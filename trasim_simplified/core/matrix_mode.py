@@ -3,7 +3,6 @@
 # @Author : yzbyx
 # @File : matrix_mode.py
 # @Software : PyCharm
-from timeit import timeit
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -27,11 +26,14 @@ class MatrixMode:
         self.lane_length = lane_length
         self.car_pos = np.arange(0, lane_length, dhw).reshape(1, -1)
         assert car_num == self.car_pos.shape[1], f"车辆生成数量有误！目标：{car_num}，结果：{self.car_pos.shape}"
+        self.car_initial_speed = car_initial_speed
         self.car_speed = np.random.uniform(
             max(car_initial_speed - 0.5, 0),  car_initial_speed + 0.5, self.car_pos.shape
         ).reshape(1, -1)
         self.car_acc = np.zeros(self.car_pos.shape).reshape(1, -1)
 
+        self.cf_mode = cf_mode
+        self.cf_param = cf_param
         self.cf_model = get_cf_model(None, cf_mode, cf_param)
         self.cf_param = self.cf_model.get_param_map()
 
@@ -55,9 +57,10 @@ class MatrixMode:
         self.basic_save = False
         self.aggregate_cal = False
         self.plot_data = False
-        self.dpi = 500
+        self.df_save = False
 
         self.ui = False
+        self.frame_rate = -1
         self.screen_width = 1980 / 1.5
         self.screen_height = 100 / 1.5
         self.screen: Optional[pg.Surface] = None
@@ -69,6 +72,7 @@ class MatrixMode:
         self.aggregate_cal = aggregate_cal
         self.plot_data = plot_data
         self.ui = ui
+        self.df_save = df_save
 
         if kwargs is None:
             kwargs = {}
@@ -78,6 +82,8 @@ class MatrixMode:
         """预热步数 [s]"""
         self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt))
         """总仿真步 [次]"""
+        self.frame_rate = kwargs.get("frame_rate", -1)
+        """pygame刷新率 [fps]"""
 
         if ui: self.ui_init()
 
@@ -85,14 +91,39 @@ class MatrixMode:
             self.step()
             if self.ui: self.ui_update()
 
-        if aggregate_cal and basic_save:
+        if self.aggregate_cal and self.basic_save:
             print(self.aggregate())
-            if plot_data: self.plot()
-            if df_save: self.data_to_df()
+            if self.plot_data: self.plot()
+            if self.df_save: self.data_to_df()
 
     def data_to_df(self):
+        """环形边界一个车辆轨迹拆分为多段，id加后缀_x"""
         dict_ = {"Frame_ID": [], "v_ID": [], "Local_xVelocity": [], "Local_X": [], "gap": [], "dhw": [], "thw": [] }
-        # df = pd.DataFrame({"Frame_ID": range(self.speed_data.shape[]), })
+        for i in range(self.car_num):
+            for key in dict_.keys():
+                temp = None
+                if key == "Frame_ID":
+                    temp = np.arange(self.warm_up_step + 1, self.sim_step).tolist()
+                elif key == "v_ID":
+                    count = 0
+                    for _, temp_ in self._data_shear(self.pos_data):
+                        dict_["v_ID"].extend([str(i) + "_" + str(count)] * len(temp_))
+                        count += 1
+                    continue
+                elif key == "Local_xVelocity":
+                    temp = self.speed_data[:, i]
+                elif key == "Local_X":
+                    temp = self.pos_data[:, i]
+                elif key == "gap":
+                    temp = self.gap_data[:, i]
+                elif key == "dhw":
+                    temp = self.dhw_data[:, i]
+                elif key == "thw":
+                    temp = self.thw_data[:, i]
+                if temp is not None:
+                    dict_[key].extend(temp)
+        df = pd.DataFrame(dict_)
+        df.to_csv("")
 
     def ui_init(self):
         pg.init()
@@ -108,9 +139,10 @@ class MatrixMode:
             pg.draw.rect(self.screen, (255, 0, 0),
                          (self.car_pos[0, i] / self.lane_length * self.screen_width, int(self.screen_height / 2),
                          int(self.car_length / self.lane_length * self.screen_width), 20))
-        # 刷新屏幕
+
         pg.display.update()
-        self.clock.tick(240)
+        if self.frame_rate > 0:
+            self.clock.tick(self.frame_rate)
 
     def step(self):
         if self.basic_save and self.step_ > self.warm_up_step:
@@ -203,8 +235,16 @@ class MatrixMode:
         ax.plot(time_, self.thw_data[:, index])
 
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
+        for time__, temp__ in self._data_shear(self.pos_data):
+            ax.plot(time__, temp__, linewidth=0.2, color='black')
+
+        plt.show()
+
+    def _data_shear(self, data):
+        time_ = np.arange(self.warm_up_step + 1, self.sim_step) * self.dt
+
         for j in range(self.car_num):
-            temp_ = self.pos_data[:, j]
+            temp_ = data[:, j]
             return_index = list(np.where(np.diff(temp_) < 0)[0])
             return_index.insert(0, 0)
             for i in range(len(return_index)):
@@ -217,10 +257,24 @@ class MatrixMode:
                 else:
                     temp__ = temp_[return_index[i] + 1:]
                     time__ = time_[return_index[i] + 1:]
-                ax.plot(time__, temp__, linewidth=0.2, color='black')
+                yield time__, temp__
 
-        plt.show()
-
+    def __str__(self):
+        return "lane_length: " + str(self.lane_length) + \
+            "\tcar_num: " + str(self.car_num) +\
+            "\tcar_length: " + str(self.car_length) +\
+            "\tcar_initial_speed: " + str(self.car_initial_speed) +\
+            "\tcf_mode: " + self.cf_mode +\
+            "\tcf_param: " + self.cf_model.get_param_map().__str__() +\
+            "\tbasic_save: " + str(self.basic_save) +\
+            "\taggregate_cal: " + str(self.aggregate_cal) +\
+            "\tplot_data: " + str(self.plot_data) +\
+            "\tui: " + str(self.ui) + \
+            "\tframe_rate" + str(self.frame_rate) +\
+            "\tdf_save: " + str(self.df_save) +\
+            "\tdt: " + str(self.dt) +\
+            "\twarm_up_step: " + str(self.warm_up_step) +\
+            "\tsim_step: " + str(self.sim_step)
 
 def run():
     _cf_param = {}
