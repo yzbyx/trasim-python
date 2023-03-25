@@ -3,7 +3,7 @@
 # @Author : yzbyx
 # @File : matrix_mode.py
 # @Software : PyCharm
-from typing import Optional
+from typing import Optional, Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -98,22 +98,26 @@ class MatrixMode:
 
     def data_to_df(self):
         """环形边界一个车辆轨迹拆分为多段，id加后缀_x"""
-        dict_ = {"Frame_ID": [], "v_ID": [], "Local_xVelocity": [], "Local_X": [], "gap": [], "dhw": [], "thw": [] }
+        dict_ = {"Frame_ID": [], "v_ID": [], "Local_xVelocity": [], "Preceding_ID": [], "v_Length": [],
+                 "Local_X": [], "gap": [], "dhw": [], "thw": [] }
+        data_len = int(self.pos_data.shape[0])
         for i in range(self.car_num):
             for key in dict_.keys():
-                temp = None
+                temp: Optional[Iterable, object] = None
                 if key == "Frame_ID":
                     temp = np.arange(self.warm_up_step + 1, self.sim_step).tolist()
                 elif key == "v_ID":
                     count = 0
-                    for _, temp_ in self._data_shear(self.pos_data):
-                        dict_["v_ID"].extend([str(i) + "_" + str(count)] * len(temp_))
+                    dict_["v_ID"].extend([i] * data_len)
+                    dict_["Preceding_ID"].extend([(i + 1) if (i + 1 != self.car_num) else 0] * data_len)
+                    for _, temp_ in self._data_shear(self.pos_data, index=i):
+                        dict_["Local_X"].extend(temp_ + count * self.lane_length)
                         count += 1
                     continue
                 elif key == "Local_xVelocity":
                     temp = self.speed_data[:, i]
-                elif key == "Local_X":
-                    temp = self.pos_data[:, i]
+                elif key == "v_Length":
+                    temp = [self.car_length] * data_len
                 elif key == "gap":
                     temp = self.gap_data[:, i]
                 elif key == "dhw":
@@ -123,7 +127,7 @@ class MatrixMode:
                 if temp is not None:
                     dict_[key].extend(temp)
         df = pd.DataFrame(dict_)
-        df.to_csv("")
+        df.to_csv("test.csv")
 
     def ui_init(self):
         pg.init()
@@ -240,10 +244,12 @@ class MatrixMode:
 
         plt.show()
 
-    def _data_shear(self, data):
+    def _data_shear(self, data, index=-1):
         time_ = np.arange(self.warm_up_step + 1, self.sim_step) * self.dt
 
         for j in range(self.car_num):
+            if index >= 0 and index != j:
+                continue
             temp_ = data[:, j]
             return_index = list(np.where(np.diff(temp_) < 0)[0])
             return_index.insert(0, 0)
