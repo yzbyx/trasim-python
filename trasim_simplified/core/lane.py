@@ -8,9 +8,9 @@ from typing import Sequence
 
 import numpy as np
 
-from vehicle import Vehicle
-from obstacle import Obstacle
-from constant import CFM, RUNMODE, V_TYPE, V_STATIC, V_DYNAMIC, RANDOM_SEED
+from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.obstacle import Obstacle
+from trasim_simplified.core.constant import CFM, RUNMODE, V_TYPE, V_STATIC, V_DYNAMIC, RANDOM_SEED
 from trasim_simplified.msg.trasimError import TrasimError, ErrorMessage as vem
 from trasim_simplified.msg.trasimWarning import TrasimWarning, WarningMessage as wm
 

@@ -6,11 +6,11 @@ from core.constant import CFM
 def run():
     lane = Lane(length=10000)
     lane.addDriverTool(carNum=100,
-                       fRule=CFM.GIPPS)
+                       fRule=CFM.IDM)
 
     for i in range(5000):
         lane.step()
-        # print(lane.getDriverPos())
+        print(lane.getDriverDynamic(lane.getOrdIDList(), "speed"))
 
 
 if __name__ == '__main__':

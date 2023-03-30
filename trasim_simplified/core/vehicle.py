@@ -8,9 +8,9 @@ import warnings
 import numpy as np
 
 from trasim_simplified.kinematics.cfm import get_cf_model, CFModel
-from constant import CFM, RUNMODE, V_TYPE, V_DYNAMIC, V_STATIC
+from trasim_simplified.core.constant import CFM, RUNMODE, V_TYPE, V_DYNAMIC, V_STATIC
 from trasim_simplified.msg.trasimWarning import TrasimWarning, WarningMessage
-from obstacle import Obstacle
+from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError, ErrorMessage
 
 
@@ -80,7 +80,7 @@ class Vehicle(Obstacle):
         self.fRule.mode = self._mode
 
     def setfParam(self, param: dict):
-        self.fRule.fParam.update(param)
+        self.fRule.param_update(param)
 
     def setDynamic(self, param, value):
         self.vehicle.dynamic[param] = value
@@ -92,7 +92,7 @@ class Vehicle(Obstacle):
         return self.vehicle.static[param]
 
     def getfParam(self):
-        return self.fRule.fParam
+        return self.fRule.get_param_map()
 
     def getfStatus(self):
         return self.fRule.status
@@ -194,7 +194,13 @@ class Vehicle(Obstacle):
         """车辆跟驰行为计算"""
         result = self.fRule.step()
 
-        self._dynamicData = result
+        pre_speed = self.vehicle.dynamic["speed"]
+        tau = self.fRule.getTau()
+        next_speed = pre_speed + result * tau
+
+        self._dynamicData = {"acc": result,
+                             "speed": next_speed,
+                             "xOffset": self.vehicle.dynamic["xOffset"] + (pre_speed + next_speed) / 2 * tau}
 
         if updateMethod == 'synchronous':
             self._isCalculate = True
@@ -218,9 +224,3 @@ class Vehicle(Obstacle):
         leaderL = self.leader.vehicle.static[V_STATIC.LENGTH]
         if leaderX - leaderL < xOffset:
             TrasimWarning(WarningMessage.GAP_LESS_THAN_ZERO.format(self._ID, leaderX - leaderL - xOffset))
-
-
-if __name__ == '__main__':
-    d = Vehicle()
-    d.setfRule()
-    print(d.fRule.name)

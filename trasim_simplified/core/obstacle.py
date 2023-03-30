@@ -8,11 +8,11 @@ from constant import V_TYPE, V_DYNAMIC, V_STATIC
 
 
 class Obstacle:
-    _STATIC_PARAMETER = {V_TYPE.PASSENGER: {'length': 5.0, 'width': 1.8, 'height': 1.5, 'color': [0, 255, 0],
+    _STATIC_PARAMETER = {V_TYPE.PASSENGER: {'length': 5.0, 'width': 1.8, 'height': 1.5, 'color_value': [0, 255, 0],
                                             'vType': V_TYPE.PASSENGER},
-                         V_TYPE.TRUCK: {'length': 7.1, 'width': 1.8, 'height': 1.5, 'color': [255, 255, 0],
+                         V_TYPE.TRUCK: {'length': 7.1, 'width': 1.8, 'height': 1.5, 'color_value': [255, 255, 0],
                                         'vType': V_TYPE.TRUCK},
-                         V_TYPE.BUS: {'length': 12.0, 'width': 1.8, 'height': 1.5, 'color': [0, 0, 255],
+                         V_TYPE.BUS: {'length': 12.0, 'width': 1.8, 'height': 1.5, 'color_value': [0, 0, 255],
                                       'vType': V_TYPE.BUS}}
 
     _COLOR_PARAMETER = {'red': [255, 0, 0], 'black': [0, 0, 0], 'white': [255, 255, 255],

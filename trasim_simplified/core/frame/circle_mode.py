@@ -25,9 +25,8 @@ class FrameCircle(FrameAbstract):
         ).reshape(1, -1)
         self.car_acc = np.zeros(self.car_pos.shape).reshape(1, -1)
 
-    @timer_no_log
     def run(self, basic_save=True, aggregate_cal=True, plot_data=True, df_save=True, ui=True, **kwargs):
-        super().run(basic_save, aggregate_cal, plot_data, df_save, ui, **kwargs)
+        return super().run(basic_save, aggregate_cal, plot_data, df_save, ui, **kwargs)
 
     def step(self):
         leader_x = np.roll(self.car_pos, -1)
@@ -41,15 +40,19 @@ class FrameCircle(FrameAbstract):
             leader_x,
             self.car_length
         )
-        car_speed_before = self.car_speed
-        self.car_speed += self.car_acc * self.dt
-        self.car_pos += (car_speed_before + self.car_speed) / 2 * self.dt
-        self.car_pos[np.where(self.car_pos > self.lane_length)] -= self.lane_length
 
+
+@timer_no_log
 def run():
     _cf_param = {}
+    take_over_index = 0
     sim = FrameCircle(1000, 60, 5, 0, CFM.IDM, _cf_param)
-    sim.run(basic_save=True, ui=False, df_save=True, warm_up_step=3000, sim_step=3600, dt=1)
+    for step in sim.run(basic_save=True, ui=True, df_save=True, warm_up_step=3000, sim_step=3600, dt=1, frame_rate=60):
+        if 3100 == step:
+            take_over_index = sim.get_appropriate_car()
+        if 3100 < step <= 3120:
+            sim.take_over(take_over_index, -3)
+    sim.plot((take_over_index - 1) if take_over_index != 0 else sim.car_num - 1)
 
 
 if __name__ == '__main__':

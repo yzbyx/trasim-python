@@ -57,7 +57,7 @@ class CFModel_IDM(CFModel):
         self.dt = 0.1  # TODO: 后期要实时获取
 
 
-    def _param_update(self, param: dict[str, float]) -> None:
+    def param_update(self, param: dict[str, float]) -> None:
         for key in param.keys():
             inner_name = "_" + key
             if hasattr(self, inner_name):
@@ -70,6 +70,10 @@ class CFModel_IDM(CFModel):
         f_param = [self._s0, self._s1, self._v0, self._T, self._omega, self._d, self._delta]
         if args:
             return calculate(*f_param, *args)
+        else:
+            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
+                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
+                             self.vehicle.leader.static["length"])
 
     def calculate(*args):
         pass

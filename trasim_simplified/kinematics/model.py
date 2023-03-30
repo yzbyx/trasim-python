@@ -45,7 +45,7 @@ class Model(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def _param_update(self, param: dict[str, float]) -> None:
+    def param_update(self, param: dict[str, float]) -> None:
         """
         更新跟驰参数
 
