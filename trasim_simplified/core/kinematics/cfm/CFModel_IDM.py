@@ -81,3 +81,4 @@ def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, 
     finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
     return finalAcc
+

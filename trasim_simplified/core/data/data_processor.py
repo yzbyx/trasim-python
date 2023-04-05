@@ -25,9 +25,20 @@ class DataProcessor:
         self.aggregate_Edie_result = {}
         """Edie广义定义下的集计结果"""
 
+        self.aggregate_info: set = set()
+
+    def config(self, cal_dict=None, add_all=True):
+        if add_all:
+            self.aggregate_info.update(Info.get_all_info())
+            return
+        if cal_dict is None:
+            cal_dict = {}
+        self.aggregate_info.update(cal_dict)
+
     def check_container(self):
-        assert self.container.speed_data.size != 0 and self.container.gap_data.size != 0 and self.container.dhw_data.size != 0 and \
-               self.container.thw_data.size != 0 and self.container.dv_data.size != 0 and self.container.pos_data.size != 0, \
+        assert self.container.speed_data is not None and self.container.gap_data is not None \
+               and self.container.dhw_data is not None and self.container.thw_data is not None \
+               and self.container.dv_data is not None and self.container.pos_data is not None, \
             "调用本函数须使用record函数记录数据"
 
     def print_result(self):
@@ -42,29 +53,61 @@ class DataProcessor:
             print(result)
         print()
 
+    def kqv_cal(self):
+        assert self.container.speed_data is not None, "调用本函数须使用record函数记录速度数据"
+
+        avg_speed = np.mean(self.container.speed_data)
+        avg_k_by_car_num_lane_length = self.frame.car_num / self.frame.lane_length * 1000
+        avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
+
+        self.aggregate_all_result.update({
+            Info.avg_speed: avg_speed,
+            Info.avg_q_by_v_k: avg_q_by_v_k,
+            Info.avg_k_by_car_num_lane_length: avg_k_by_car_num_lane_length
+        })
+
+        return self.aggregate_all_result
+
     def aggregate(self):
         self.check_container()
         # 由于总车辆数恒定，因此直接对所有车辆数据求平均是可行的
-        avg_speed, avg_gap, avg_dv, avg_dhw, avg_thw = \
-            (np.mean(data) for data in [self.container.speed_data, self.container.gap_data, self.container.dv_data,
+        avg_acc, avg_speed, avg_gap, avg_dv, avg_dhw, avg_thw = \
+            (np.mean(data) for data in [self.container.acc_data, self.container.speed_data, self.container.gap_data,
+                                        self.container.dv_data,
                                         self.container.dhw_data, self.container.thw_data])
         # TODO：标准差这样做有待商榷
-        std_speed, std_gap, std_dv, std_dhw, std_thw = \
-            (np.std(data) for data in [self.container.speed_data, self.container.gap_data, self.container.dv_data,
+        std_acc, std_speed, std_gap, std_dv, std_dhw, std_thw = \
+            (np.std(data) for data in [self.container.acc_data, self.container.speed_data, self.container.gap_data,
+                                       self.container.dv_data,
                                        self.container.dhw_data, self.container.thw_data])
-        avg_q = 3600 / avg_thw
+        avg_q_by_thw = 3600 / avg_thw
         avg_k_by_dhw = 1000 / avg_dhw
-        q_divide_k = avg_q / avg_k_by_dhw / 3.6
+        avg_v_q_div_k_by_thw_dhw = avg_q_by_thw / avg_k_by_dhw / 3.6
+
         harmonic_avg_speed = 1 / np.mean(1 / self.container.speed_data)
-        avg_k = self.frame.car_num / self.frame.lane_length * 1000
+
+        avg_k_by_car_num_lane_length = self.frame.car_num / self.frame.lane_length * 1000
+        avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
+
         self.aggregate_all_result.update({
-            "avg_speed(m/s)": avg_speed, "harmonic_avg_speed(m/s)": harmonic_avg_speed,
-            "avg_gap(m)": avg_gap, "avg_dv(m/s)": avg_dv, "avg_dhw(m)": avg_dhw, "avg_thw(s)": avg_thw,
-            "std_speed((m/s)^2)": std_speed, "std_gap(m^2)": std_gap, "std_dv((m/s)^2)": std_dv,
-            "std_dhw(m^2)": std_dhw, "std_thw(s^2)": std_thw,
-            "avg_q(v*k)(veh/h)": avg_speed * 3.6 * avg_k,
-            "avg_q(1/thw)(veh/h)": avg_q, "avg_k(1/dhw)(veh/km)": avg_k, "speed_by_q(1/thw)/k(1/dhw)(m/s)": q_divide_k,
-            "avg_k(veh/km)": avg_k})
+            Info.avg_acc: avg_acc,
+            Info.avg_speed: avg_speed,
+            Info.harmonic_avg_speed: harmonic_avg_speed,
+            Info.avg_gap: avg_gap,
+            Info.avg_dv: avg_dv,
+            Info.avg_dhw: avg_dhw,
+            Info.avg_thw: avg_thw,
+            Info.std_acc: std_acc,
+            Info.std_speed: std_speed,
+            Info.std_gap: std_gap,
+            Info.std_dv: std_dv,
+            Info.std_dhw: std_dhw,
+            Info.std_thw: std_thw,
+            Info.avg_q_by_thw: avg_q_by_thw,
+            Info.avg_k_by_dhw: avg_k_by_dhw,
+            Info.avg_v_q_div_k_by_thw_dhw: avg_v_q_div_k_by_thw_dhw,
+            Info.avg_q_by_v_k: avg_q_by_v_k,
+            Info.avg_k_by_car_num_lane_length: avg_k_by_car_num_lane_length})
         return self.aggregate_all_result
 
     def aggregate_as_detect_loop(self, pos, width, d_step: int, step_range: Sequence[int, int]=None):
@@ -225,3 +268,38 @@ class DataProcessor:
                 temp__ = temp_[pos[0]: pos[1]]
                 time__ = time_[pos[0]: pos[1]]
                 yield time__, temp__, j, pos
+
+
+class Info:
+    avg_acc = "avg_acc(m/s^2)"
+    avg_speed = "avg_speed(m/s)"
+    avg_gap = "avg_gap(m)"
+    avg_dv = "avg_dv(m/s)"
+    avg_dhw = "avg_dhw(m)"
+    avg_thw = "avg_thw(s)"
+
+    std_speed = "std_speed"
+    std_acc = "std_acc"
+    std_gap = "std_gap"
+    std_dv = "std_dv"
+    std_dhw = "std_dhw"
+    std_thw = "std_thw"
+
+    avg_q_by_thw = "avg_q(1/thw)(veh/h)"
+    avg_k_by_dhw = "avg_k(1/dhw)(veh/km)"
+    avg_v_q_div_k_by_thw_dhw = "avg_v_by_q(1/thw)/k(1/dhw)(m/s)"
+    harmonic_avg_speed = "harmonic_avg_speed(m/s)"
+    avg_k_by_car_num_lane_length = "avg_k(veh/km)"
+    avg_q_by_v_k = "avg_q(v*k)(veh/h)"
+
+    @classmethod
+    def get_all_info(cls):
+        dict_ = Info.__dict__
+        values = []
+        for key in dict_.keys():
+            if isinstance(dict_[key], str) and dict_[key][:2] != "__":
+                values.append(dict_[key])
+        return values
+
+if __name__ == '__main__':
+    print(Info.get_all_info())

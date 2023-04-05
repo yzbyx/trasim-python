@@ -51,7 +51,7 @@ class FrameAbstract(ABC):
         self.sim_step = int(10 * 60 / self.dt)
         """总仿真步 [次]"""
 
-        self.basic_save = False
+        self.data_save = False
         self.data_container: DataContainer = DataContainer(self)
         self.data_processor: DataProcessor = DataProcessor(self)
 
@@ -64,8 +64,8 @@ class FrameAbstract(ABC):
     def car_init(self):
         pass
 
-    def run(self, basic_save=True, has_ui=True, **kwargs):
-        self.basic_save = basic_save
+    def run(self, data_save=True, has_ui=True, **kwargs):
+        self.data_save = data_save
         self.has_ui = has_ui
 
         if kwargs is None:
@@ -87,7 +87,7 @@ class FrameAbstract(ABC):
         # 整个仿真能够运行sim_step的仿真步
         while self.sim_step != self.step_:
             # 能够记录warm_up_step仿真步时的车辆数据
-            if self.basic_save and self.step_ >= self.warm_up_step:
+            if self.data_save and self.step_ >= self.warm_up_step:
                 self.data_container.record()
             self.step()
             # 控制车辆对应的step需要在下一个仿真步才能显现到数据记录中
@@ -136,7 +136,7 @@ class FrameAbstract(ABC):
             "\tcar_initial_speed: " + str(self.car_initial_speed) + \
             "\tcf_mode: " + self.cf_mode + \
             "\tcf_param: " + self.cf_model.get_param_map().__str__() + \
-            "\tbasic_record: " + str(self.basic_save) + \
+            "\tbasic_record: " + str(self.data_save) + \
             "\thas_ui: " + str(self.has_ui) + \
             "\tframe_rate" + str(self.ui.frame_rate) + \
             "\tdt: " + str(self.dt) + \
