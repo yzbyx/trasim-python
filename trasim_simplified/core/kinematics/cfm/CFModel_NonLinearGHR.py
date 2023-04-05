@@ -6,7 +6,7 @@
 
 import numpy as np
 
-from trasim_simplified.kinematics.cfm.CFModel import CFModel
+from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
 
 

@@ -8,7 +8,7 @@ from abc import ABC
 from typing import TYPE_CHECKING, Optional
 
 from trasim_simplified.core.constant import RUNMODE, RANDOM_SEED
-from trasim_simplified.kinematics.model import Model
+from trasim_simplified.core.kinematics.model import Model
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle

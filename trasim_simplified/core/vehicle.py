@@ -7,7 +7,7 @@ import warnings
 
 import numpy as np
 
-from trasim_simplified.kinematics.cfm import get_cf_model, CFModel
+from trasim_simplified.core.kinematics import get_cf_model, CFModel
 from trasim_simplified.core.constant import CFM, RUNMODE, V_TYPE, V_DYNAMIC, V_STATIC
 from trasim_simplified.msg.trasimWarning import TrasimWarning, WarningMessage
 from trasim_simplified.core.obstacle import Obstacle

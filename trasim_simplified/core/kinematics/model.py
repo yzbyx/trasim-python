@@ -11,15 +11,10 @@ if TYPE_CHECKING:
 
 
 class Model(metaclass=abc.ABCMeta):
-    DEFAULT_PARAM = {}
-    """模型默认参数字典"""
-    NAME = None
-    """模型名称"""
-    THESIS = None
-    """模型论文"""
-
     def __init__(self, vehicle: Optional['Vehicle']):
         self.vehicle: Optional['Vehicle'] = vehicle if vehicle else None
+        self.name = None
+        self.thesis = None
         self._param = {}
 
     @abc.abstractmethod
@@ -40,18 +35,18 @@ class Model(metaclass=abc.ABCMeta):
         """
         pass
 
-    @abc.abstractmethod
-    def calculate(*args):
-        pass
-
-    @abc.abstractmethod
     def param_update(self, param: dict[str, float]) -> None:
         """
         更新跟驰参数
 
         :_param param: 包含待更新参数的字典
         """
-        pass
+        for key in param.keys():
+            inner_name = "_" + key
+            if hasattr(self, inner_name):
+                setattr(self, inner_name, param.get(key))
+            else:
+                print(f"{self.name}模型无参数{key}!")
 
     def get_param_map(self) -> dict[str, float]:
         """获取模型参数值"""

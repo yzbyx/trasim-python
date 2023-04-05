@@ -3,24 +3,42 @@
 # @Author : yzbyx
 # @File : CFModel_Gipps.py
 # @Software : PyCharm
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
-from trasim_simplified.kinematics.cfm.CFModel import CFModel
+from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
+
+if TYPE_CHECKING:
+    from trasim_simplified.core.vehicle import Vehicle
 
 
 class CFModel_Gipps(CFModel):
-    PARAM = {
-        'a': 2,         # 最大期望加速度
-        'b': -3,        # 最大期望减速度
-        'v0': 20,       # 期望速度
-        'tau': 0.7,     # 反应时间
-        's': 6.5,       # 静止时正常最小车头间距（前车有效车长）
-        'b_hat': -2.5   # 预估前车最大期望减速度
-     }
-    CFM_NAME = CFM.GIPPS
-    CFM_THESIS = 'A behavioural car-following model for computer simulation (1981)'
+    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float] ):
+        super().__init__(vehicle)
+        # -----模型属性------ #
+        self.name = CFM.GIPPS
+        self.thesis = 'A behavioural car-following model for computer simulation (1981)'
+
+        # -----模型变量------ #
+        self._a = f_param.get("a", 2)         # 最大期望加速度
+        self._b = f_param.get("b", -3)       # 最大期望减速度
+        self._v0 = f_param.get("v0", 20)      # 期望速度
+        self._tau = f_param.get("tau", 0.7)     # 反应时间
+        self._s = f_param.get("s", 6.5)       # 静止时正常最小车头间距（前车有效车长）
+        self._b_hat = f_param.get("b_hat", -2.5)   # 预估前车最大期望减速度
+
+    def _update_dynamic(self):
+        self.dt = 0.1
+        assert self.dt == self._tau, f"{self.name}模型的反应时间tau需要与仿真步长一致！"
+
+    def step(self, *args):
+        pass
+
+    def calculate(*args):
+        pass
+
 
     def _calculate(self, interval, speed, acc, xOffset, length, leaderV, leaderA, leaderX, leaderL) -> dict:
         a = self.fParam['a']

@@ -11,7 +11,7 @@ from numba import jit
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
 
-from trasim_simplified.kinematics.cfm.CFModel import CFModel
+from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
 
 
@@ -54,19 +54,15 @@ class CFModel_IDM(CFModel):
         """舒适减速度"""
 
     def _update_dynamic(self):
-        self.dt = 0.1  # TODO: 后期要实时获取
-
-
-    def param_update(self, param: dict[str, float]) -> None:
-        for key in param.keys():
-            inner_name = "_" + key
-            if hasattr(self, inner_name):
-                setattr(self, inner_name, param.get(key))
-            else:
-                print(f"{self.name}模型无参数{key}!")
-
+        pass
 
     def step(self, *args):
+        """
+        计算下一时间步的加速度
+
+        :param args: 为了兼容矩阵计算设置的参数直接传递
+        :return: 下一时间步的加速度
+        """
         f_param = [self._s0, self._s1, self._v0, self._T, self._omega, self._d, self._delta]
         if args:
             return calculate(*f_param, *args)
@@ -74,9 +70,6 @@ class CFModel_IDM(CFModel):
             return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
                              self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
                              self.vehicle.leader.static["length"])
-
-    def calculate(*args):
-        pass
 
 @jit(nopython=True)
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
