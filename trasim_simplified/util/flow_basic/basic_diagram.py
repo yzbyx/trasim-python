@@ -16,6 +16,7 @@ from trasim_simplified.core.data.data_plot import Plot
 from trasim_simplified.core.frame.circle_frame import FrameCircle
 from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.core.kinematics.cfm import get_cf_model
 
 
 class BasicDiagram:
@@ -29,11 +30,13 @@ class BasicDiagram:
         self.cf_param = cf_param
 
         self.resume = False
+        self.file_name = None
 
         self.occ_seq = None
         self.result: Optional[dict[str, list]] = {"occ": [], "Q": [], "K": [], "V": []}
+        self.equilibrium_state_result = {"Q": [], "K": [], "V": []}
 
-    def run(self, occ_start: float, occ_end: float, d_occ: float, resume=False):
+    def run(self, occ_start: float, occ_end: float, d_occ: float, resume=False, file_name=None):
         self.resume = resume
         assert 0 < occ_start <= (occ_end - d_occ) <= 1, "请输入有效的occ起始点！"
         assert d_occ * self.lane_length >= self.car_length,\
@@ -43,16 +46,21 @@ class BasicDiagram:
         else:
             occ_seq = np.round(np.arange(occ_start, occ_end, d_occ), 6)
         car_nums = np.round(np.ceil(occ_seq * self.lane_length / self.car_length))
+
+        self.file_name = file_name if file_name is not None else "result_IDM.pkl"
+        self.result = self.load_result()
+
         self.occ_seq = occ_seq
         warm_up_step = 6000 * 2
         sim_step = 6000 * 3
         dt = 0.1
-
         time_ = 0
+
         for i, car_num in enumerate(car_nums):
             time_epoch_begin = time.time()
 
-            if self.check_contain_occ(self.occ_seq[i]): continue
+            if self.check_contain_occ(self.occ_seq[i]):
+                continue
 
             print(f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
                   f" occ: {occ_seq[i]:.2f}, car_nums: {round(car_num)}", end="\t\t\t")
@@ -76,23 +84,44 @@ class BasicDiagram:
             time_ += time_epoch
             print(f"time_used: {time_:.2f}s + time_epoch: {time_epoch:.2f}s + cal_speed: {cal_speed:.2f}cal/s^-1")
 
-    def plot(self):
-        fig, axes = plt.subplots(1, 3, figsize=(10, 2), layout="constrained", squeeze=False)
+    def get_by_equilibrium_state_func(self):
+        cf_model = get_cf_model(None, self.cf_mode, self.cf_param)
+        for speed in self.result["V"]:
+            speed /= 3.6
+            result = cf_model.equilibrium_state(speed, self.car_length)
+            self.equilibrium_state_result["V"].append(result["V"])
+            self.equilibrium_state_result["Q"].append(result["Q"])
+            self.equilibrium_state_result["K"].append(result["K"])
+
+    def plot(self, save_fig=True):
+        fig, axes = plt.subplots(1, 3, figsize=(10, 3), layout="constrained", squeeze=False)
+        fig: plt.Figure = fig
         axes: list[list[plt.Axes]] = axes
 
         ax = axes[0][0]
         Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.result["Q"]], data_label="Q-Occ")
+        if len(self.equilibrium_state_result["V"]) != 0:
+            Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.equilibrium_state_result["Q"]],
+                             data_label="Q-Occ-E", linestyle="dashed")
 
         ax = axes[0][1]
         Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [self.result["Q"]], [self.result["V"]], data_label="V-Q")
+        if len(self.equilibrium_state_result["V"]) != 0:
+            Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [self.equilibrium_state_result["Q"]],
+                             [self.equilibrium_state_result["V"]], data_label="V-Q-E", linestyle="dashed")
 
         ax = axes[0][2]
         Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [self.result["K"]], [self.result["V"]], data_label="V-K")
+        if len(self.equilibrium_state_result["V"]) != 0:
+            Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [self.equilibrium_state_result["K"]],
+                             [self.equilibrium_state_result["V"]], data_label="V-K-E", linestyle="dashed")
 
+        fig.suptitle(self.cf_mode + "+" + get_cf_model(None, self.cf_mode, self.cf_param).get_param_map().__str__())
+        if save_fig: fig.savefig("./temp/" + self.file_name + ".png", dpi=500, bbox_inches='tight')
         plt.show()
 
     def save_result(self):
-        with open("./temp/result.pkl", "wb") as f:
+        with open(f"./temp/{self.file_name}.pkl", "wb") as f:
             pickle.dump(self.result, f)
 
     def load_result(self):
@@ -100,12 +129,11 @@ class BasicDiagram:
             self.clear_result()
             return {"occ": [], "Q": [], "K": [], "V": []}
         else:
-            with open("./temp/result.pkl", "rb") as f:
+            with open(f"./temp/{self.file_name}.pkl", "rb") as f:
                 return pickle.load(f)
 
-    @staticmethod
-    def clear_result():
-        os.remove("./temp/result.pkl")
+    def clear_result(self):
+        os.remove(f"./temp/{self.file_name}.pkl")
 
     def check_contain_occ(self, occ):
         if not self.resume: return False
@@ -117,5 +145,6 @@ class BasicDiagram:
 
 if __name__ == '__main__':
     diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.IDM, cf_param={})
-    diag.run(0.01, 0.7, 0.02)
+    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_IDM")
+    diag.get_by_equilibrium_state_func()
     diag.plot()

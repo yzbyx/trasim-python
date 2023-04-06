@@ -71,6 +71,22 @@ class CFModel_IDM(CFModel):
                              self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
                              self.vehicle.leader.static["length"])
 
+    def equilibrium_state(self, speed, v_length):
+        """
+        通过平衡态速度计算三参数
+
+        :param v_length: 车辆长度
+        :param speed: 平衡态速度
+        :return: KQV三参数的值
+        """
+        sStar = self._s0 + self._s1 * np.sqrt(speed / self._v0) + self._T * speed
+        dhw = sStar / np.sqrt(1 - np.power(speed / self._v0, self._delta)) + v_length
+        k = 1000 / dhw
+        v = speed * 3.6
+        q = k * v
+        return {"K": k, "Q": q, "V": v}
+
+
 @jit(nopython=True)
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
@@ -81,4 +97,3 @@ def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, 
     finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
     return finalAcc
-

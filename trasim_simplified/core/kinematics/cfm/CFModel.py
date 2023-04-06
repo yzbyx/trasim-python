@@ -28,3 +28,6 @@ class CFModel(Model, ABC):
     def getTau(self) -> float:
         """获取反应时间"""
         return self.get_param_map().get('tau', 0)
+
+    def equilibrium_state(self, *args):
+        pass

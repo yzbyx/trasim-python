@@ -15,7 +15,6 @@ class Model(metaclass=abc.ABCMeta):
         self.vehicle: Optional['Vehicle'] = vehicle if vehicle else None
         self.name = None
         self.thesis = None
-        self._param = {}
 
     @abc.abstractmethod
     def _update_dynamic(self):
@@ -51,7 +50,7 @@ class Model(metaclass=abc.ABCMeta):
     def get_param_map(self) -> dict[str, float]:
         """获取模型参数值"""
         param_map = {}
-        for name_ in globals():
-            if name_[0] == "_" and name_[1] != "_" and not callable(name_):
+        for name_ in self.__dict__:
+            if name_[0] == "_" and name_[:2] != "__" and not callable(name_):
                 param_map[name_] = getattr(self, name_)
         return param_map
