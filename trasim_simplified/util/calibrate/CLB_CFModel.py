@@ -113,7 +113,6 @@ def simulation(currentV, currentY, leaderV, leaderY, param, output='fitness', le
 
 
 class CLB_CFModel:
-    # FIXME 标定范围确定
     Range = {
         CFM.IDM: {'Dim': 6, 'varTypes': [0, 0, 1, 0, 0, 0],
                   'lb': [0, 0, 1, 0.1, 0.1, 0.1], 'ub': [40, 10, 10, 5, 5, 5]},

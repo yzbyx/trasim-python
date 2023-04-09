@@ -46,24 +46,3 @@ class FrameCircle(FrameAbstract):
             leader_x,
             self.car_length
         )
-
-
-@timer_no_log
-def run():
-    _cf_param = {}
-    take_over_index = 0
-    warm_up_step = 6000
-    sim = FrameCircle(1000, 20, 5, 1, False, CFM.IDM, _cf_param)
-    for step in sim.run(data_save=True, has_ui=False, warm_up_step=6000, sim_step=12000, dt=0.1):
-        pass
-        if warm_up_step + 100 == step:
-            take_over_index = sim.get_appropriate_car()
-        if warm_up_step + 100 < step <= warm_up_step + 120:
-            sim.take_over(take_over_index, -3)
-    sim.plot.basic_plot(((take_over_index - 1) if take_over_index != 0 else sim.car_num - 1))
-    sim.data_processor.aggregate()
-    sim.data_processor.aggregate_as_detect_loop(0, 995, 6000)
-    sim.data_processor.print_result()
-
-if __name__ == '__main__':
-    run()

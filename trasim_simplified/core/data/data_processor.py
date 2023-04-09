@@ -24,16 +24,21 @@ class DataProcessor:
         """道路线圈检测器的集计结果"""
         self.aggregate_Edie_result = {}
         """Edie广义定义下的集计结果"""
+        self.safe_result = {}
+        """安全指标结果"""
 
-        self.aggregate_info: set = set()
+        self.ttc_star = 1.5
+        """判断TET的TTC阈值 [s]"""
+
+        self.info: set = set()
 
     def config(self, cal_dict=None, add_all=True):
         if add_all:
-            self.aggregate_info.update(Info.get_all_info())
+            self.info.update(Info.get_all_info().values())
             return
         if cal_dict is None:
             cal_dict = {}
-        self.aggregate_info.update(cal_dict)
+        self.info.update(cal_dict)
 
     def check_container(self):
         assert self.container.speed_data is not None and self.container.gap_data is not None \
@@ -213,6 +218,32 @@ class DataProcessor:
 
         return [self.aggregate_loop_result, self.aggregate_Edie_result]
 
+    def cal_safety(self):
+        if Info.safe_ttc in self.info:
+            self.safe_result[Info.safe_ttc] = self.container.dhw_data / (- self.container.dv_data)
+        if Info.safe_tet in self.info and Info.safe_ttc in self.info:
+            where_ = np.where((self.safe_result[Info.safe_ttc] > 0) &
+                              (self.safe_result[Info.safe_ttc] < self.ttc_star))
+            result = np.zeros(self.container.speed_data.shape)
+            result[where_] = 1
+            self.safe_result[Info.safe_tet] = result
+        if Info.safe_tit in self.info and Info.safe_ttc in self.info:
+            where_ = np.where((self.safe_result[Info.safe_ttc] > 0) &
+                              (self.safe_result[Info.safe_ttc] < self.ttc_star))
+            result = np.zeros(self.container.speed_data.shape)
+            result[where_] = self.ttc_star - self.safe_result[Info.safe_ttc][where_]
+            self.safe_result[Info.safe_tit] = result
+        if Info.safe_picud in self.info:
+            d = 3.
+            if "d" in self.frame.cf_model.get_param_map().keys():
+                d = self.frame.cf_model.get_param_map()["d"]
+            dec_dist = np.power(self.container.speed_data, 2) / (2 * d)
+            dec_dist = np.concatenate([dec_dist, dec_dist[:, 0].reshape((-1, 1))], axis=1)
+            react_dist = self.container.speed_data * self.frame.dt
+            dist = self.container.gap_data
+            self.safe_result[Info.safe_picud] = dist + np.diff(dec_dist, axis=1) - react_dist
+        return self.safe_result
+
     def data_to_df(self):
         assert self.frame.warm_up_step >= 0, "warm_up_step必须大于等于0！"
         """环形边界一个车辆轨迹拆分为多段，id加后缀_x"""
@@ -292,13 +323,27 @@ class Info:
     avg_k_by_car_num_lane_length = "avg_k(veh/km)"
     avg_q_by_v_k = "avg_q(v*k)(veh/h)"
 
+    safe_ttc = "ttc(s)"
+    safe_tet = "tet"
+    safe_tit = "tit(s)"
+    safe_picud = "picud(m)"
+
     @classmethod
     def get_all_info(cls):
         dict_ = Info.__dict__
-        values = []
+        values = {}
         for key in dict_.keys():
-            if isinstance(dict_[key], str) and dict_[key][:2] != "__":
-                values.append(dict_[key])
+            if isinstance(dict_[key], str) and key[:2] != "__":
+                values.update({key: dict_[key]})
+        return values
+
+    @classmethod
+    def get_safety_info(cls):
+        dict_ = cls.get_all_info()
+        values = {}
+        for key in dict_.keys():
+            if key[:4] == "safe":
+                values.update({key: dict_[key]})
         return values
 
 if __name__ == '__main__':

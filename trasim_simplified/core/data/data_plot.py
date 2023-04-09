@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 from matplotlib.cm import ScalarMappable
 import matplotlib.colors as mc
 import matplotlib.collections as mcoll
+from trasim_simplified.core.data.data_processor import Info as P_Info
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.frame_abstract import FrameAbstract
@@ -26,8 +27,7 @@ class Plot:
         time_ = np.arange(self.frame.warm_up_step, self.frame.sim_step) * self.frame.dt
 
         if axes is None or fig is None:
-            fig, axes = plt.subplots(2, 2, figsize=(7, 5), layout="constrained")
-            axes: np.ndarray[plt.Axes] = axes
+            fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
         self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.speed_data[:, index], f"index={index}")
@@ -42,6 +42,19 @@ class Plot:
 
         ax = axes[1, 1]
         self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.acc_data[:, index], f"index={index}")
+
+        if P_Info.safe_tit in self.processor.info:
+            ax = axes[0, 2]
+            self.custom_plot(ax, "time(s)", "tit(s)", time_,
+                             self.processor.safe_result[P_Info.safe_tit][:, index], f"index={index}")
+
+        if P_Info.safe_picud in self.processor.info:
+            ax = axes[1, 2]
+            self.custom_plot(ax, "time(s)", "picud(m)", time_,
+                             self.processor.safe_result[P_Info.safe_picud][:, index], f"index={index}")
+
+        ax = axes[2][0]
+        self.custom_plot(ax, "time(s)", "gap(m)", time_, self.container.gap_data[:, index], f"index={index}")
 
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
         ax: plt.Axes = ax

@@ -28,6 +28,8 @@ class CFM:
     OPTIMAL_VELOCITY = 'Optimal_Velocity'
     # TPACC模型
     TPACC = 'Three-Phase_ACC'
+    LINEAR = "Linear"
+    """线性跟驰模型(刺激反应模型)"""
 
 
 # ******************************

@@ -36,7 +36,7 @@ class BasicDiagram:
         self.result: Optional[dict[str, list]] = {"occ": [], "Q": [], "K": [], "V": []}
         self.equilibrium_state_result = {"Q": [], "K": [], "V": []}
 
-    def run(self, occ_start: float, occ_end: float, d_occ: float, resume=False, file_name=None):
+    def run(self, occ_start: float, occ_end: float, d_occ: float, resume=False, file_name=None, **kwargs):
         self.resume = resume
         assert 0 < occ_start <= (occ_end - d_occ) <= 1, "请输入有效的occ起始点！"
         assert d_occ * self.lane_length >= self.car_length,\
@@ -53,7 +53,7 @@ class BasicDiagram:
         self.occ_seq = occ_seq
         warm_up_step = 6000 * 2
         sim_step = 6000 * 3
-        dt = 0.1
+        dt = kwargs.get("dt", 0.1)
         time_ = 0
 
         for i, car_num in enumerate(car_nums):
@@ -133,7 +133,8 @@ class BasicDiagram:
                 return pickle.load(f)
 
     def clear_result(self):
-        os.remove(f"./temp/{self.file_name}.pkl")
+        if os.path.exists(f"./temp/{self.file_name}.pkl"):
+            os.remove(f"./temp/{self.file_name}.pkl")
 
     def check_contain_occ(self, occ):
         if not self.resume: return False
@@ -144,7 +145,7 @@ class BasicDiagram:
 
 
 if __name__ == '__main__':
-    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.IDM, cf_param={})
-    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_IDM")
-    diag.get_by_equilibrium_state_func()
+    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.GIPPS, cf_param={})
+    diag.run(0.01, 0.7, 0.02, resume=False, file_name="result_Gipps", dt=0.7)
+    # diag.get_by_equilibrium_state_func()
     diag.plot()
