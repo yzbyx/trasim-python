@@ -30,31 +30,31 @@ class Plot:
             fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
-        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.speed_data[:, index], f"index={index}")
+        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.speed_data[:, index], data_label=f"index={index}")
 
         ax = axes[0, 1]
         self.custom_plot(ax, "speed(m/s)", "gap(m)",
-                         self.container.speed_data[:, index], self.container.gap_data[:, index], f"index={index}")
+                         self.container.speed_data[:, index], self.container.gap_data[:, index], data_label=f"index={index}")
 
         ax = axes[1, 0]
         self.custom_plot(ax, "dv(m/s)", "gap(m)",
-                         self.container.dv_data[:, index], self.container.gap_data[:, index], f"index={index}")
+                         self.container.dv_data[:, index], self.container.gap_data[:, index], data_label=f"index={index}")
 
         ax = axes[1, 1]
-        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.acc_data[:, index], f"index={index}")
+        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.acc_data[:, index], data_label=f"index={index}")
 
         if P_Info.safe_tit in self.processor.info:
             ax = axes[0, 2]
             self.custom_plot(ax, "time(s)", "tit(s)", time_,
-                             self.processor.safe_result[P_Info.safe_tit][:, index], f"index={index}")
+                             self.processor.safe_result[P_Info.safe_tit][:, index], data_label=f"index={index}")
 
         if P_Info.safe_picud in self.processor.info:
             ax = axes[1, 2]
             self.custom_plot(ax, "time(s)", "picud(m)", time_,
-                             self.processor.safe_result[P_Info.safe_picud][:, index], f"index={index}")
+                             self.processor.safe_result[P_Info.safe_picud][:, index], data_label=f"index={index}")
 
         ax = axes[2][0]
-        self.custom_plot(ax, "time(s)", "gap(m)", time_, self.container.gap_data[:, index], f"index={index}")
+        self.custom_plot(ax, "time(s)", "gap(m)", time_, self.container.gap_data[:, index], data_label=f"index={index}")
 
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
         ax: plt.Axes = ax
@@ -91,7 +91,7 @@ class Plot:
 
     @staticmethod
     def custom_plot(ax: plt.Axes, x_label: str, y_label: str,
-                    x_data: Union[list[Sequence], Sequence], y_data: Union[list[Sequence], Sequence],
+                    x_data: Union[list[Sequence], Sequence], y_data: Union[list[Sequence], Sequence], *args,
                     data_label: Union[list[str], Union[str, None]]=None, **kwargs):
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
@@ -99,5 +99,5 @@ class Plot:
         if not isinstance(y_data, list): y_data = [y_data]
         if not isinstance(data_label, list): data_label = [data_label]
         for i, x_data_ in enumerate(x_data):
-            ax.plot(x_data_, y_data[i], label=data_label[i], **kwargs)
+            ax.plot(x_data_, y_data[i], *args, label=data_label[i], **kwargs)
         ax.legend()

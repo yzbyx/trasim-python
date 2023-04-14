@@ -289,16 +289,19 @@ class DataProcessor:
             temp_ = data[:, j]
             return_index = list(np.where(np.diff(temp_) < 0)[0])
             return_index.insert(0, 0)
-            for i in range(len(return_index)):
-                if i == 0:
-                    pos = (0, return_index[i + 1] + 1)
-                elif i != len(return_index) - 1 and i != 0:
-                    pos = (return_index[i] + 1, return_index[i + 1] + 1)
-                else:
-                    pos = (return_index[i] + 1, len(temp_))
-                temp__ = temp_[pos[0]: pos[1]]
-                time__ = time_[pos[0]: pos[1]]
-                yield time__, temp__, j, pos
+            if len(return_index) == 1:
+                yield time_, temp_, j, [0, len(temp_)]
+            else:
+                for i in range(len(return_index)):
+                    if i == 0:
+                        pos = (0, return_index[i + 1] + 1)
+                    elif i != len(return_index) - 1 and i != 0:
+                        pos = (return_index[i] + 1, return_index[i + 1] + 1)
+                    else:
+                        pos = (return_index[i] + 1, len(temp_))
+                    temp__ = temp_[pos[0]: pos[1]]
+                    time__ = time_[pos[0]: pos[1]]
+                    yield time__, temp__, j, pos
 
 
 class Info:

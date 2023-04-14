@@ -3,6 +3,8 @@
 # @Author : yzbyx
 # @File : circle_frame.py
 # @Software : PyCharm
+from typing import Optional
+
 import numpy as np
 
 from trasim_simplified.core.constant import CFM
@@ -46,3 +48,39 @@ class FrameCircle(FrameAbstract):
             leader_x,
             self.car_length
         )
+
+
+class FrameCircleW99(FrameCircle):
+    """W99"""
+    def __init__(self, lane_length: int, car_num: int, car_length: int, car_initial_speed: int, speed_with_random: bool,
+                 cf_mode: str, cf_param: dict[str, float]):
+        self.status: Optional[list] = None
+        super().__init__(lane_length, car_num, car_length, car_initial_speed, speed_with_random, cf_mode, cf_param)
+
+    def car_init(self):
+        super().car_init()
+        self.status = ["w",] * self.car_num
+
+    def step(self):
+        leader_x = np.roll(self.car_pos, -1)
+        diff_x = leader_x - self.car_pos
+        pos_ = np.where(diff_x < 0)
+        leader_x[pos_] += self.lane_length
+        leader_a = np.roll(self.car_acc, -1)
+        leader_v = np.roll(self.car_speed, -1)
+        for i in range(self.car_num):
+            # interval, speed, acc, xOffset, length, leaderV, leaderA, leaderX, leaderL
+            car_acc, status = self.cf_model.step(
+                self.status[i],
+                self.dt,
+                self.car_speed[0][i],
+                self.car_acc[0][i],
+                self.car_pos[0][i],
+                self.car_length,
+                leader_v[0][i],
+                leader_a[0][i],
+                leader_x[0][i],
+                self.car_length
+            )
+            self.status[i] = status
+            self.car_acc[0][i] = car_acc

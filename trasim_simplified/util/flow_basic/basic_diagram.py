@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.data.data_plot import Plot
-from trasim_simplified.core.frame.circle_frame import FrameCircle
+from trasim_simplified.core.frame.circle_frame import FrameCircle, FrameCircleW99
 from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.core.kinematics.cfm import get_cf_model
@@ -65,11 +65,18 @@ class BasicDiagram:
             print(f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
                   f" occ: {occ_seq[i]:.2f}, car_nums: {round(car_num)}", end="\t\t\t")
 
-            frame = FrameCircle(self.lane_length, car_num, self.car_length, self.car_initial_speed,
-                                self.speed_with_random, self.cf_mode, self.cf_param)
+            params = [self.lane_length, car_num, self.car_length, self.car_initial_speed,
+                      self.speed_with_random, self.cf_mode, self.cf_param]
+            if self.cf_mode == CFM.WIEDEMANN_99:
+                frame = FrameCircleW99(*params)
+            else:
+                frame = FrameCircle(*params)
+
             frame.data_container.config(save_info={C_Info.v})
+
             for _ in frame.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
                 pass
+
             result = frame.data_processor.kqv_cal()
             self.result["occ"].append(occ_seq[i])
             self.result["V"].append(np.mean(result[P_Info.avg_speed]) * 3.6)
@@ -99,22 +106,33 @@ class BasicDiagram:
         axes: list[list[plt.Axes]] = axes
 
         ax = axes[0][0]
-        Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.result["Q"]], data_label="Q-Occ")
+        Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.result["Q"]], data_label="Q-Occ",
+                         color='blue', marker='s', linestyle='solid',
+                         linewidth=1, markersize=2)
         if len(self.equilibrium_state_result["V"]) != 0:
             Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.equilibrium_state_result["Q"]],
-                             data_label="Q-Occ-E", linestyle="dashed")
+                             data_label="Q-Occ-E", color='green', marker='s', linestyle='dashed',
+                             linewidth=1, markersize=2)
 
         ax = axes[0][1]
-        Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [self.result["Q"]], [self.result["V"]], data_label="V-Q")
+        Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [self.result["Q"]], [self.result["V"]], data_label="V-Q",
+                         color='blue', marker='s', linestyle='solid',
+                         linewidth=1, markersize=2)
         if len(self.equilibrium_state_result["V"]) != 0:
             Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [self.equilibrium_state_result["Q"]],
-                             [self.equilibrium_state_result["V"]], data_label="V-Q-E", linestyle="dashed")
+                             [self.equilibrium_state_result["V"]], data_label="V-Q-E",
+                             color='green', marker='s', linestyle='dashed',
+                             linewidth=1, markersize=2)
 
         ax = axes[0][2]
-        Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [self.result["K"]], [self.result["V"]], data_label="V-K")
+        Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [self.result["K"]], [self.result["V"]], data_label="V-K",
+                         color='blue', marker='s', linestyle='solid',
+                         linewidth=1, markersize=2)
         if len(self.equilibrium_state_result["V"]) != 0:
             Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [self.equilibrium_state_result["K"]],
-                             [self.equilibrium_state_result["V"]], data_label="V-K-E", linestyle="dashed")
+                             [self.equilibrium_state_result["V"]], data_label="V-K-E",
+                             color='green', marker='s', linestyle='dashed',
+                             linewidth=1, markersize=2)
 
         fig.suptitle(self.cf_mode + "+" + get_cf_model(None, self.cf_mode, self.cf_param).get_param_map().__str__())
         if save_fig: fig.savefig("./temp/" + self.file_name + ".png", dpi=500, bbox_inches='tight')
@@ -145,7 +163,7 @@ class BasicDiagram:
 
 
 if __name__ == '__main__':
-    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.GIPPS, cf_param={})
-    diag.run(0.01, 0.7, 0.02, resume=False, file_name="result_Gipps", dt=0.7)
+    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.WIEDEMANN_99, cf_param={})
+    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_W99", dt=0.1)
     # diag.get_by_equilibrium_state_func()
     diag.plot()

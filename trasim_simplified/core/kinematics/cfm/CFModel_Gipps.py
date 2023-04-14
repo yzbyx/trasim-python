@@ -56,12 +56,12 @@ class CFModel_Gipps(CFModel):
         """
         通过平衡态速度计算三参数
 
-        :param v_length: 车辆长度
-        :param speed: 平衡态速度
-        :return: KQV三参数的值
+        :param v_length: 车辆长度 [m]
+        :param speed: 平衡态速度 [m/s]
+        :return: KQV三参数的值 K[veh/km], Q[veh/h], V[km/h]
         """
-        sStar = self._s0 + self._s1 * np.sqrt(speed / self._v0) + self._T * speed
-        dhw = sStar / np.sqrt(1 - np.power(speed / self._v0, self._delta)) + v_length
+        dhw = ((np.power(self._b * self._tau, 2) - np.power(speed - self._b * self._tau, 2)) / self._b +
+               speed * self._tau + np.power(speed, 2) / self._b_hat) / 2 + self._s
         k = 1000 / dhw
         v = speed * 3.6
         q = k * v
@@ -77,15 +77,7 @@ def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX, leaderL
     # 安全驾驶限制，注意此处的s为当前车与前车的期望车头间距
     vMax2 = b * tau + np.sqrt((b ** 2) * (tau ** 2) - b * (2 * (deltaX - s) - speed * tau - (leaderV ** 2) / b_hat))
     # 选取最小的速度限制作为下一时刻t+tau的速度
-    # status = 'free' if vMax1 < vMax2 else 'follow'
     vTau = np.min([vMax1, vMax2], axis=0)
-    # vTau = vMax2
-    # 提示速度错误
-    # if vTau < 0:
-    #     if self.mode != RUNMODE.SILENT:
-    #         message = f"vMax1: {vMax1}, vMax2: {vMax2}, current: {self.driverID}"
-    #         warnings.warn(message, RuntimeWarning)
-    #     vTau = 0  # 将负速度值设置为0
     # 计算加速度和位置
     finalAcc = (vTau - speed) / tau
     return finalAcc

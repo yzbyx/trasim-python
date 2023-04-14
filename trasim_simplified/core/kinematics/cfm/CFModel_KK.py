@@ -1,7 +1,7 @@
 # -*- coding = uft-8 -*-
 # @Time : 2022-07-04 12:41
 # @Author : yzbyx
-# @File : CFModel_TPACC.py
+# @File : CFModel_KK.py
 # @Software : PyCharm
 import numpy as np
 
@@ -9,7 +9,7 @@ from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM, V_DYNAMIC, V_STATIC
 
 
-class CFModel_TPACC(CFModel):
+class CFModel_KK(CFModel):
     """
     'd': 7.5m  # 最小停车间距
 
@@ -49,7 +49,7 @@ class CFModel_TPACC(CFModel):
         'v_01': 10,
         'v_21': 15,
     }
-    CFM_NAME = CFM.TPACC
+    CFM_NAME = CFM.KK
     CFM_THESIS = 'Physics of automated driving in framework of three-phase traffic theory (2018)'
 
     def __init__(self, driverID: str, pre_status=0):
@@ -138,7 +138,7 @@ class CFModel_TPACC(CFModel):
     def _cal_v_s_new(self, g, interval):
         v_safe = self.cal_v_safe()[0]
 
-        fRule_l: CFModel_TPACC = self.driver.leader.fRule
+        fRule_l: CFModel_KK = self.driver.leader.fRule
 
         v_safe_l, speed_l, g_l, interval_l = fRule_l.cal_v_safe()
 
@@ -161,7 +161,7 @@ class CFModel_TPACC(CFModel):
         g = leaderX - xOffset - d_l
 
         leader = self.driver.leader
-        leader_fRule: CFModel_TPACC = leader.fRule
+        leader_fRule: CFModel_KK = leader.fRule
         leader_fParam = leader_fRule.fParam
         b_l = leader_fParam['b']
 
@@ -176,7 +176,7 @@ class CFModel_TPACC(CFModel):
 
     def _cal_v_l_a(self):
         leader = self.driver.leader
-        leader_fRule: CFModel_TPACC = leader.fRule
+        leader_fRule: CFModel_KK = leader.fRule
         interval = leader.interval
         b_l = leader_fRule.b
         b_l_l = leader.leader.fRule.b
