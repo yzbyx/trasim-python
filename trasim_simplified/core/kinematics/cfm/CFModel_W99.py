@@ -103,7 +103,7 @@ class CFModel_W99(CFModel):
 
 def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive, status,
               interval, speed, acc, xOffset, length, leaderV, leaderA, leaderX, leaderL):
-    cc6 = cc6 / 10000
+    cc6 /= 10000
 
     dx = leaderX - xOffset - leaderL  # 车辆净间距
     dv = leaderV - speed  # 速度差

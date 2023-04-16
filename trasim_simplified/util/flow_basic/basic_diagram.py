@@ -63,7 +63,8 @@ class BasicDiagram:
                 continue
 
             print(f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
-                  f" occ: {occ_seq[i]:.2f}, car_nums: {round(car_num)}", end="\t\t\t")
+                  f" occ: {occ_seq[i]:.2f}, car_nums: {car_num}, density[veh/h]: {car_num / (self.lane_length / 1000)}",
+                  end="\t\t\t")
 
             params = [self.lane_length, car_num, self.car_length, self.car_initial_speed,
                       self.speed_with_random, self.cf_mode, self.cf_param]
@@ -93,9 +94,11 @@ class BasicDiagram:
 
     def get_by_equilibrium_state_func(self):
         cf_model = get_cf_model(None, self.cf_mode, self.cf_param)
-        for speed in self.result["V"]:
+        for i, speed in enumerate(self.result["V"]):
+            car_num = (self.result["occ"][i] * self.lane_length) / self.car_length
+            dhw = self.lane_length / car_num
             speed /= 3.6
-            result = cf_model.equilibrium_state(speed, self.car_length)
+            result = cf_model.equilibrium_state(speed, dhw, self.car_length)
             self.equilibrium_state_result["V"].append(result["V"])
             self.equilibrium_state_result["Q"].append(result["Q"])
             self.equilibrium_state_result["K"].append(result["K"])
@@ -163,7 +166,7 @@ class BasicDiagram:
 
 
 if __name__ == '__main__':
-    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.WIEDEMANN_99, cf_param={})
-    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_W99", dt=0.1)
-    # diag.get_by_equilibrium_state_func()
+    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.OPTIMAL_VELOCITY, cf_param={})
+    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_OVM", dt=0.1)
+    diag.get_by_equilibrium_state_func()
     diag.plot()

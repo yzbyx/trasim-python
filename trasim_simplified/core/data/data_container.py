@@ -71,19 +71,19 @@ class DataContainer:
 
 
 class Info:
-    a = 0
+    a = "Acceleration [m/s^2]"
     """加速度"""
-    v = 1
+    v = "Velocity [m/s]"
     """速度"""
-    x = 2
+    x = "Position [m]"
     """位置"""
-    dhw = 3
+    dhw = "Distance Headway [m]"
     """车头间距"""
-    thw = 4
+    thw = "Time Headway [s]"
     """车头时距"""
-    gap = 5
+    gap = "Gap [m]"
     """净间距"""
-    dv = 6
+    dv = "Dv [m/s]"
     """前车与后车速度差"""
 
     @classmethod
@@ -91,7 +91,7 @@ class Info:
         dict_ = Info.__dict__
         values = {}
         for key in dict_.keys():
-            if isinstance(dict_[key], int) and key[:2] != "__":
+            if isinstance(dict_[key], str) and key[:2] != "__":
                 values.update({key: dict_[key]})
         return values
 

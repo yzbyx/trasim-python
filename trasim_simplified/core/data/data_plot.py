@@ -10,7 +10,10 @@ from matplotlib import pyplot as plt
 from matplotlib.cm import ScalarMappable
 import matplotlib.colors as mc
 import matplotlib.collections as mcoll
+from matplotlib.colorbar import Colorbar
+
 from trasim_simplified.core.data.data_processor import Info as P_Info
+from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.frame_abstract import FrameAbstract
@@ -56,20 +59,29 @@ class Plot:
         ax = axes[2][0]
         self.custom_plot(ax, "time(s)", "gap(m)", time_, self.container.gap_data[:, index], data_label=f"index={index}")
 
+    def spatial_time_plot(self, index=0, color_data=None, color_bar_name=None):
+        if color_data is None:
+            color_data = self.container.speed_data
+            color_bar_name = C_Info.v
+        assert color_data is not None and color_bar_name is not None, "color_data或color_bar_name不能为None"
+
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
         ax: plt.Axes = ax
         fig: plt.Figure = fig
         ax.set_xlabel("time(s)")
         ax.set_ylabel("location")
-        value_range = (np.min(self.container.speed_data), np.max(self.container.speed_data))
+        value_range = (np.min(color_data), np.max(color_data))
         cmap = plt.get_cmap('rainbow')
         for time__, temp__, index_, pos in self.frame.data_processor.data_shear(self.container.pos_data):
             if pos[1] - pos[0] > 1:
-                self._lines_color(ax, time__, temp__, self.container.speed_data[:, index_][pos[0]: pos[1]], value_range,
+                self._lines_color(ax, time__, temp__, color_data[:, index_][pos[0]: pos[1]], value_range,
                                   cmap, line_width=0.2 if index != index_ else 1)
 
-        fig.colorbar(ScalarMappable(mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap))
+        cb: Colorbar = fig.colorbar(ScalarMappable(mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap))
+        cb.set_label(color_bar_name)
 
+    @staticmethod
+    def show():
         plt.show()
 
     @staticmethod

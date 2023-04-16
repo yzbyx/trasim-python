@@ -52,10 +52,11 @@ class CFModel_Gipps(CFModel):
     def calculate(*args):
         pass
 
-    def equilibrium_state(self, speed, v_length):
+    def equilibrium_state(self, speed, dhw, v_length):
         """
         通过平衡态速度计算三参数
 
+        :param dhw: 平衡间距
         :param v_length: 车辆长度 [m]
         :param speed: 平衡态速度 [m/s]
         :return: KQV三参数的值 K[veh/km], Q[veh/h], V[km/h]

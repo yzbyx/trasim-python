@@ -3,7 +3,12 @@
 # @Author : yzbyx
 # @File : CFModel_OVM.py
 # @Software : PyCharm
+from typing import Optional, TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:
+    from trasim_simplified.core.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
@@ -21,39 +26,57 @@ class CFModel_OVM(CFModel):
 
     bc : 期望最小净间距(m) (原文包含前车长)Gipps_a_main.py
     """
-    PARAM = {
-        'a': 2,             # 代表车辆动态的时间参数
-        'V0': 16.8,         # 优化速度系数
-        'm': 0.086,         # 比例系数
-        'bf': 20,           # 加速度极大值点(m) (原文包含前车长，此处未包含)
-        'bc': 2,            # 期望最小净间距(m) (原文包含前车长，此处未包含)
-    }
-    CFM_NAME = CFM.OPTIMAL_VELOCITY
-    CFM_THESIS = {
-        'Title': 'Analysis of optimal velocity model with explicit delay',
-        'Author': 'Bando, M., Hasebe, K., Nakanishi, K., Nakayama, A.',
-        'DOI': '10.1103/PhysRevE.58.5429',
-        'Year': 1998,
-    }
+    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
+        super().__init__(vehicle)
+        # -----模型属性------ #
+        self.name = CFM.OPTIMAL_VELOCITY
+        self.thesis = 'Analysis of optimal velocity model with explicit delay'
 
-    def _calculate(self, interval, speed, acc, xOffset, length, leaderV, leaderA, leaderX, leaderL) -> dict:
-        a = self.fParam['a']
-        V0 = self.fParam['V0']
-        m = self.fParam['m']
-        bf = self.fParam['bf']
-        bc = self.fParam['bc']
+        # -----模型变量------ #
+        self._a = f_param.get("a", 2)
+        """代表车辆动态的时间参数"""
+        self._V0 = f_param.get("V0", 16.8)
+        """优化速度系数"""
+        self._m = f_param.get("m", 0.086)
+        """比例系数"""
+        self._bf = f_param.get("bf", 20)
+        """加速度极大值点(m) (原文包含前车长，此处未包含)"""
+        self._bc = f_param.get("bc", 2)
+        """期望最小净间距(m) (原文包含前车长，此处未包含)"""
 
-        bf += leaderL
-        bc += leaderL       # 期望最小车头间距
+    def _update_dynamic(self):
+        pass
 
-        headway = leaderX - xOffset
-        V_deltaX = V0 * (np.tanh(m * (headway - bf)) - np.tanh(m * (bc - bf)))
-        # V_deltaX = V0 * (np.tanh(gap / b - C1) + C2)
-        finalAcc = a * (V_deltaX - speed)
+    def step(self, *args):
+        f_param = [self._a, self._V0, self._m, self._bf, self._bc]
+        if args:
+            return calculate(*f_param, *args)
+        else:
+            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
+                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
+                             self.vehicle.leader.static["length"])
 
-        finalV = speed + finalAcc * interval
-        # if finalV < 0:
-        #     finalAcc = - speed / interval
-        #     finalV = 0
-        xOffset += speed * interval + 0.5 * finalAcc * np.power(interval, 2)
-        return {'xOffset': xOffset, 'speed': finalV, 'acc': finalAcc}
+    def equilibrium_state(self, speed, dhw, v_length):
+        """
+        通过平衡态速度计算三参数
+
+        :param dhw: 平衡间距
+        :param v_length: 车辆长度
+        :param speed: 平衡态速度
+        :return: KQV三参数的值
+        """
+        k = 1000 / dhw
+        v = self._V0 * (np.tanh(self._m * (dhw - self._bf)) - np.tanh(self._m * (self._bc - self._bf))) * 3.6
+        q = k * v
+        return {"K": k, "Q": q, "V": v}
+
+def calculate(a, V0, m, bf, bc, speed, xOffset, leaderV, leaderX, leaderL):
+    bf += leaderL
+    bc += leaderL       # 期望最小车头间距
+
+    headway = leaderX - xOffset
+    V = V0 * (np.tanh(m * (headway - bf)) - np.tanh(m * (bc - bf)))
+    # V = V0 * (np.tanh(gap / b - C1) + C2)
+    finalAcc = a * (V - speed)
+
+    return finalAcc

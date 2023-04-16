@@ -71,10 +71,11 @@ class CFModel_IDM(CFModel):
                              self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
                              self.vehicle.leader.static["length"])
 
-    def equilibrium_state(self, speed, v_length):
+    def equilibrium_state(self, speed, dhw, v_length):
         """
         通过平衡态速度计算三参数
 
+        :param dhw: 平衡间距
         :param v_length: 车辆长度
         :param speed: 平衡态速度
         :return: KQV三参数的值

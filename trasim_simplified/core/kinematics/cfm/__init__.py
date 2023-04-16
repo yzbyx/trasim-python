@@ -30,10 +30,10 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
     elif name == CFM.WIEDEMANN_99:
         return W99(_driver, param)
     elif name == CFM.NON_LINEAR_GHR:
-        return GHR(_driver)
+        return GHR(_driver, param)
     elif name == CFM.OPTIMAL_VELOCITY:
-        return OVM(_driver)
+        return OVM(_driver, param)
     elif name == CFM.KK:
-        return KK(_driver)
+        return KK(_driver, param)
     else:
         raise TrasimError(rem.NO_MODEL.format(name))
