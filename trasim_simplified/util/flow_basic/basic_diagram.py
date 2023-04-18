@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.data.data_plot import Plot
-from trasim_simplified.core.frame.circle_frame import FrameCircle, FrameCircleW99
+from trasim_simplified.core.frame.circle_frame import FrameCircle, FrameCircleCommon
 from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.core.kinematics.cfm import get_cf_model
@@ -69,7 +69,7 @@ class BasicDiagram:
             params = [self.lane_length, car_num, self.car_length, self.car_initial_speed,
                       self.speed_with_random, self.cf_mode, self.cf_param]
             if self.cf_mode == CFM.WIEDEMANN_99:
-                frame = FrameCircleW99(*params)
+                frame = FrameCircleCommon(*params)
             else:
                 frame = FrameCircle(*params)
 

@@ -34,13 +34,13 @@ class FrameAbstract(ABC):
         self.car_pos: Optional[np.ndarray] = None
         self.car_speed: Optional[np.ndarray] = None
         self.car_acc: Optional[np.ndarray] = None
-        self.car_init()
+        self._car_init()
         assert self.car_pos is not None, "car_init()函数未初始化car_pos属性!"
         assert self.car_speed is not None, "car_init()函数未初始化car_speed属性!"
         assert self.car_acc is not None, "car_init()函数未初始化car_acc属性!"
 
         self.step_ = 0
-        """当前仿真时间 [s]"""
+        """当前仿真步次"""
         self.yield_ = True
         """run()是否为迭代器"""
 
@@ -60,9 +60,22 @@ class FrameAbstract(ABC):
         self.has_ui = False
         self.ui: UI = UI(self)
 
-    @abc.abstractmethod
-    def car_init(self):
-        pass
+    def _car_init(self):
+        dhw = self.lane_length / self.car_num
+        assert dhw >= self.car_length, f"该密度下，车辆重叠！此车身长度下车辆数最多为{np.floor(self.lane_length / self.car_length)}"
+        self.car_pos = np.arange(0, self.lane_length, dhw).reshape(1, -1)
+        if self.car_num != self.car_pos.shape[1]:
+            if (self.lane_length - self.car_pos[0][-1]) < 1e-6:
+                self.car_pos = self.car_pos[:, :-1]
+            Warning(f"车辆生成数量有误！目标：{self.car_num}，结果：{self.car_pos.shape}，头车位置：{self.car_pos[0][-1]}")
+        if self.speed_with_random:
+            self.car_speed = np.random.uniform(
+                max(self.car_initial_speed - 0.5, 0),  self.car_initial_speed + 0.5, self.car_pos.shape
+            ).reshape(1, -1)
+        else:
+            self.car_speed = (np.ones(self.car_pos.shape) * self.car_initial_speed).reshape(1, -1)
+        self.car_acc = np.zeros(self.car_pos.shape).reshape(1, -1)
+        self.car_id = np.arange(self.car_num, 0, -1).reshape(1, -1)
 
     def run(self, data_save=True, has_ui=True, **kwargs):
         self.data_save = data_save
@@ -96,17 +109,9 @@ class FrameAbstract(ABC):
             self.step_ += 1
             if self.has_ui: self.ui.ui_update()
 
+    @abc.abstractmethod
     def update_state(self):
-        car_speed_before = self.car_speed.copy()
-        self.car_speed += self.car_acc * self.dt
-
-        speed_neg_pos = np.where(self.car_speed < 0)
-        if len(speed_neg_pos[0]) != 0:
-            TrasimWarning("存在速度为负的车辆！")
-            self.car_speed[speed_neg_pos] = 0
-
-        self.car_pos += (car_speed_before + self.car_speed) / 2 * self.dt
-        self.car_pos[np.where(self.car_pos > self.lane_length)] -= self.lane_length
+        pass
 
     @abc.abstractmethod
     def step(self):

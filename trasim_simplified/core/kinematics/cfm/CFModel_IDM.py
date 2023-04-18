@@ -6,7 +6,7 @@
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-from numba import jit
+# from numba import jit
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -88,7 +88,7 @@ class CFModel_IDM(CFModel):
         return {"K": k, "Q": q, "V": v}
 
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
