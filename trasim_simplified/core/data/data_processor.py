@@ -4,7 +4,7 @@
 # @File : data_processor.py
 # @Software : PyCharm
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Optional, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 class DataProcessor:
     def __init__(self, frame_abstract: 'FrameAbstract'):
-        self.df: Optional[pd.DataFrame] = None
         self.frame = frame_abstract
         self.container = self.frame.data_container
         self.aggregate_all_result = {}
@@ -41,10 +40,7 @@ class DataProcessor:
         self.info.update(cal_dict)
 
     def check_container(self):
-        assert self.container.speed_data is not None and self.container.gap_data is not None \
-               and self.container.dhw_data is not None and self.container.thw_data is not None \
-               and self.container.dv_data is not None and self.container.pos_data is not None, \
-            "调用本函数须使用record函数记录数据"
+        assert self.container.data_pd is not None, "调用本函数须使用record函数记录数据"
 
     def print_result(self):
         print("-" * 10 + "aggregate_all_result" + "-" * 10)
@@ -76,6 +72,7 @@ class DataProcessor:
     def aggregate(self):
         self.check_container()
         # 由于总车辆数恒定，因此直接对所有车辆数据求平均是可行的
+
         avg_acc, avg_speed, avg_gap, avg_dv, avg_dhw, avg_thw = \
             (np.mean(data) for data in [self.container.acc_data, self.container.speed_data, self.container.gap_data,
                                         self.container.dv_data,
@@ -243,42 +240,6 @@ class DataProcessor:
             dist = self.container.gap_data
             self.safe_result[Info.safe_picud] = dist + np.diff(dec_dist, axis=1) - react_dist
         return self.safe_result
-
-    def data_to_df(self):
-        assert self.frame.warm_up_step >= 0, "warm_up_step必须大于等于0！"
-        """环形边界一个车辆轨迹拆分为多段，id加后缀_x"""
-        dict_ = {"Frame_ID": [], "v_ID": [], "Local_xVelocity": [], "Preceding_ID": [], "v_Length": [],
-                 "Local_X": [], "gap": [], "dhw": [], "thw": [], "Local_xAcc": []}
-        data_len = int(self.container.pos_data.shape[0])
-        for i in range(self.frame.car_num):
-            for key in dict_.keys():
-                temp: Optional[Iterable, object] = None
-                if key == "Frame_ID":
-                    temp = np.arange(self.frame.warm_up_step, self.frame.sim_step).tolist()
-                elif key == "v_ID":
-                    count = 0
-                    dict_["v_ID"].extend([i] * data_len)
-                    dict_["Preceding_ID"].extend([(i + 1) if (i + 1 != self.frame.car_num) else 0] * data_len)
-                    for _, temp_, _, _ in self.data_shear(self.container.pos_data, index=i):
-                        dict_["Local_X"].extend(temp_ + count * self.frame.lane_length)
-                        count += 1
-                    continue
-                elif key == "Local_xVelocity":
-                    temp = self.container.speed_data[:, i]
-                elif key == "Local_xAcc":
-                    temp = self.container.acc_data[:, i]
-                elif key == "v_Length":
-                    temp = [self.frame.car_length] * data_len
-                elif key == "gap":
-                    temp = self.container.gap_data[:, i]
-                elif key == "dhw":
-                    temp = self.container.dhw_data[:, i]
-                elif key == "thw":
-                    temp = self.container.thw_data[:, i]
-                if temp is not None:
-                    dict_[key].extend(temp)
-        self.df = pd.DataFrame(dict_)
-        return self.df
 
     def data_shear(self, data, index=-1):
         time_ = np.arange(self.frame.warm_up_step, self.frame.sim_step) * self.frame.dt

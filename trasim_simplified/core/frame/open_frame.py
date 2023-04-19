@@ -17,7 +17,10 @@ class FrameOpen(FrameAbstract):
 
     def step(self):
         if self.car_pos.shape[1] > 1:
-            leader_x = np.concatenate([self.car_pos[:, 1:], [[self.car_pos[0][-1] - self.car_pos[0][-2]]]], axis=1)
+            first_pos = float(self.car_pos[0][-1])
+            after_diff_pos = first_pos - float(self.car_pos[0][-2])
+            end_diff_pos = self.lane_length - first_pos
+            leader_x = np.concatenate([self.car_pos[:, 1:], [[max(after_diff_pos, end_diff_pos)]]], axis=1)
             leader_speed = np.concatenate([self.car_speed[:, 1:], [[self.car_speed[0][-1]]]], axis=1)
         else:
             leader_x = np.array([[self.lane_length]])

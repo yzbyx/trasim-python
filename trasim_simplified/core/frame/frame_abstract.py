@@ -34,13 +34,17 @@ class FrameAbstract(ABC):
         self.car_pos: Optional[np.ndarray] = None
         self.car_speed: Optional[np.ndarray] = None
         self.car_acc: Optional[np.ndarray] = None
+        self.car_id: Optional[np.ndarray] = None
         self._car_init()
         assert self.car_pos is not None, "car_init()函数未初始化car_pos属性!"
         assert self.car_speed is not None, "car_init()函数未初始化car_speed属性!"
         assert self.car_acc is not None, "car_init()函数未初始化car_acc属性!"
+        assert self.car_id is not None, "car_init()函数未初始化car_id属性!"
 
         self.step_ = 0
         """当前仿真步次"""
+        self.time_ = 0
+        """当前仿真时长 [s]"""
         self.yield_ = True
         """run()是否为迭代器"""
 
@@ -107,6 +111,7 @@ class FrameAbstract(ABC):
             if self.yield_: yield self.step_
             self.update_state()
             self.step_ += 1
+            self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
 
     @abc.abstractmethod
