@@ -4,223 +4,191 @@
 # @File : vehicle.py
 # @Software : PyCharm
 import warnings
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.kinematics import get_cf_model, CFModel
-from trasim_simplified.core.constant import CFM, RUNMODE, V_TYPE, V_DYNAMIC, V_STATIC
-from trasim_simplified.msg.trasimWarning import TrasimWarning, WarningMessage
+from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
 from trasim_simplified.core.obstacle import Obstacle
-from trasim_simplified.msg.trasimError import TrasimError, ErrorMessage
+
+
+if TYPE_CHECKING:
+    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
 
 
 class Vehicle(Obstacle):
-    _DRIVER_ID = 0
-    # 由lane控制车辆的step值
-    SIMULATION_STEP = 0
+    def __init__(self, lane: 'LaneAbstract', type_: str, id_: int, length: float):
+        super().__init__(type_)
+        self.ID = id_
+        self.length = length
+        self.lane = lane
 
-    def __init__(self, onLane, carType=V_TYPE.PASSENGER, mode=RUNMODE.NORMAL, fRule=CFM.IDM):
-        super().__init__()
-        from lane import Lane
-        self.onLane: Lane = onLane
-        self.isCircle = False
-        self._needUpdate = True
-        self.fRule: CFModel | None = None
-        self.maxOffset = None
-        self._isCalculate = False  # 异步更新不会使用该变量
-        self._isUnderControl = False
-        self._dynamicData = {}
-        self.interval = None
+        self.leader: Optional[Vehicle] = None
+        self.follower: Optional[Vehicle] = None
 
-        self.leader: Vehicle = self
-        self.follower: Vehicle = self
+        self.pos_list = []
+        self.speed_list = []
+        self.acc_list = []
+        self.step_list = []
+        self.time_list = []
+        self.dv_list = []
+        """前车与后车速度差"""
+        self.gap_list = []
+        self.thw_list = []
+        self.dhw_list = []
 
-        self._ID = 'driver' + str(Vehicle._DRIVER_ID)
-        Vehicle._DRIVER_ID += 1      # 注意调用类公共属性时，一定要使用类名.属性
+        self.ttc_list = []
+        self.tit_list = []
+        self.ttc_star = 1.5
+        self.tet_list = []
+        self.picud_list = []
 
-        self._mode = mode
-        self.vehicle = Obstacle(carType)
+        self.cf_model: Optional[CFModel] = None
 
-        self.setfRule(fRule)
+        self.step_acc = 0
 
-        self.graph = None
+    def set_cf_model(self, cf_name: str, cf_param: dict):
+        self.cf_model = get_cf_model(self, cf_name, cf_param)
+        self._info_config()
 
-        self._historyOn = False  # 历史数据保存部分
-        self._subscribe = []  # 历史数据订阅的内容
-        self._historyData: dict[int, dict] = {}  # int为step的值，内层字典存储订阅的历史数据
-        self._maxHistory = 100  # 用于控制数据量的大小
+    def _info_config(self):
+        """此处可以进行模型所需参数记录的配置，影响record函数记录的内容"""
+        pass
 
-    def __eq__(self, other):
-        if isinstance(other, Vehicle):
-            return self.ID == other.ID
-        elif isinstance(other, str):
-            return self.ID == other
-        else:
-            raise TrasimError(ErrorMessage.OBJ_TYPE_ERROR.format(type(self), type(other)))
+    def step(self, index):
+        self.step_acc = self.cf_model.step(index)
+        if self.v + self.step_acc * self.lane.dt > self.cf_model.get_expect_speed():
+            self.step_acc = (self.cf_model.get_expect_speed() - self.v) / self.lane.dt
 
-    def __ne__(self, other):
-        if isinstance(other, Vehicle):
-            return self.ID != other.ID
-        elif isinstance(other, str):
-            return self.ID != other
-        else:
-            raise TrasimError(ErrorMessage.OBJ_TYPE_ERROR.format(type(self), type(other)))
+    def get_data_list(self, info):
+        from trasim_simplified.core.data.data_container import Info as C_Info
+        if C_Info.id == info:
+            return [self.ID] * len(self.pos_list)
+        elif C_Info.a == info:
+            return self.acc_list
+        elif C_Info.v == info:
+            return self.speed_list
+        elif C_Info.x == info:
+            return self.pos_list
+        elif C_Info.dv == info:
+            return self.dv_list
+        elif C_Info.gap == info:
+            return self.gap_list
+        elif C_Info.dhw == info:
+            return self.dhw_list
+        elif C_Info.thw == info:
+            return self.thw_list
+        elif C_Info.time == info:
+            return self.time_list
+        elif C_Info.step == info:
+            return self.step_list
+        elif C_Info.safe_ttc == info:
+            return self.ttc_list
+        elif C_Info.safe_tit == info:
+            return self.tit_list
+        elif C_Info.safe_tet == info:
+            return self.tet_list
+        elif C_Info.safe_picud == info:
+            return self.picud_list
+
+    def record(self):
+        from trasim_simplified.core.data.data_container import Info as C_Info
+        for info in self.lane.data_container.save_info:
+            if C_Info.a == info:
+                self.acc_list.append(self.a)
+            elif C_Info.v == info:
+                self.speed_list.append(self.v)
+            elif C_Info.x == info:
+                self.pos_list.append(self.x)
+            elif C_Info.dv == info:
+                self.dv_list.append(self.dv)
+            elif C_Info.gap == info:
+                self.gap_list.append(self.gap)
+            elif C_Info.dhw == info:
+                self.dhw_list.append(self.dhw)
+            elif C_Info.thw == info:
+                self.thw_list.append(self.thw)
+            elif C_Info.time == info:
+                self.time_list.append(self.lane.time_)
+            elif C_Info.step == info:
+                self.step_list.append(self.lane.step_)
+
+            elif C_Info.safe_ttc == info:
+                self.ttc_list.append(self.ttc)
+            elif C_Info.safe_tit == info:
+                self.tit_list.append(self.tit)
+            elif C_Info.safe_tet == info:
+                self.tet_list.append(self.tet)
+            elif C_Info.safe_picud == info:
+                self.picud_list.append(self.picud)
 
     @property
-    def ID(self):
-        return self._ID
-
-    def setfRule(self, fModel=CFM.IDM):
-        if isinstance(fModel, str):
-            self.fRule: CFModel = get_cf_model(self, name=fModel)
-        elif isinstance(fModel, CFModel):
-            self.fRule: CFModel = fModel
+    def gap(self):
+        if self.leader is not None:
+            gap = self.leader.x - self.x - self.leader.length
+            if gap < 0:
+                gap += self.lane.lane_length
+            return gap
         else:
-            raise TrasimError(ErrorMessage.NO_MODEL.format(fModel))
-        self.fRule.mode = self._mode
+            return np.NaN
 
-    def setfParam(self, param: dict):
-        self.fRule.param_update(param)
-
-    def setDynamic(self, param, value):
-        self.vehicle.dynamic[param] = value
-
-    def getDynamic(self, param):
-        return self.vehicle.dynamic[param]
-
-    def getStatic(self, param):
-        return self.vehicle.static[param]
-
-    def getfParam(self):
-        return self.fRule.get_param_map()
-
-    def getfStatus(self):
-        return self.fRule.status
-
-    def getHistory(self):
-        return self._historyData
-
-    def setDynamicInOperation(self, acc: float, **kwargs):
-        """控制下一仿真步的加速度"""
-        self._dynamicData = {'acc': acc}
-        if kwargs.get('xOffset', False) and kwargs.get('speed', False):
-            self._dynamicData['xOffset'] = kwargs['xOffset']
-            if kwargs['xOffset'] > self.maxOffset:
-                self._dynamicData['xOffset'] -= self.maxOffset
-            self._dynamicData['speed'] = kwargs['speed']
-            self._needUpdate = False
-        self._isUnderControl = True
-
-    def historyOn(self, on=True, subscribe: list = None, maxHistory=np.inf):
-        """开启运行状态历史记录"""
-        self._historyOn = on
-        if not on:
-            return
-        sTemp = []
-        if subscribe is not None:
-            for s in subscribe:
-                if s not in self.vehicle.dynamic.keys():
-                    message = f"{s}不在可订阅的动态属性列表中！"
-                    warnings.warn(message, RuntimeWarning)
-                else:
-                    sTemp.append(s)
+    @property
+    def dv(self):
+        """前车与当前车速度差"""
+        if self.leader is not None:
+            return self.leader.v - self.v
         else:
-            sTemp = list(self.vehicle.dynamic.keys())
-        self._subscribe = sTemp
-        self._maxHistory = maxHistory
+            return np.NaN
 
-    def _underControlUpdate(self):
-        """被控制车辆的数据更新方法"""
-        if self._needUpdate:
-            acc = self._dynamicData['acc']
-            v = self.getDynamic('speed')
-            x = self.getDynamic('xOffset')
-            if v + acc * self.interval < 0:
-                acc = - v / self.interval
-            speed = acc * self.interval + v
-            self._dynamicData['speed'] = speed
-            xOffset = x + speed * self.interval + 0.5 * acc * (self.interval ** 2)
-            self._dynamicData['xOffset'] = (xOffset if xOffset <= self.maxOffset else xOffset - self.maxOffset)
+    @property
+    def dhw(self):
+        if self.leader is not None:
+            return self.gap + self.leader.length
         else:
-            self._needUpdate = True
+            return np.NaN
 
-        self.vehicle.dynamic.update(self._dynamicData)
-        self._isUnderControl = False
-        self._isCalculate = False
+    @property
+    def thw(self):
+        if self.leader is not None:
+            if self.dv != 0:
+                return self.dhw / np.array(- self.dv)
+        return np.NaN
 
-    def update(self, interval=0.1, updateMethod='synchronous'):
-        """供外部调用的车辆更新方法，含有tau参数的模型interval始终为tau"""
-        # 数据计算
-        # tau = self.fRule.getTau()
-        # if tau != 0:
-        #     interval = tau
-        self.interval = interval
-        if updateMethod == 'synchronous':
-            if self._isCalculate is False:
-                if self._isUnderControl is False:
-                    self._followRule(updateMethod)
-                else:
-                    self._isCalculate = True
-            else:
-                if not self._isUnderControl:
-                    self._circle_xOffset_reset()
-                    self.vehicle.dynamic.update(self._dynamicData)
-                    self._isCalculate = False
-                else:
-                    self._underControlUpdate()
-                self._dataStorage()
-        elif updateMethod == 'asynchronous':
-            if self._isUnderControl is False:
-                self._followRule(updateMethod)
-            else:
-                self._underControlUpdate()
-            self._dataStorage()
+    @property
+    def ttc(self):
+        if self.leader is not None:
+            if self.dv != 0:
+                return self.gap / np.array(- self.dv)
+        return np.NaN
+
+    @property
+    def tit(self):
+        """只是0 <= ttc <= ttc_star时计算单个ttc_star - ttc"""
+        ttc = self.ttc
+        if 0 <= ttc <= self.ttc_star:
+            return self.ttc_star - ttc
+        return 0
+
+    @property
+    def tet(self):
+        ttc = self.ttc
+        if 0 <= ttc <= self.ttc_star:
+            return 1
+        return 0
+
+    @property
+    def picud(self):
+        if self.leader is not None:
+            l_dec = self.leader.cf_model.get_expect_dec()
+            l_v = self.leader.v
+            l_x = self.leader.x if self.leader.x > self.x else (self.leader.x + self.lane.lane_length)
+            l_length = self.leader.length
+            dec = self.cf_model.get_expect_dec()
+            xd_l = (l_v ** 2) / (2 * l_dec)
+            xd = (self.v ** 2) / (2 * dec)
+            return (l_x + xd_l) - (self.x + self.v * self.lane.dt + xd) - l_length
         else:
-            raise ValueError(f"updateMethod={updateMethod}")
+            return np.NaN
 
-    def _dataStorage(self):
-        #  数据存储
-        if self._historyOn and len(self._subscribe) > 0:
-            subscription = {}
-            for s in self._subscribe:
-                subscription[s] = self.vehicle.dynamic[s]
-            self._historyData[self.SIMULATION_STEP] = subscription
-            if len(self._historyData) > self._maxHistory:
-                historyTimeList = list(self._historyData.keys())
-                delTime = historyTimeList[0]
-                self._historyData.pop(delTime)
-
-    def _followRule(self, updateMethod):
-        """车辆跟驰行为计算"""
-        result = self.fRule.step()
-
-        pre_speed = self.vehicle.dynamic["speed"]
-        tau = self.fRule.getTau()
-        next_speed = pre_speed + result * tau
-
-        self._dynamicData = {"acc": result,
-                             "speed": next_speed,
-                             "xOffset": self.vehicle.dynamic["xOffset"] + (pre_speed + next_speed) / 2 * tau}
-
-        if updateMethod == 'synchronous':
-            self._isCalculate = True
-        elif updateMethod == 'asynchronous':
-            self._circle_xOffset_reset()
-            self.vehicle.dynamic.update(self._dynamicData)
-
-    def _circle_xOffset_reset(self):
-        self.isCircle = False
-        x = self._dynamicData[V_DYNAMIC.X_OFFSET]
-        if x >= self.maxOffset:
-            x -= self.maxOffset
-            self.onLane.first = self.follower
-            self.onLane.last = self
-            self.isCircle = True
-            self._dynamicData[V_DYNAMIC.X_OFFSET] = x
-
-    def selfCheck(self):
-        xOffset = self.vehicle.dynamic[V_DYNAMIC.X_OFFSET]
-        leaderX = self.leader.vehicle.dynamic[V_DYNAMIC.X_OFFSET]
-        leaderL = self.leader.vehicle.static[V_STATIC.LENGTH]
-        if leaderX - leaderL < xOffset:
-            TrasimWarning(WarningMessage.GAP_LESS_THAN_ZERO.format(self._ID, leaderX - leaderL - xOffset))
+    def has_data(self):
+        return len(self.pos_list) != 0

@@ -42,6 +42,7 @@ class V_TYPE:
     TRUCK = 'truck'
     # 公交车
     BUS = 'bus'
+    OBSTACLE = "obstacle"
 
 
 # ******************************

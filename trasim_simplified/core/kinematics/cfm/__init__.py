@@ -15,7 +15,7 @@ from trasim_simplified.core.constant import CFM
 
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 
-__All__ = ['getCFModel', 'CFModel']
+__All__ = ['get_cf_model', 'CFModel']
 
 
 def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:

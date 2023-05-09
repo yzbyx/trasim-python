@@ -16,54 +16,61 @@ from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.frame_abstract import FrameAbstract
+    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
 
 
 class Plot:
-    def __init__(self, frame_abstract: 'FrameAbstract'):
+    def __init__(self, frame_abstract: 'LaneAbstract'):
         self.frame = frame_abstract
         self.container = self.frame.data_container
         self.processor = self.frame.data_processor
 
-    def basic_plot(self, index=0, axes: plt.Axes=None, fig: plt.Figure=None):
+    def basic_plot(self, index=0, axes: plt.Axes = None, fig: plt.Figure = None):
         """绘制车辆index"""
-        time_ = np.arange(self.frame.warm_up_step, self.frame.sim_step) * self.frame.dt
+        time_ = self.container.get_data(index, C_Info.time)
 
         if axes is None or fig is None:
             fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
-        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.speed_data[:, index], data_label=f"index={index}")
+        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.get_data(index, C_Info.v),
+                         data_label=f"index={index}")
 
         ax = axes[0, 1]
         self.custom_plot(ax, "speed(m/s)", "gap(m)",
-                         self.container.speed_data[:, index], self.container.gap_data[:, index], data_label=f"index={index}")
+                         self.container.get_data(index, C_Info.v), self.container.get_data(index, C_Info.gap),
+                         data_label=f"index={index}")
 
         ax = axes[1, 0]
         self.custom_plot(ax, "dv(m/s)", "gap(m)",
-                         self.container.dv_data[:, index], self.container.gap_data[:, index], data_label=f"index={index}")
+                         self.container.get_data(index, C_Info.dv), self.container.get_data(index, C_Info.gap),
+                         data_label=f"index={index}")
 
         ax = axes[1, 1]
-        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.acc_data[:, index], data_label=f"index={index}")
+        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.get_data(index, C_Info.a),
+                         data_label=f"index={index}")
 
-        if P_Info.safe_tit in self.processor.info:
+        if P_Info.safe_tit in self.container.save_info:
             ax = axes[0, 2]
             self.custom_plot(ax, "time(s)", "tit(s)", time_,
-                             self.processor.safe_result[P_Info.safe_tit][:, index], data_label=f"index={index}")
+                             self.container.get_data(index, C_Info.safe_tit), data_label=f"index={index}")
 
-        if P_Info.safe_picud in self.processor.info:
+        if P_Info.safe_picud in self.container.save_info:
             ax = axes[1, 2]
             self.custom_plot(ax, "time(s)", "picud(m)", time_,
-                             self.processor.safe_result[P_Info.safe_picud][:, index], data_label=f"index={index}")
+                             self.container.get_data(index, C_Info.safe_picud), data_label=f"index={index}")
 
         ax = axes[2][0]
-        self.custom_plot(ax, "time(s)", "gap(m)", time_, self.container.gap_data[:, index], data_label=f"index={index}")
+        self.custom_plot(ax, "time(s)", "gap(m)", time_,
+                         self.container.get_data(index, C_Info.gap), data_label=f"index={index}")
 
-    def spatial_time_plot(self, index=0, color_data=None, color_bar_name=None):
-        if color_data is None:
-            color_data = self.container.speed_data
+    def spatial_time_plot(self, index=0, color_info_name=None):
+        if color_info_name is None:
+            color_data = self.container.data_df[C_Info.v]
             color_bar_name = C_Info.v
-        assert color_data is not None and color_bar_name is not None, "color_data或color_bar_name不能为None"
+        else:
+            color_data = self.container.data_df[color_info_name]
+            color_bar_name = color_info_name
 
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
         ax: plt.Axes = ax
@@ -72,10 +79,12 @@ class Plot:
         ax.set_ylabel("location")
         value_range = (np.min(color_data), np.max(color_data))
         cmap = plt.get_cmap('rainbow')
-        for time__, temp__, index_, pos in self.frame.data_processor.data_shear(self.container.pos_data):
-            if pos[1] - pos[0] > 1:
-                self._lines_color(ax, time__, temp__, color_data[:, index_][pos[0]: pos[1]], value_range,
-                                  cmap, line_width=0.2 if index != index_ else 1)
+        for id_ in [car.ID for car in self.container.get_total_car_has_data()]:
+            color_data_single = self.container.get_data(id_, color_info_name)
+            for time__, temp__, pos in self.frame.data_processor.data_shear(C_Info.x, id_):
+                if pos[1] - pos[0] > 1:
+                    self._lines_color(ax, time__, temp__, color_data_single[pos[0]: pos[1]],
+                                      value_range, cmap, line_width=0.2 if index != id_ else 1)
 
         cb: Colorbar = fig.colorbar(ScalarMappable(mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap))
         cb.set_label(color_bar_name)
@@ -93,7 +102,8 @@ class Plot:
         color_value = color_value[:-1]
         seg = np.array([(a, b) for a, b in zip(points[:-1], points[1:])])
 
-        color_value = (color_value - value_range[0]) / (value_range[1] - value_range[0])
+        if value_range[1] - value_range[0] != 0:
+            color_value = (color_value - value_range[0]) / (value_range[1] - value_range[0])
         colors = cmap(color_value)
         lc = mcoll.LineCollection(seg, colors=colors, linewidths=line_width)
 
@@ -104,7 +114,7 @@ class Plot:
     @staticmethod
     def custom_plot(ax: plt.Axes, x_label: str, y_label: str,
                     x_data: Union[list[Sequence], Sequence], y_data: Union[list[Sequence], Sequence], *args,
-                    data_label: Union[list[str], Union[str, None]]=None, **kwargs):
+                    data_label: Union[list[str], Union[str, None]] = None, **kwargs):
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         if not isinstance(x_data, list): x_data = [x_data]

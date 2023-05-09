@@ -4,17 +4,17 @@
 # @File : data_processor.py
 # @Software : PyCharm
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
-import pandas as pd
+from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.frame_abstract import FrameAbstract
+    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
 
 
 class DataProcessor:
-    def __init__(self, frame_abstract: 'FrameAbstract'):
+    def __init__(self, frame_abstract: 'LaneAbstract'):
         self.frame = frame_abstract
         self.container = self.frame.data_container
         self.aggregate_all_result = {}
@@ -39,9 +39,6 @@ class DataProcessor:
             cal_dict = {}
         self.info.update(cal_dict)
 
-    def check_container(self):
-        assert self.container.data_pd is not None, "调用本函数须使用record函数记录数据"
-
     def print_result(self):
         print("-" * 10 + "aggregate_all_result" + "-" * 10)
         for result in self.aggregate_all_result.items():
@@ -55,10 +52,10 @@ class DataProcessor:
         print()
 
     def kqv_cal(self):
-        assert self.container.speed_data is not None, "调用本函数须使用record函数记录速度数据"
+        assert self.container.data_df[C_Info.v] is not None, "调用本函数须使用record函数记录速度数据"
 
-        avg_speed = np.mean(self.container.speed_data)
-        avg_k_by_car_num_lane_length = self.frame.car_num / self.frame.lane_length * 1000
+        avg_speed = self.get_total_agg_info(C_Info.v)
+        avg_k_by_car_num_lane_length = sum(self.frame.car_num_list) / self.frame.lane_length * 1000
         avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
 
         self.aggregate_all_result.update({
@@ -69,26 +66,56 @@ class DataProcessor:
 
         return self.aggregate_all_result
 
-    def aggregate(self):
-        self.check_container()
-        # 由于总车辆数恒定，因此直接对所有车辆数据求平均是可行的
+    def get_total_agg_info(self, name: str, func: Callable = np.average):
+        total_car_list_has_data = self.container.get_total_car_has_data()
+        temp = []
+        if C_Info.a == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.acc_list)
+            return func(temp)
+        elif C_Info.v == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.speed_list)
+            return func(temp)
+        elif C_Info.gap == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.gap_list)
+            temp_array = np.array(temp)
+            return func(temp_array[~ np.isnan(temp_array)])
+        elif C_Info.dv == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.dv_list)
+            temp_array = np.array(temp)
+            return func(temp_array[~ np.isnan(temp_array)])
+        elif C_Info.dhw == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.dhw_list)
+            temp_array = np.array(temp)
+            return func(temp_array[~ np.isnan(temp_array)])
+        elif C_Info.thw == name:
+            for car in total_car_list_has_data:
+                temp.extend(car.thw_list)
+            temp_array = np.array(temp)
+            return func(temp_array[~ np.isnan(temp_array)])
 
-        avg_acc, avg_speed, avg_gap, avg_dv, avg_dhw, avg_thw = \
-            (np.mean(data) for data in [self.container.acc_data, self.container.speed_data, self.container.gap_data,
-                                        self.container.dv_data,
-                                        self.container.dhw_data, self.container.thw_data])
+    def aggregate(self):
+        """集计指标计算"""
+        # 由于总车辆数恒定，因此直接对所有车辆数据求平均是可行的
+        avg_acc, avg_speed, avg_gap, avg_dv, avg_dhw, avg_thw = self.get_total_agg_info(C_Info.a),\
+            self.get_total_agg_info(C_Info.v), self.get_total_agg_info(C_Info.gap), self.get_total_agg_info(C_Info.dv),\
+            self.get_total_agg_info(C_Info.dhw), self.get_total_agg_info(C_Info.thw)
         # TODO：标准差这样做有待商榷
-        std_acc, std_speed, std_gap, std_dv, std_dhw, std_thw = \
-            (np.std(data) for data in [self.container.acc_data, self.container.speed_data, self.container.gap_data,
-                                       self.container.dv_data,
-                                       self.container.dhw_data, self.container.thw_data])
+        std_acc, std_speed, std_gap, std_dv, std_dhw, std_thw = self.get_total_agg_info(C_Info.a, np.std), \
+            self.get_total_agg_info(C_Info.v, np.std), self.get_total_agg_info(C_Info.gap, np.std),\
+            self.get_total_agg_info(C_Info.dv, np.std), self.get_total_agg_info(C_Info.dhw, np.std),\
+            self.get_total_agg_info(C_Info.thw, np.std)
         avg_q_by_thw = 3600 / avg_thw
         avg_k_by_dhw = 1000 / avg_dhw
         avg_v_q_div_k_by_thw_dhw = avg_q_by_thw / avg_k_by_dhw / 3.6
 
-        harmonic_avg_speed = 1 / np.mean(1 / self.container.speed_data)
+        harmonic_avg_speed = 1 / np.mean(1 / self.container.data_df[C_Info.v])
 
-        avg_k_by_car_num_lane_length = self.frame.car_num / self.frame.lane_length * 1000
+        avg_k_by_car_num_lane_length = sum(self.frame.car_num_list) / self.frame.lane_length * 1000
         avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
 
         self.aggregate_all_result.update({
@@ -112,7 +139,7 @@ class DataProcessor:
             Info.avg_k_by_car_num_lane_length: avg_k_by_car_num_lane_length})
         return self.aggregate_all_result
 
-    def aggregate_as_detect_loop(self, pos, width, d_step: int, step_range: Sequence[int, int]=None):
+    def aggregate_as_detect_loop(self, pos, width, d_step: int, step_range: Sequence[int, int] = None):
         """
         以传感线圈的方式检测交通参数（HCM的平均速度定义）
 
@@ -122,9 +149,8 @@ class DataProcessor:
         :param d_step: 每个检测周期的总仿真步
         :return: 包含顺序集计交通参数列表的字典
         """
-        self.check_container()
 
-        min_width = self.frame.dt * np.max(self.container.speed_data)
+        min_width = self.frame.dt * np.max(self.container.data_df[C_Info.v])
         assert width > min_width, f"至少将传感线圈的宽度设置在{min_width}以上！"
         is_return = False  # 传感器是否返回
         end_pos = pos + width
@@ -157,7 +183,7 @@ class DataProcessor:
             car_num_in = 0
             steps_has_car = 0
             avg_speed_list_per_dt = []
-            for i in range(self.frame.car_num):
+            for i in range(self.frame.car_num_list):
                 target_pos = np.where(pos_in[1] == i)
                 if len(target_pos[0]) == 0: continue
 
@@ -189,11 +215,12 @@ class DataProcessor:
                         t_a += (end_pos - start_pos) * self.frame.dt
 
                     start_pos = end_pos + 1
-                car_num_in  += len(last_pos_before_leave)
+                car_num_in += len(last_pos_before_leave)
                 steps_has_car += len(single_pos)
 
             time_avg_speed_list.append(np.mean(avg_speed_list_per_dt))  # 时间平均车速
-            space_avg_speed_by_time_avg_speed_list.append(np.mean(1 / np.array(avg_speed_list_per_dt)))  # 地点车速的调和平均为空间平均车速
+            # 地点车速的调和平均为空间平均车速
+            space_avg_speed_by_time_avg_speed_list.append(np.mean(1 / np.array(avg_speed_list_per_dt)))
             q_list.append(car_num_in / (d_step * self.frame.dt))
             time_occ_list.append(steps_has_car / d_step)
 
@@ -215,54 +242,25 @@ class DataProcessor:
 
         return [self.aggregate_loop_result, self.aggregate_Edie_result]
 
-    def cal_safety(self):
-        if Info.safe_ttc in self.info:
-            self.safe_result[Info.safe_ttc] = self.container.dhw_data / (- self.container.dv_data)
-        if Info.safe_tet in self.info and Info.safe_ttc in self.info:
-            where_ = np.where((self.safe_result[Info.safe_ttc] > 0) &
-                              (self.safe_result[Info.safe_ttc] < self.ttc_star))
-            result = np.zeros(self.container.speed_data.shape)
-            result[where_] = 1
-            self.safe_result[Info.safe_tet] = result
-        if Info.safe_tit in self.info and Info.safe_ttc in self.info:
-            where_ = np.where((self.safe_result[Info.safe_ttc] > 0) &
-                              (self.safe_result[Info.safe_ttc] < self.ttc_star))
-            result = np.zeros(self.container.speed_data.shape)
-            result[where_] = self.ttc_star - self.safe_result[Info.safe_ttc][where_]
-            self.safe_result[Info.safe_tit] = result
-        if Info.safe_picud in self.info:
-            d = 3.
-            if "d" in self.frame.cf_model.get_param_map().keys():
-                d = self.frame.cf_model.get_param_map()["d"]
-            dec_dist = np.power(self.container.speed_data, 2) / (2 * d)
-            dec_dist = np.concatenate([dec_dist, dec_dist[:, 0].reshape((-1, 1))], axis=1)
-            react_dist = self.container.speed_data * self.frame.dt
-            dist = self.container.gap_data
-            self.safe_result[Info.safe_picud] = dist + np.diff(dec_dist, axis=1) - react_dist
-        return self.safe_result
+    def data_shear(self, info_name: str, id_=-1):
+        temp_ = self.container.get_data(id_, info_name)
+        time_ = self.container.get_data(id_, C_Info.time)
 
-    def data_shear(self, data, index=-1):
-        time_ = np.arange(self.frame.warm_up_step, self.frame.sim_step) * self.frame.dt
-
-        for j in range(self.frame.car_num):
-            if index >= 0 and index != j:
-                continue
-            temp_ = data[:, j]
-            return_index = list(np.where(np.diff(temp_) < 0)[0])
-            return_index.insert(0, 0)
-            if len(return_index) == 1:
-                yield time_, temp_, j, [0, len(temp_)]
-            else:
-                for i in range(len(return_index)):
-                    if i == 0:
-                        pos = (0, return_index[i + 1] + 1)
-                    elif i != len(return_index) - 1 and i != 0:
-                        pos = (return_index[i] + 1, return_index[i + 1] + 1)
-                    else:
-                        pos = (return_index[i] + 1, len(temp_))
-                    temp__ = temp_[pos[0]: pos[1]]
-                    time__ = time_[pos[0]: pos[1]]
-                    yield time__, temp__, j, pos
+        return_index = list(np.where(np.diff(np.array(temp_)) < 0)[0])
+        return_index.insert(0, 0)
+        if len(return_index) == 1:
+            yield time_, temp_, [0, len(temp_)]
+        else:
+            for i in range(len(return_index)):
+                if i == 0:
+                    pos = (0, return_index[i + 1] + 1)
+                elif i != len(return_index) - 1 and i != 0:
+                    pos = (return_index[i] + 1, return_index[i + 1] + 1)
+                else:
+                    pos = (return_index[i] + 1, len(temp_))
+                temp__ = temp_[pos[0]: pos[1]]
+                time__ = time_[pos[0]: pos[1]]
+                yield time__, temp__, pos
 
 
 class Info:
@@ -309,6 +307,7 @@ class Info:
             if key[:4] == "safe":
                 values.update({key: dict_[key]})
         return values
+
 
 if __name__ == '__main__':
     print(Info.get_all_info())

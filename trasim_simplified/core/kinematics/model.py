@@ -15,6 +15,7 @@ class Model(metaclass=abc.ABCMeta):
         self.vehicle: Optional['Vehicle'] = vehicle if vehicle else None
         self.name = None
         self.thesis = None
+        self.dt = 0.1
 
     @abc.abstractmethod
     def _update_dynamic(self):
@@ -26,11 +27,12 @@ class Model(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def step(self, *args):
+    def step(self, index):
         """
-        仿真程序内部调用函数，调用_calculate函数计算加速度
+        计算下一时间步的加速度
 
-        :return: {'xOffset', 'speed', 'acc', ...}
+        :param index: 车辆在车道上从上游到下游的顺序编号，从0开始
+        :return: 下一时间步的加速度
         """
         pass
 

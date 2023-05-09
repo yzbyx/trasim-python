@@ -3,6 +3,7 @@
 # @Author : yzbyx
 # @File : CFModel.py
 # @Software : PyCharm
+import abc
 import random
 from abc import ABC
 from typing import TYPE_CHECKING, Optional
@@ -28,6 +29,18 @@ class CFModel(Model, ABC):
     def getTau(self) -> float:
         """获取反应时间"""
         return self.get_param_map().get('tau', 0)
+
+    @abc.abstractmethod
+    def get_expect_dec(self):
+        pass
+
+    @abc.abstractmethod
+    def get_expect_acc(self):
+        pass
+
+    @abc.abstractmethod
+    def get_expect_speed(self):
+        pass
 
     def equilibrium_state(self, *args):
         pass

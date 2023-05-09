@@ -4,7 +4,7 @@
 # @File : obstacle.py
 # @Software : PyCharm
 
-from constant import V_TYPE, V_DYNAMIC, V_STATIC
+from trasim_simplified.core.constant import V_TYPE
 
 
 class Obstacle:
@@ -23,9 +23,12 @@ class Obstacle:
     def getStatic(cls, param1, param2):
         return cls._STATIC_PARAMETER[param1][param2]
 
-    def __init__(self, vType=V_TYPE.PASSENGER):
-        # 速度、加速度、道路ID、车道编号、偏航、角加速度、车道偏移、道路偏移
-        self.dynamic = {'speed': 0, 'acc': 0, 'alpha': 0,
-                        'roadId': None, 'laneNum': 0,
-                        'theta': 0, 'yOffset': 0, 'xOffset': 0, 'globalPos': [0, 0]}
-        self.static = self._STATIC_PARAMETER[vType]
+    def __init__(self, type_: str):
+        self.x = 0
+        self.v = 0
+        self.a = 0
+        self.color = self._COLOR_PARAMETER["yellow"]
+
+        self.length = 5.0
+        self.width = 1.8
+        self.type = type_

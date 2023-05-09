@@ -6,7 +6,6 @@
 from typing import Optional, TYPE_CHECKING
 
 import numpy as np
-from numba import jit
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class CFModel_Gipps(CFModel):
-    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float] ):
+    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
         super().__init__(vehicle)
         # -----模型属性------ #
         self.name = CFM.GIPPS
@@ -31,26 +30,17 @@ class CFModel_Gipps(CFModel):
         self._b_hat = f_param.get("b_hat", -2.5)   # 预估前车最大期望减速度
 
     def _update_dynamic(self):
-        self.dt = 0.1
-        assert self.dt == self._tau, f"{self.name}模型的反应时间tau需要与仿真步长一致！"
+        if self.vehicle.lane.dt != self._tau:
+            print(f"{self.name}模型的反应时间tau需要与仿真步长一致！")
+            self.vehicle.lane.dt = self._tau
 
-    def step(self, *args):
-        """
-        计算下一时间步的加速度
-
-        :param args: 为了兼容矩阵计算设置的参数直接传递
-        :return: 下一时间步的加速度
-        """
+    def step(self, index):
+        if self.vehicle.leader is None:
+            return self.get_expect_acc()
+        self._update_dynamic()
         f_param = [self._a, self._b, self._v0, self._tau, self._s, self._b_hat]
-        if args:
-            return calculate(*f_param, *args)
-        else:
-            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
-                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
-                             self.vehicle.leader.static["length"])
-
-    def calculate(*args):
-        pass
+        return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
+                         self.vehicle.x + self.vehicle.dhw)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -68,9 +58,17 @@ class CFModel_Gipps(CFModel):
         q = k * v
         return {"K": k, "Q": q, "V": v}
 
+    def get_expect_dec(self):
+        return self._b
 
-# @jit(nopython=True)
-def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
+    def get_expect_acc(self):
+        return self._a
+
+    def get_expect_speed(self):
+        return self._v0
+
+
+def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX) -> dict:
     # 计算车头间距
     deltaX = leaderX - xOffset
     # 包络线公式限制

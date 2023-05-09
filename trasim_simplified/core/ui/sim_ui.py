@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Optional
 from pygame.time import Clock
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.frame_abstract import FrameAbstract
+    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
 
 
 class UI:
-    def __init__(self, frame_abstract: 'FrameAbstract'):
+    def __init__(self, frame_abstract: 'LaneAbstract'):
         self.frame = frame_abstract
         self.frame_rate = -1
         self.screen_width = 1980 / 1.5
@@ -32,13 +32,17 @@ class UI:
 
     def ui_update(self):
         self.screen.fill((0, 0, 0))
-        for i in range(self.frame.car_pos.shape[1]):
+        font = pg.font.SysFont('Times', 20)
+        text = font.render("steps: " + str(self.frame.step_), True, (255, 255, 255), None)
+        self.screen.blit(text, (0, 0))
+
+        for i, car in enumerate(self.frame.car_list):
             # TODO: 实现转折或缩放
             # pos_y = int(self.car_pos[0, i] / 1000)
             # pos_x = self.car_pos[0, i] - pos_y * 1000
             pg.draw.rect(self.screen, (255, 0, 0),
-                         (self.frame.car_pos[0, i] / self.frame.lane_length * self.screen_width, int(self.screen_height / 2),
-                          int(self.frame.car_length / self.frame.lane_length * self.screen_width), 10))
+                         (car.x / self.frame.lane_length * self.screen_width, int(self.screen_height / 2),
+                          int(car.length / self.frame.lane_length * self.screen_width), 10))
 
         pg.display.update()
         if self.frame_rate > 0:
