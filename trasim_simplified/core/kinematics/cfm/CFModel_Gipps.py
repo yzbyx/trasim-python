@@ -59,7 +59,7 @@ class CFModel_Gipps(CFModel):
         return {"K": k, "Q": q, "V": v}
 
     def get_expect_dec(self):
-        return self._b
+        return - self._b
 
     def get_expect_acc(self):
         return self._a

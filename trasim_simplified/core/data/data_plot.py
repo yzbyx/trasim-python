@@ -25,44 +25,44 @@ class Plot:
         self.container = self.frame.data_container
         self.processor = self.frame.data_processor
 
-    def basic_plot(self, index=0, axes: plt.Axes = None, fig: plt.Figure = None):
+    def basic_plot(self, id_=0, axes: plt.Axes = None, fig: plt.Figure = None):
         """绘制车辆index"""
-        time_ = self.container.get_data(index, C_Info.time)
+        time_ = self.container.get_data(id_, C_Info.time)
 
         if axes is None or fig is None:
             fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
-        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.get_data(index, C_Info.v),
-                         data_label=f"index={index}")
+        self.custom_plot(ax, "time(s)", "speed(m/s)", time_, self.container.get_data(id_, C_Info.v),
+                         data_label=f"index={id_}")
 
         ax = axes[0, 1]
         self.custom_plot(ax, "speed(m/s)", "gap(m)",
-                         self.container.get_data(index, C_Info.v), self.container.get_data(index, C_Info.gap),
-                         data_label=f"index={index}")
+                         self.container.get_data(id_, C_Info.v), self.container.get_data(id_, C_Info.gap),
+                         data_label=f"index={id_}")
 
         ax = axes[1, 0]
         self.custom_plot(ax, "dv(m/s)", "gap(m)",
-                         self.container.get_data(index, C_Info.dv), self.container.get_data(index, C_Info.gap),
-                         data_label=f"index={index}")
+                         self.container.get_data(id_, C_Info.dv), self.container.get_data(id_, C_Info.gap),
+                         data_label=f"index={id_}")
 
         ax = axes[1, 1]
-        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.get_data(index, C_Info.a),
-                         data_label=f"index={index}")
+        self.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, self.container.get_data(id_, C_Info.a),
+                         data_label=f"index={id_}")
 
         if P_Info.safe_tit in self.container.save_info:
             ax = axes[0, 2]
             self.custom_plot(ax, "time(s)", "tit(s)", time_,
-                             self.container.get_data(index, C_Info.safe_tit), data_label=f"index={index}")
+                             self.container.get_data(id_, C_Info.safe_tit), data_label=f"index={id_}")
 
         if P_Info.safe_picud in self.container.save_info:
             ax = axes[1, 2]
             self.custom_plot(ax, "time(s)", "picud(m)", time_,
-                             self.container.get_data(index, C_Info.safe_picud), data_label=f"index={index}")
+                             self.container.get_data(id_, C_Info.safe_picud), data_label=f"index={id_}")
 
         ax = axes[2][0]
         self.custom_plot(ax, "time(s)", "gap(m)", time_,
-                         self.container.get_data(index, C_Info.gap), data_label=f"index={index}")
+                         self.container.get_data(id_, C_Info.gap), data_label=f"index={id_}")
 
     def spatial_time_plot(self, index=0, color_info_name=None):
         if color_info_name is None:

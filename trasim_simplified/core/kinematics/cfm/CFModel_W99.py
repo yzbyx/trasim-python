@@ -82,23 +82,33 @@ class CFModel_W99(CFModel):
         self.status = None
 
     def _update_dynamic(self):
-        pass
+        self.dt = self.vehicle.lane.dt
 
     def step(self, *args):
+        if self.vehicle.leader is None:
+            return self.get_expect_acc()
+        self._update_dynamic()
         f_param = [self._CC0, self._CC1, self._CC2, self._CC3, self._CC4, self._CC5, self._CC6, self._CC7,
                    self._CC8, self._CC9, self._vDesire, self._aggressive]
-        if args:
-            result = calculate(*f_param, *args)
-        else:
-            result = calculate(*f_param, self.status, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
-                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
-                             self.vehicle.leader.static["length"])
-            _, self.status = result
-        return result
+        result = calculate(*f_param, self.status, self.dt, self.vehicle.v, self.vehicle.a, self.vehicle.x,
+                           self.vehicle.length,
+                           self.vehicle.leader.v, self.vehicle.leader.a, self.vehicle.x + self.vehicle.dhw,
+                           self.vehicle.leader.length)
+        acc, self.status = result
+        return acc
 
     def getThresholdValues(self, speed, gap, leaderV, leaderA):
         params = [self._CC0, self._CC1, self._CC2, self._CC3, self._CC4, self._CC5, self._CC6, self._aggressive]
         return getThresholdValues(*params, speed, gap, leaderV, leaderA)
+
+    def get_expect_dec(self):
+        return self.DEFAULT_EXPECT_DEC
+
+    def get_expect_acc(self):
+        return self._CC9
+
+    def get_expect_speed(self):
+        return self._vDesire
 
 
 def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive, status,
@@ -167,6 +177,7 @@ def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggress
 
     return finalAcc, status
 
+
 def getThresholdValues(cc0, cc1, cc2, cc3, cc4, cc5, cc6, aggressive, speed, gap, leaderV, leaderA):
     cc6 = cc6 / 10000
 
@@ -187,6 +198,7 @@ def getThresholdValues(cc0, cc1, cc2, cc3, cc4, cc5, cc6, aggressive, speed, gap
     sdvo = cc5 + sdv if speed > cc5 else sdv  # minimal opening dv
 
     return sdxc, sdxo, sdxv, sdvc, sdvo
+
 
 def myRandom(seed):
     """根据一定规则，生成[0, 0.5]范围的随机数"""

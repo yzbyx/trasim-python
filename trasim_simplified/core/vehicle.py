@@ -10,7 +10,7 @@ import numpy as np
 
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
 from trasim_simplified.core.obstacle import Obstacle
-
+from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.lane_abstract import LaneAbstract
@@ -127,7 +127,10 @@ class Vehicle(Obstacle):
         if self.leader is not None:
             gap = self.leader.x - self.x - self.leader.length
             if gap < 0:
-                gap += self.lane.lane_length
+                if self.lane.is_circle:
+                    gap += self.lane.lane_length
+                else:
+                    TrasimError("车辆净间距小于0！")
             return gap
         else:
             return np.NaN

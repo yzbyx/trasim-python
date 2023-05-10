@@ -6,7 +6,6 @@
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-# from numba import jit
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -63,13 +62,12 @@ class CFModel_IDM(CFModel):
         :param args: 为了兼容矩阵计算设置的参数直接传递
         :return: 下一时间步的加速度
         """
+        if self.vehicle.leader is None:
+            return self.get_expect_acc()
+        self._update_dynamic()
         f_param = [self._s0, self._s1, self._v0, self._T, self._omega, self._d, self._delta]
-        if args:
-            return calculate(*f_param, *args)
-        else:
-            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
-                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
-                             self.vehicle.leader.static["length"])
+        return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
+                         self.vehicle.x + self.vehicle.dhw, self.vehicle.leader.length)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -87,8 +85,16 @@ class CFModel_IDM(CFModel):
         q = k * v
         return {"K": k, "Q": q, "V": v}
 
+    def get_expect_dec(self):
+        return self._d
 
-# @jit(nopython=True)
+    def get_expect_acc(self):
+        return self._omega
+
+    def get_expect_speed(self):
+        return self._v0
+
+
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))

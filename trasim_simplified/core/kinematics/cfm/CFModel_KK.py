@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM, V_DYNAMIC, V_STATIC
+from trasim_simplified.core.constant import CFM
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -68,6 +68,9 @@ class CFModel_KK(CFModel):
         self.index = None
 
     def _update_dynamic(self):
+        self.dt = self.vehicle.lane.dt
+        self._update_v_safe()
+
         self.v = self.vehicle.v
         self.gap = self.vehicle.gap
         self.l_v = self.vehicle.leader.v
@@ -119,14 +122,12 @@ class CFModel_KK(CFModel):
 
         self.v_safe = getattr(lane, "_v_safe")[self.index]
         self.v_a = getattr(lane, "_v_a")
-        self.l_v_a = self.v_a[self.index + 1] if (self.index + 1 < lane.car_num - 1) else self.v_a[0]
+        self.l_v_a = self.v_a[self.index + 1] if (self.index <= len(self.v_a) - 2) else self.v_a[0]
 
     def step(self, index):
+        self.index = index
         if self.vehicle.leader is None:
             return self.get_expect_acc()
-        self.index = index
-        self.dt = self.vehicle.lane.dt
-        self._update_v_safe()
         self._update_dynamic()
         acc, self.status = self._calculate()
         return acc
@@ -163,6 +164,7 @@ class CFModel_KK(CFModel):
         alpha_l = int(leaderV / (leader_dec * dt))
         beta_l = leaderV / (leader_dec * dt) - alpha_l
         X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
+        if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
         alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
         beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
 

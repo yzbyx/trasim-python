@@ -64,7 +64,7 @@ class LaneAbstract(ABC):
     def car_num(self):
         return len(self.car_list)
 
-    def car_config(self, car_num: int, car_length: int, car_type: str, car_initial_speed: int, speed_with_random: bool,
+    def car_config(self, car_num: int, car_length: float, car_type: str, car_initial_speed: int, speed_with_random: bool,
                    cf_name: str, cf_param: dict[str, float]):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
         self.car_num_list.append(car_num)
@@ -139,13 +139,15 @@ class LaneAbstract(ABC):
 
         # 整个仿真能够运行sim_step的仿真步
         while self.sim_step != self.step_:
+            if not self.is_circle:
+                self.car_summon()
             # 能够记录warm_up_step仿真步时的车辆数据
             if self.data_save and self.step_ >= self.warm_up_step:
                 self.record()
-            self.step()
+            self.step()  # 未更新状态，但已经计算
             # 控制车辆对应的step需要在下一个仿真步才能显现到数据记录中
             if self.yield_: yield self.step_
-            self.update_state()
+            self.update_state()  # 更新车辆状态
             self.step_ += 1
             self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
@@ -156,6 +158,10 @@ class LaneAbstract(ABC):
 
     @abc.abstractmethod
     def step(self):
+        pass
+
+    def car_summon(self):
+        """用于开边界车辆生成"""
         pass
 
     def record(self):
@@ -175,6 +181,25 @@ class LaneAbstract(ABC):
         for car in self.car_list:
             if car.ID == car_id:
                 car.step_acc = acc_values
+
+    def get_relative_id(self, id_, offset: int):
+        """
+        :param id_: 车辆ID
+        :param offset: 正整数代表向下游检索，负数代表上游
+        """
+        assert offset - int(offset) == 0, "offset必须是整数"
+        for car in self.car_list:
+            if car.ID == id_:
+                while offset != 0:
+                    if offset > 0:
+                        if car.leader is not None:
+                            car = car.leader
+                        offset -= 1
+                    else:
+                        if car.follower is not None:
+                            car = car.follower
+                        offset += 1
+                return car.ID
 
     def __str__(self):
         return "lane_length: " + str(self.lane_length) + \

@@ -5,6 +5,8 @@
 # @Software : PyCharm
 from typing import Optional, TYPE_CHECKING
 
+import numpy as np
+
 from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.kinematics.cfm import CFModel
 
@@ -25,17 +27,36 @@ class CFModel_Linear(CFModel):
         self._lambda = f_param.get("lambda", 1.)
         """敏感度 [s^-1]"""
 
+        self.v = -1
+        self.x = -1
+        self.l_v = -1
+        self.l_x = -1
+
     def _update_dynamic(self):
-        assert self.dt == self._T
+        time = self.vehicle.lane.time_ - self._T
+        if time > self._T:
+            index = np.where(((time - 1e-4) < np.array(self.vehicle.time_list)) &
+                             ((time + 1e-4) > np.array(self.vehicle.time_list)))[0][0]
+        else:
+            index = 0
+        self.pre_v = self.vehicle.speed_list[index]
+        self.l_pre_v = self.vehicle.leader.speed_list[index]
 
     def step(self, *args):
-        f_param = [self._T, self._lambda]
-        if args:
-            return calculate(*f_param, *args)
-        else:
-            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
-                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
-                             self.vehicle.leader.static["length"])
+        if self.vehicle.leader is None:
+            return 0.
+        self._update_dynamic()
+        return calculate(self._lambda, self.pre_v, self.l_pre_v)
 
-def calculate(T, lambda_, speed, xOffset, leaderV, leaderX, leaderL):
+    def get_expect_dec(self):
+        return self.DEFAULT_EXPECT_DEC
+
+    def get_expect_acc(self):
+        return self.DEFAULT_EXPECT_ACC
+
+    def get_expect_speed(self):
+        return self.DEFAULT_EXPECT_SPEED
+
+
+def calculate(lambda_, speed, leaderV):
     return lambda_ * (leaderV - speed)

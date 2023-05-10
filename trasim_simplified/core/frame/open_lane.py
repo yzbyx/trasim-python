@@ -3,8 +3,7 @@
 # @Author : yzbyx
 # @File : open_lane.py
 # @Software : PyCharm
-import random
-from typing import Iterable, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -44,7 +43,6 @@ class LaneOpen(LaneAbstract):
         self.car_num_percent = np.array(self.car_num_list) / sum(self.car_num_list)
 
     def step(self):
-        self.car_summon()
         for i, car in enumerate(self.car_list):
             car.step(i)
 

@@ -25,6 +25,9 @@ class CFModel(Model, ABC):
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = CFModel._RANDOM
+        self.DEFAULT_EXPECT_DEC = 3.
+        self.DEFAULT_EXPECT_ACC = 3.
+        self.DEFAULT_EXPECT_SPEED = 30.
 
     def getTau(self) -> float:
         """获取反应时间"""
@@ -32,6 +35,7 @@ class CFModel(Model, ABC):
 
     @abc.abstractmethod
     def get_expect_dec(self):
+        """值为正数"""
         pass
 
     @abc.abstractmethod

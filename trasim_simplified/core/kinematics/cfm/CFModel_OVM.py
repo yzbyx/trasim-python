@@ -48,13 +48,13 @@ class CFModel_OVM(CFModel):
         pass
 
     def step(self, *args):
+        if self.vehicle.leader is None:
+            return self.get_expect_acc()
+        self._update_dynamic()
         f_param = [self._a, self._V0, self._m, self._bf, self._bc]
-        if args:
-            return calculate(*f_param, *args)
-        else:
-            return calculate(*f_param, self.vehicle.dynamic["speed"], self.vehicle.dynamic["xOffset"],
-                             self.vehicle.leader.dynamic["speed"], self.vehicle.leader.dynamic["xOffset"],
-                             self.vehicle.leader.static["length"])
+        return calculate(*f_param, self.vehicle.v, self.vehicle.x,
+                         self.vehicle.x + self.vehicle.dhw,
+                         self.vehicle.leader.length)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -70,7 +70,17 @@ class CFModel_OVM(CFModel):
         q = k * v
         return {"K": k, "Q": q, "V": v}
 
-def calculate(a, V0, m, bf, bc, speed, xOffset, leaderV, leaderX, leaderL):
+    def get_expect_dec(self):
+        return 3.
+
+    def get_expect_acc(self):
+        return 3.
+
+    def get_expect_speed(self):
+        return self._V0
+
+
+def calculate(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     bf += leaderL
     bc += leaderL       # 期望最小车头间距
 
