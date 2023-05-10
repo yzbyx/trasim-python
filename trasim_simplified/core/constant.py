@@ -12,24 +12,39 @@ class RANDOM_SEED:
     CAR_PRODUCE_SEED = 0  # 用于车辆生成
 
 
+class COLOR:
+    red = [255, 0, 0]
+    black = [0, 0, 0]
+    white = [255, 255, 255]
+    blue = [0, 0, 255]
+    purple = [160, 32, 240]
+    yellow = [255, 255, 0]
+    green = [0, 255, 0]
+    pink = [255, 192, 203]
+    gray = [190, 190, 190]
+
 # ******************************
 # 跟驰模型
 # ******************************
 class CFM:
-    # idm模型
     IDM = 'IDM'
-    # gipps模型
+    """IDM模型"""
     GIPPS = 'Gipps'
-    # wiedemann模型
+    """Gipps模型"""
     WIEDEMANN_99 = 'W99'
-    # GM模型
+    """Wiedemann99模型"""
     NON_LINEAR_GHR = 'Non_linear_GHR'
-    # OV模型
+    """GM模型"""
     OPTIMAL_VELOCITY = 'Optimal_Velocity'
-    # TPACC模型
-    KK = 'Three-Phase_ACC'
+    """OV模型"""
+    KK = 'Three-Phase_KK'
+    """KK模型"""
     LINEAR = "Linear"
     """线性跟驰模型(刺激反应模型)"""
+    TPACC = "Three-Phase_TPACC"
+    """TPACC模型"""
+    ACC = "ACC"
+    """ACC模型"""
 
 
 # ******************************

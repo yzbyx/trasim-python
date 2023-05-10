@@ -17,6 +17,7 @@ from trasim_simplified.core.vehicle import Vehicle
 
 class LaneAbstract(ABC):
     def __init__(self, lane_length: int):
+        self.speed_limit = 30.
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
@@ -29,6 +30,7 @@ class LaneAbstract(ABC):
         self.speed_with_random_list: list[bool] = []
         self.cf_name_list: list[str] = []
         self.cf_param_list: list[dict] = []
+        self.car_param_list: list[dict] = []
 
         self.car_list: list[Vehicle] = []
         self.out_car_has_data: list[Vehicle] = []
@@ -65,7 +67,7 @@ class LaneAbstract(ABC):
         return len(self.car_list)
 
     def car_config(self, car_num: int, car_length: float, car_type: str, car_initial_speed: int, speed_with_random: bool,
-                   cf_name: str, cf_param: dict[str, float]):
+                   cf_name: str, cf_param: dict[str, float], car_param: dict):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
         self.car_num_list.append(car_num)
         self.car_length_list.append(car_length)
@@ -74,6 +76,7 @@ class LaneAbstract(ABC):
         self.speed_with_random_list.append(speed_with_random)
         self.cf_name_list.append(cf_name)
         self.cf_param_list.append(cf_param)
+        self.car_param_list.append(car_param)
 
     def car_load(self, car_gap=-1):
         car_num_total = sum(self.car_num_list)
@@ -81,31 +84,31 @@ class LaneAbstract(ABC):
         gap = (self.lane_length - car_length_total) / car_num_total
         assert gap >= 0, f"该密度下，车辆重叠！"
 
-        index_list = np.arange(car_num_total)
-        np.random.shuffle(index_list)
-
         x = 0
         car_count = 0
-        for i, car_num in enumerate(self.car_num_list):
-            for j in range(car_num):
-                vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
-                vehicle.x = x
-                vehicle.v = np.random.uniform(
-                    max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
-                ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
-                vehicle.a = 0
-                vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
+        car_type_index_list = []
+        for i in range(len(self.car_num_list)):
+            car_type_index_list.extend([i] * self.car_num_list[i])
+        np.random.shuffle(car_type_index_list)
 
-                self.car_list.append(vehicle)
-                if car_count != car_num_total - 1:
-                    if car_gap < 0:
-                        if j < car_num - 1:
-                            x = x + gap + self.car_length_list[i]
-                        else:
-                            x = x + gap + self.car_length_list[i + 1]
-                    else:
-                        x = x + car_gap + self.car_length_list[car_count + 1]
-                car_count += 1
+        for index, i in enumerate(car_type_index_list):
+            vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
+            vehicle.x = x
+            vehicle.v = np.random.uniform(
+                max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
+            ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
+            vehicle.a = 0
+            vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
+            vehicle.set_car_param(self.car_param_list[i])
+
+            self.car_list.append(vehicle)
+            if index != car_num_total - 1:
+                length = self.car_length_list[car_type_index_list[index + 1]]
+                if car_gap < 0:
+                    x = x + gap + length
+                else:
+                    x = x + car_gap + length
+            car_count += 1
 
         for i, car in enumerate(self.car_list[1: -1]):
             car.leader = self.car_list[i + 2]
@@ -151,6 +154,24 @@ class LaneAbstract(ABC):
             self.step_ += 1
             self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
+
+    def car_state_update_common(self, car):
+        car_speed_before = car.v
+        car.v += car.step_acc * self.dt
+
+        if car.v > car.cf_model.get_expect_speed():
+            expect_speed = car.cf_model.get_expect_speed()
+            car.a = (expect_speed - car.v) / self.dt
+            car.v = expect_speed
+        elif car.v < 0:
+            if car.v < - 1e-3:
+                print("存在速度为负的车辆！")
+            car.step_acc = - (car_speed_before / self.dt)
+            car.v = 0
+        else:
+            car.a = car.step_acc
+
+        car.x += (car_speed_before + car.v) * self.dt / 2
 
     @abc.abstractmethod
     def update_state(self):

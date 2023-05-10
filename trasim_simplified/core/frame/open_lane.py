@@ -92,15 +92,8 @@ class LaneOpen(LaneAbstract):
 
     def update_state(self):
         for car in self.car_list:
-            car_speed_before = car.v
-            car.v += car.step_acc * self.dt
-            car.a = car.step_acc
+            self.car_state_update_common(car)
 
-            if car.v < 0:
-                TrasimWarning("存在速度为负的车辆！")
-                car.v = 0
-
-            car.x += (car_speed_before + car.v) / 2 * self.dt
             if car.x > self.lane_length:
                 self.car_list.remove(car)
                 if len(self.car_list) > 0:

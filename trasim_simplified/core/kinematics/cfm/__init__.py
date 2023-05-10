@@ -11,6 +11,8 @@ from trasim_simplified.core.kinematics.cfm.CFModel_NonLinearGHR import CFModel_N
 from trasim_simplified.core.kinematics.cfm.CFModel_OVM import CFModel_OVM as OVM
 from trasim_simplified.core.kinematics.cfm.CFModel_KK import CFModel_KK as KK
 from trasim_simplified.core.kinematics.cfm.CFModel_Linear import CFModel_Linear as Linear
+from trasim_simplified.core.kinematics.cfm.CFModel_ACC import CFModel_ACC as ACC
+from trasim_simplified.core.kinematics.cfm.CFModel_TPACC import CFModel_TPACC as TPACC
 from trasim_simplified.core.constant import CFM
 
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
@@ -35,5 +37,9 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
         return OVM(_driver, param)
     elif name == CFM.KK:
         return KK(_driver, param)
+    elif name == CFM.ACC:
+        return ACC(_driver, param)
+    elif name == CFM.TPACC:
+        return TPACC(_driver, param)
     else:
         raise TrasimError(rem.NO_MODEL.format(name))

@@ -5,7 +5,7 @@
 # @Software : PyCharm
 import numpy as np
 
-from trasim_simplified.core.constant import CFM, V_TYPE
+from trasim_simplified.core.constant import CFM, V_TYPE, COLOR
 from trasim_simplified.core.frame.circle_lane import LaneCircle
 from trasim_simplified.core.frame.open_lane import LaneOpen
 from trasim_simplified.util.decorator.mydecorator import timer_no_log
@@ -15,22 +15,24 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 
 @timer_no_log
 def test_circle():
-    _cf_param = {"lambda": 0.8}
+    _cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True}
+    _car_param = {}
     take_over_index = -1
     follower_index = -1
-    dt = 0.1
+    dt = 1
     warm_up_step = 0
     sim_step = warm_up_step + int(120 / dt)
     offset_step = int(50 / dt)
     is_circle = True
 
     if is_circle:
-        sim = LaneCircle(1000)
-        sim.car_config(40, 7.5, V_TYPE.PASSENGER, 20, False, CFM.LINEAR, _cf_param)
+        sim = LaneCircle(10000)
+        sim.car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.TPACC, _cf_param, {"color": COLOR.yellow})
+        sim.car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.blue})
         sim.car_load()
     else:
         sim = LaneOpen(10000)
-        sim.car_config(40, 7.5, V_TYPE.PASSENGER, 10, False, CFM.LINEAR, _cf_param)
+        sim.car_config(40, 7.5, V_TYPE.PASSENGER, 10, False, CFM.ACC, _cf_param, _car_param)
         sim.car_loader(2000)
 
     sim.data_container.config()

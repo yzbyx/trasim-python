@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from trasim_simplified.core.constant import COLOR
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
+from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.lane_abstract import LaneAbstract
@@ -57,8 +59,6 @@ class Vehicle(Obstacle):
 
     def step(self, index):
         self.step_acc = self.cf_model.step(index)
-        if self.v + self.step_acc * self.lane.dt > self.cf_model.get_expect_speed():
-            self.step_acc = (self.cf_model.get_expect_speed() - self.v) / self.lane.dt
 
     def get_data_list(self, info):
         from trasim_simplified.core.data.data_container import Info as C_Info
@@ -125,13 +125,8 @@ class Vehicle(Obstacle):
     @property
     def gap(self):
         if self.leader is not None:
-            gap = self.leader.x - self.x - self.leader.length
-            if gap < 0:
-                if self.lane.is_circle:
-                    gap += self.lane.lane_length
-                else:
-                    TrasimError("车辆净间距小于0！")
-            return gap
+            dhw = self.dhw
+            return dhw - self.leader.length
         else:
             return np.NaN
 
@@ -146,7 +141,14 @@ class Vehicle(Obstacle):
     @property
     def dhw(self):
         if self.leader is not None:
-            return self.gap + self.leader.length
+            dhw = self.leader.x - self.x
+            if dhw < 0:
+                if self.lane.is_circle and self.lane.car_list[-1].ID == self.ID:
+                    dhw += self.lane.lane_length
+                else:
+                    # raise TrasimError("车头间距小于0！")
+                    pass
+            return dhw
         else:
             return np.NaN
 
@@ -154,14 +156,14 @@ class Vehicle(Obstacle):
     def thw(self):
         if self.leader is not None:
             if self.dv != 0:
-                return self.dhw / np.array(- self.dv)
+                return self.dhw / (- self.dv)
         return np.NaN
 
     @property
     def ttc(self):
         if self.leader is not None:
             if self.dv != 0:
-                return self.gap / np.array(- self.dv)
+                return self.gap / (- self.dv)
         return np.NaN
 
     @property
@@ -195,3 +197,7 @@ class Vehicle(Obstacle):
 
     def has_data(self):
         return len(self.pos_list) != 0
+
+    def set_car_param(self, param: dict):
+        self.color = param.get("color", COLOR.yellow)
+        self.width = param.get("width", 1.8)

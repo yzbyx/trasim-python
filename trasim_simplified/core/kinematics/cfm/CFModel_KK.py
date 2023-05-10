@@ -64,6 +64,9 @@ class CFModel_KK(CFModel):
         self._v_01 = f_param.get("v_01", 10)
         self._v_21 = f_param.get("v_21", 15)
 
+        self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
+        """v_safe计算是否离散化时间"""
+
         self.status = 0
         self.index = None
 
@@ -80,7 +83,8 @@ class CFModel_KK(CFModel):
         lane = self.vehicle.lane
         has_v_safe = hasattr(lane, "_v_safe")
         if not has_v_safe or (has_v_safe and int(getattr(lane, "_update_step") != lane.step_)):
-            v_safe = [self.cal_v_safe(
+            v_safe = [cal_v_safe(
+                self._v_safe_dispersed,
                 self.dt,
                 car.leader.v,
                 car.gap,
@@ -89,7 +93,8 @@ class CFModel_KK(CFModel):
             ) for car in lane.car_list[:-1]]
             if lane.is_circle:
                 car = self.vehicle.lane.car_list[-1]
-                v_safe.append(self.cal_v_safe(
+                v_safe.append(cal_v_safe(
+                    self._v_safe_dispersed,
                     self.dt,
                     car.leader.v,
                     car.gap,
@@ -160,17 +165,6 @@ class CFModel_KK(CFModel):
         return v_s
 
     @staticmethod
-    def cal_v_safe(dt, leaderV, gap, dec, leader_dec):
-        alpha_l = int(leaderV / (leader_dec * dt))
-        beta_l = leaderV / (leader_dec * dt) - alpha_l
-        X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
-        if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
-        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
-        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
-
-        return dec * dt * (alpha_safe + beta_safe)
-
-    @staticmethod
     def _cal_v_a(dt, gap, v_safe, l_v, expect_acc):
         return max(0, min(v_safe, l_v, gap / dt) - expect_acc * dt)
 
@@ -230,3 +224,23 @@ class CFModel_KK(CFModel):
 
     def p_2_v(self, v):
         return 0.48 + 0.32 * self._sig_func(v - self._v_21)
+
+
+def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
+    """其中的dt为反应时间，同时也是离散化时间步长"""
+    if v_safe_dispersed:
+        alpha_l = int(leaderV / (leader_dec * dt))
+        beta_l = leaderV / (leader_dec * dt) - alpha_l
+        X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
+        if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
+        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
+        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
+
+        return dec * dt * (alpha_safe + beta_safe)
+    else:
+        x_d_l = (leaderV ** 2) / (2 * leader_dec)
+        total_allow_dist = x_d_l + gap
+        a = 1 / (2 * dec)
+        v_safe = (- dt + np.sqrt(dt ** 2 + 4 * a * total_allow_dist)) / (2 * a)
+
+        return v_safe

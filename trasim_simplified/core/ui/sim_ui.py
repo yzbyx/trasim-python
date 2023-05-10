@@ -16,14 +16,19 @@ class UI:
     def __init__(self, frame_abstract: 'LaneAbstract'):
         self.frame = frame_abstract
         self.frame_rate = -1
-        self.screen_width = 1980 / 1.5
-        self.screen_height = 100 / 1.5
+        self.width_base = 1000
+        self.scale = 1.5
+        self.single_height = 20
+        self.screen_width = None
+        self.screen_height = None
         self.screen: Optional[pg.Surface] = None
         self.clock: Optional[Clock] = None
 
     def ui_init(self, caption="微观交通流仿真", frame_rate=-1):
         pg.init()
         self.frame_rate = frame_rate
+        self.screen_height = int((int(self.frame.lane_length / 1000) + 2) * self.single_height * self.scale)
+        self.screen_width = int(self.width_base * self.scale)
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height))
         pg.display.set_caption(caption)
         self.clock = pg.time.Clock()
@@ -37,12 +42,10 @@ class UI:
         self.screen.blit(text, (0, 0))
 
         for i, car in enumerate(self.frame.car_list):
-            # TODO: 实现转折或缩放
-            # pos_y = int(self.car_pos[0, i] / 1000)
-            # pos_x = self.car_pos[0, i] - pos_y * 1000
-            pg.draw.rect(self.screen, (255, 0, 0),
-                         (car.x / self.frame.lane_length * self.screen_width, int(self.screen_height / 2),
-                          int(car.length / self.frame.lane_length * self.screen_width), 10))
+            pos_y = int((int(car.x / 1000) + 2) * self.single_height) * self.scale
+            pos_x = int((car.x - int(car.x / 1000) * 1000) * self.scale)
+            pg.draw.rect(self.screen, car.color,
+                         (pos_x, pos_y, int(car.length * self.scale), int(car.width * 2 * self.scale)))
 
         pg.display.update()
         if self.frame_rate > 0:
