@@ -5,10 +5,7 @@
 # @Software : PyCharm
 from typing import TYPE_CHECKING, Optional
 
-import numpy as np
 import pandas as pd
-
-from trasim_simplified.core.vehicle import Vehicle
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.lane_abstract import LaneAbstract
@@ -38,7 +35,8 @@ class DataContainer:
         for info in info_list:
             for car in total_car_list_has_data:
                 data[info].extend(car.get_data_list(info))
-        self.data_df = pd.DataFrame(data, columns=info_list).sort_values(by=[Info.id, Info.time]).reset_index()
+        self.data_df = pd.DataFrame(data, columns=info_list).sort_values(by=[Info.id, Info.time]).reset_index(drop=True)
+        return self.data_df
 
     def get_total_car_has_data(self):
         """仿真完成后调用"""
@@ -53,6 +51,8 @@ class DataContainer:
 
 
 class Info:
+    lane_id = "Lane ID"
+    """车辆所在车道ID"""
     id = "ID"
     """车辆ID"""
     step = "Step"

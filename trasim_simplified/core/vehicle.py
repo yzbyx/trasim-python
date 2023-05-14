@@ -10,6 +10,7 @@ import numpy as np
 
 from trasim_simplified.core.constant import COLOR
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
+from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
 from trasim_simplified.msg.trasimWarning import TrasimWarning
@@ -28,6 +29,7 @@ class Vehicle(Obstacle):
         self.leader: Optional[Vehicle] = None
         self.follower: Optional[Vehicle] = None
 
+        self.lane_id_list = []
         self.pos_list = []
         self.speed_list = []
         self.acc_list = []
@@ -46,23 +48,44 @@ class Vehicle(Obstacle):
         self.picud_list = []
 
         self.cf_model: Optional[CFModel] = None
+        self.lc_model: Optional[LCModel] = None
 
-        self.step_acc = 0
+        self.cf_acc = 0
+        self.lc_result = {"lc": 0, "a": 0, "v": None, "x": None}
+        """换道模型结果，lc（-1（向左换道）、0（保持当前车道）、1（向右换道）），a（换道位置调整加速度），v（速度），x（位置）"""
 
     def set_cf_model(self, cf_name: str, cf_param: dict):
         self.cf_model = get_cf_model(self, cf_name, cf_param)
-        self._info_config()
 
-    def _info_config(self):
-        """此处可以进行模型所需参数记录的配置，影响record函数记录的内容"""
-        pass
+    def set_lc_model(self, lc_name: str, lc_param: dict):
+        self.lc_model = get_lc_model(self, lc_name, lc_param)
 
     def step(self, index):
-        self.step_acc = self.cf_model.step(index)
+        self.cf_acc = self.cf_model.step(index)
+
+    def step_lane_change(self, index: int, left_lane: 'LaneAbstract', right_lane: 'LaneAbstract'):
+        self.lc_result = self.lc_model.step(index, left_lane, right_lane)
+
+    def get_dist(self, pos: float):
+        """获取pos与车头的距离，如果为环形边界，选取距离最近的表述"""
+        if self.lane.is_circle:
+            if pos > self.x:
+                dist_head = pos - self.x
+                dist_after = self.lane.lane_length - pos + self.x
+                dist = dist_head if dist_head < dist_after else (- dist_after)
+            else:
+                dist_head = pos + self.lane.lane_length - self.x
+                dist_after = self.x - pos
+                dist = dist_head if dist_head < dist_after else (- dist_after)
+        else:
+            dist = pos - self.x
+        return dist
 
     def get_data_list(self, info):
         from trasim_simplified.core.data.data_container import Info as C_Info
-        if C_Info.id == info:
+        if C_Info.lane_id == info:
+            return self.lane_id_list
+        elif C_Info.id == info:
             return [self.ID] * len(self.pos_list)
         elif C_Info.a == info:
             return self.acc_list
@@ -94,6 +117,8 @@ class Vehicle(Obstacle):
     def record(self):
         from trasim_simplified.core.data.data_container import Info as C_Info
         for info in self.lane.data_container.save_info:
+            if C_Info.lane_id == info:
+                self.lane_id_list.append(self.lane.ID)
             if C_Info.a == info:
                 self.acc_list.append(self.a)
             elif C_Info.v == info:

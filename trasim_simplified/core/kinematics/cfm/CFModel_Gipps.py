@@ -34,7 +34,7 @@ class CFModel_Gipps(CFModel):
             print(f"{self.name}模型的反应时间tau需要与仿真步长一致！")
             self.vehicle.lane.dt = self._tau
 
-    def step(self, index):
+    def step(self, index, *args):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()

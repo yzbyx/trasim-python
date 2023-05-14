@@ -20,7 +20,7 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model
 
 
 class BasicDiagram:
-    def __init__(self, lane_length: int, car_length: int, car_initial_speed:int, speed_with_random: bool,
+    def __init__(self, lane_length: int, car_length: int, car_initial_speed: int, speed_with_random: bool,
                  cf_mode: str, cf_param: dict[str, float]):
         self.car_length = car_length
         self.lane_length = lane_length

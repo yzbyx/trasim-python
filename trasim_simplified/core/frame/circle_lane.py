@@ -10,7 +10,7 @@ from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 
 class LaneCircle(LaneAbstract):
-    def __init__(self, lane_length: int):
+    def __init__(self, lane_length: float):
         super().__init__(lane_length)
         self.is_circle = True
 

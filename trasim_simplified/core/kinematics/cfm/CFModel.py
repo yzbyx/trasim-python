@@ -29,10 +29,6 @@ class CFModel(Model, ABC):
         self.DEFAULT_EXPECT_ACC = 3.
         self.DEFAULT_EXPECT_SPEED = 30.
 
-    def getTau(self) -> float:
-        """获取反应时间"""
-        return self.get_param_map().get('tau', 0)
-
     @abc.abstractmethod
     def get_expect_dec(self):
         """值为正数"""

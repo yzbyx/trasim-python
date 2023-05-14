@@ -129,10 +129,10 @@ class CFModel_KK(CFModel):
         self.v_a = getattr(lane, "_v_a")
         self.l_v_a = self.v_a[self.index + 1] if (self.index <= len(self.v_a) - 2) else self.v_a[0]
 
-    def step(self, index):
+    def step(self, index, *args):
         self.index = index
         if self.vehicle.leader is None:
-            return self.get_expect_acc()
+            return 0.
         self._update_dynamic()
         acc, self.status = self._calculate()
         return acc
@@ -224,6 +224,10 @@ class CFModel_KK(CFModel):
 
     def p_2_v(self, v):
         return 0.48 + 0.32 * self._sig_func(v - self._v_21)
+
+
+def cal_G(k_, tau_, a_, v, l_v):
+    return max(0, k_ * tau_ * v + 1 / a_ * v * (v - l_v))
 
 
 def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):

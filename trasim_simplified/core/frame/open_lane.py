@@ -18,7 +18,7 @@ class THW_DISTRI:
 
 
 class LaneOpen(LaneAbstract):
-    def __init__(self, lane_length: int):
+    def __init__(self, lane_length: float):
         super().__init__(lane_length)
         self.is_circle = False
         self.outflow_point = True
@@ -54,7 +54,7 @@ class LaneOpen(LaneAbstract):
             assert self.car_num_percent is not None
             if len(self.car_list) != 0:
                 first = self.car_list[0]
-                if first.x - first.length < 0:
+                if first.x - first.length - first.v * self.dt < 0:
                     return
 
             i = np.random.choice(self.car_num_percent, p=self.car_num_percent.ravel())
@@ -65,11 +65,19 @@ class LaneOpen(LaneAbstract):
                 i = pos[0]
             vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
             vehicle.x = 0
-            vehicle.v = np.random.uniform(
-                max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
-            ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
-            vehicle.a = 0
             vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
+            vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
+            if self.car_initial_speed_list[i] >= 0:
+                vehicle.v = np.random.uniform(
+                    max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
+                ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
+            else:
+                if len(self.car_list) == 0:
+                    vehicle.v = vehicle.cf_model.get_expect_speed()
+                else:
+                    vehicle.v = self.car_list[0].v
+            vehicle.a = 0
+            vehicle.set_car_param(self.car_param_list[i])
 
             if len(self.car_list) != 0:
                 vehicle.leader = self.car_list[0]
@@ -95,8 +103,4 @@ class LaneOpen(LaneAbstract):
             self.car_state_update_common(car)
 
             if car.x > self.lane_length:
-                self.car_list.remove(car)
-                if len(self.car_list) > 0:
-                    self.car_list[-1].leader = None
-                if car.has_data():
-                    self.out_car_has_data.append(car)
+                self.car_remove(car, car.has_data())

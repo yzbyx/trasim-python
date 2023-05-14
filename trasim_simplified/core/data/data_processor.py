@@ -242,11 +242,13 @@ class DataProcessor:
 
         return [self.aggregate_loop_result, self.aggregate_Edie_result]
 
-    def data_shear(self, info_name: str, id_=-1):
-        temp_ = self.container.get_data(id_, info_name)
-        time_ = self.container.get_data(id_, C_Info.time)
+    @staticmethod
+    def data_shear(temp_=None, pos_=None, time_=None, step_=None):
+        return_index = list(np.where(np.diff(np.array(pos_)) < 0)[0])
+        return_index_2 = list(np.where(np.diff(np.array(step_)) != 1)[0])
+        return_index = list(set(return_index) | set(return_index_2))
+        return_index.sort()
 
-        return_index = list(np.where(np.diff(np.array(temp_)) < 0)[0])
         return_index.insert(0, 0)
         if len(return_index) == 1:
             yield time_, temp_, [0, len(temp_)]

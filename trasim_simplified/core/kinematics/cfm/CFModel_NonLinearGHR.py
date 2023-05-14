@@ -48,7 +48,7 @@ class CFModel_NonLinearGHR(CFModel):
         self.l_pre_x = self.pre_x + self.vehicle.dhw_list[index]
         self.l_pre_v = self.vehicle.leader.speed_list[index]
 
-    def step(self, index):
+    def step(self, index, *args):
         time = self.vehicle.lane.time_ - self._tau
         if time <= self._tau:
             if len(self.vehicle.acc_list) != 0:

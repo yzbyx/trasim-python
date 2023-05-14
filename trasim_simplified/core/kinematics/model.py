@@ -27,7 +27,7 @@ class Model(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def step(self, index):
+    def step(self, index, *args):
         """
         计算下一时间步的加速度
 

@@ -9,6 +9,7 @@
 # ******************************
 class RANDOM_SEED:
     CFM_SEED = 0  # 用于跟驰模型
+    LCM_SEED = 0  # 用于换道模型
     CAR_PRODUCE_SEED = 0  # 用于车辆生成
 
 
@@ -22,6 +23,7 @@ class COLOR:
     green = [0, 255, 0]
     pink = [255, 192, 203]
     gray = [190, 190, 190]
+
 
 # ******************************
 # 跟驰模型
@@ -45,6 +47,22 @@ class CFM:
     """TPACC模型"""
     ACC = "ACC"
     """ACC模型"""
+
+
+class LCM:
+    KK = 'KK'
+    """KK模型的换道策略"""
+    ACC = "ACC/TPACC"
+    """Kerner对自动驾驶类车辆的换道规则"""
+
+
+class SECTION_TYPE:
+    BASE = "base"
+    """基本路段"""
+    ON_RAMP = "on_ramp"
+    """入口匝道区域"""
+    OFF_RAMP = "off_ramp"
+    """出口匝道区域"""
 
 
 # ******************************
