@@ -15,7 +15,7 @@ class Model(metaclass=abc.ABCMeta):
         self.vehicle: Optional['Vehicle'] = vehicle if vehicle else None
         self.name = None
         self.thesis = None
-        self.dt = 0.1
+        self.dt = None
 
     @abc.abstractmethod
     def _update_dynamic(self):

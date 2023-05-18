@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
+import pandas as pd
+
 from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
@@ -51,20 +53,25 @@ class DataProcessor:
             print(result)
         print()
 
-    def kqv_cal(self):
-        assert self.container.data_df[C_Info.v] is not None, "调用本函数须使用record函数记录速度数据"
+    @staticmethod
+    def kqv_cal(df: pd.DataFrame, lane_length, lane_id=None, pos_range=None, time_range=None):
+        assert df[C_Info.v] is not None, "调用本函数须使用record函数记录速度数据"
+        if lane_id is not None:
+            df = df[df[C_Info.lane_id] == lane_id]
+        if pos_range is not None:
+            df = df[(df[C_Info.x] >= pos_range[0]) & (df[C_Info.x] < pos_range[1])]
+        if time_range is not None:
+            df = df[((df[C_Info.time] >= time_range[0]) & (df[C_Info.time] < time_range[1]))]
 
-        avg_speed = self.get_total_agg_info(C_Info.v)
-        avg_k_by_car_num_lane_length = sum(self.frame.car_num_list) / self.frame.lane_length * 1000
+        avg_speed = df[C_Info.v].mean()
+        avg_k_by_car_num_lane_length = len(df[C_Info.id].unique()) / lane_length * 1000
         avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
 
-        self.aggregate_all_result.update({
-            Info.avg_speed: avg_speed,
+        return {
+            Info.avg_k_by_car_num_lane_length: avg_k_by_car_num_lane_length,
             Info.avg_q_by_v_k: avg_q_by_v_k,
-            Info.avg_k_by_car_num_lane_length: avg_k_by_car_num_lane_length
-        })
-
-        return self.aggregate_all_result
+            Info.avg_speed: avg_speed
+        }
 
     def get_total_agg_info(self, name: str, func: Callable = np.average):
         total_car_list_has_data = self.container.get_total_car_has_data()

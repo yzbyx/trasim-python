@@ -5,7 +5,7 @@
 # Software: PyCharm
 from typing import TYPE_CHECKING, Optional
 
-from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_v_safe
+from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_v_safe, CFModel_KK
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -34,6 +34,20 @@ class CFModel_ACC(CFModel):
         """期望加速度，用于安全速度计算"""
         self._b = f_param.get("b", 3.)
         """期望减速度，用于安全速度计算"""
+        self._tau = f_param.get("tau", 1)
+
+    def _update_dynamic(self):
+        self.dt = self.vehicle.lane.dt
+        self._tau = self.dt
+        self.gap = self.vehicle.gap
+        assert self._original_acc or self.dt == self._tau, print(self.dt, self._tau)
+        if self._original_acc:
+            self.l_v_a = None
+            return
+        self._update_v_safe()
+
+    def _update_v_safe(self):
+        self.l_v_a = CFModel_KK.update_v_safe(self)
 
     def get_expect_dec(self):
         return self._b
@@ -42,27 +56,29 @@ class CFModel_ACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.vehicle.lane.speed_limit
-
-    def _update_dynamic(self):
-        self.gap = self.vehicle.gap
+        return self.vehicle.lane.default_speed_limit
 
     def step(self, index, *args):
+        self.index = index
         if self.vehicle.leader is None:
             return 0.
         self._update_dynamic()
         f_params = [self._k1, self._k2, self._thw, self._a, self._b, self._original_acc, self._v_safe_dispersed]
+        is_first = True if self.vehicle.leader is None else False
         return calculate(*f_params, self.vehicle.leader.cf_model.get_expect_dec(),
-                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed())
+                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(), is_first,
+                         self.l_v_a)
 
 
 def calculate(k1_, k2_, thw_, acc_, dec_, original_acc_, v_safe_dispersed_,
-              l_dec_, dt, gap, v, l_v, v_free):
+              l_dec_, tau, gap, v, l_v, v_free, is_first, l_v_a):
     acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
     if original_acc_:
         return acc
 
-    v_c = v + dt * max(- dec_, min(acc, acc_))
-    v_safe = cal_v_safe(v_safe_dispersed_, dt, l_v, gap, dec_, l_dec_)
+    v_c = v + tau * max(- dec_, min(acc, acc_))
+    v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, l_dec_)
+    if not is_first:
+        v_safe = min(v_safe, (gap / tau) + l_v_a)
     v_next = max(0, min(v_free, v_c, v_safe))
-    return (v_next - v) / dt
+    return (v_next - v) / tau

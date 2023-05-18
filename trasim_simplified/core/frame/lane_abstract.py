@@ -9,12 +9,13 @@ from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
-from trasim_simplified.core.constant import SECTION_TYPE
+from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE, CFM
 from trasim_simplified.core.data.data_container import DataContainer
 from trasim_simplified.core.data.data_processor import DataProcessor
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.vehicle import Vehicle
 from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.road import Road
@@ -25,11 +26,12 @@ class LaneAbstract(ABC):
         self.ID = 0
         self.index = 0
         self.road: Optional[Road] = None
-        self.speed_limit = 30.
+        self.default_speed_limit = 30.
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
         self.section_type: dict[str, list[float, float]] = {}
+        self.speed_limit: dict[float, list[float, float]] = {}
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
@@ -46,6 +48,7 @@ class LaneAbstract(ABC):
         self.lc_add_list: list[Vehicle] = []
 
         self.car_list: list[Vehicle] = []
+        self._dummy_car_list: list[Vehicle] = []
         self.out_car_has_data: list[Vehicle] = []
 
         self.step_ = 0
@@ -78,17 +81,39 @@ class LaneAbstract(ABC):
         else:
             return self.road.get_new_car_id()
 
-    def set_section_type(self, start_pos: float, end_pos: float, type_: str):
+    def set_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1):
+        if start_pos < 0:
+            start_pos = 0
+        if end_pos < 0:
+            end_pos = self.lane_length
         self.section_type.update({type_: [start_pos, end_pos]})
 
-    def get_section_type(self, pos):
+    def get_section_type(self, pos) -> set[str]:
+        type_ = set()
         if len(self.section_type) == 0:
-            return SECTION_TYPE.BASE
+            type_.add(SECTION_TYPE.BASE)
         for key in self.section_type.keys():
             pos_ = self.section_type[key]
+            if pos_[0] <= pos < pos_[1]:
+                type_.add(key)
+        return type_
+
+    def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1):
+        assert speed_limit >= 0
+        if start_pos < 0:
+            start_pos = 0
+        if end_pos < 0:
+            end_pos = self.lane_length
+        self.speed_limit.update({speed_limit: [start_pos, end_pos]})
+
+    def get_speed_limit(self, pos):
+        if len(self.speed_limit) == 0:
+            return self.default_speed_limit
+        for key in self.speed_limit.keys():
+            pos_ = self.speed_limit[key]
             if pos_[0] <= pos <= pos_[1]:
                 return key
-        return SECTION_TYPE.BASE
+        return self.default_speed_limit
 
     @property
     def car_num(self):
@@ -142,20 +167,23 @@ class LaneAbstract(ABC):
                     x = x + car_gap + length
             car_count += 1
 
-        for i, car in enumerate(self.car_list[1: -1]):
-            car.leader = self.car_list[i + 2]
-            car.follower = self.car_list[i]
-        if self.is_circle is True:
+        if len(self.car_list) > 2:
+            for i, car in enumerate(self.car_list[1: -1]):
+                car.leader = self.car_list[i + 2]
+                car.follower = self.car_list[i]
             self.car_list[0].leader = self.car_list[1]
-            self.car_list[0].follower = self.car_list[-1]
             self.car_list[-1].follower = self.car_list[-2]
+        else:
+            self.car_list[0].leader = self.car_list[-1]
+            self.car_list[-1].follower = self.car_list[0]
+
+        if self.is_circle is True:
+            self.car_list[0].follower = self.car_list[-1]
             self.car_list[-1].leader = self.car_list[0]
 
     def run(self, data_save=True, has_ui=True, **kwargs):
         if kwargs is None:
             kwargs = {}
-        self.road_control = kwargs.get("road_control", False)
-        """是否为Road类控制"""
         self.data_save = data_save
         """是否记录数据"""
         self.warm_up_step = kwargs.get("warm_up_step", int(5 * 60 / self.dt))
@@ -190,7 +218,7 @@ class LaneAbstract(ABC):
             self.time_ += self.dt
             if self.has_ui and not self.road_control: self.ui.ui_update()
 
-    def car_state_update_common(self, car):
+    def car_state_update_common(self, car: Vehicle):
         car_speed_before = car.v
         car.v += car.cf_acc * self.dt
 
@@ -199,14 +227,18 @@ class LaneAbstract(ABC):
             car.a = (expect_speed - car.v) / self.dt
             car.v = expect_speed
         elif car.v < 0:
-            if car.v < - 1e-3:
-                print("存在速度为负的车辆！")
+            # if car.v < - 1e-3:
+            #     print("存在速度为负的车辆！")
             car.cf_acc = - (car_speed_before / self.dt)
             car.v = 0
         else:
             car.a = car.cf_acc
 
         car.x += (car_speed_before + car.v) * self.dt / 2
+
+        if car.leader is not None and car.leader.type == V_TYPE.OBSTACLE:
+            if car.x > car.leader.x:
+                car.x = car.leader.x
 
     @abc.abstractmethod
     def update_state(self):
@@ -222,7 +254,20 @@ class LaneAbstract(ABC):
 
     def record(self):
         for car in self.car_list:
-            car.record()
+            if car.type != V_TYPE.OBSTACLE:
+                car.record()
+
+    def _make_dummy_car(self, pos):
+        car = Vehicle(self, V_TYPE.OBSTACLE, -1, 0.1)
+        car.set_cf_model(CFM.DUMMY, {})
+        car.x = pos + 0.1
+        car.v = 0
+        car.a = 0
+        return car
+
+    def set_block(self, pos):
+        dummy_car = self._make_dummy_car(pos)
+        self.car_insert_by_instance(dummy_car)
 
     def get_appropriate_car(self) -> int:
         """获取合适进行控制扰动的单个车辆，（未到车道一半线的最近车辆）"""
@@ -266,7 +311,7 @@ class LaneAbstract(ABC):
         car.a = car_acc
         return car
 
-    def car_insert_by_instance(self, car: Vehicle):
+    def car_insert_by_instance(self, car: Vehicle, is_dummy=False):
         car.lane = self
         car.leader = car.follower = None
         if len(self.car_list) != 0:
@@ -291,9 +336,11 @@ class LaneAbstract(ABC):
                 car.leader = self.car_list[0]
                 self.car_list[0].follower = car
 
-            self.car_list.insert(index + 1, car)
+            if not is_dummy:
+                self.car_list.insert(index + 1, car)
         else:
-            self.car_list.append(car)
+            if not is_dummy:
+                self.car_list.append(car)
             if self.is_circle:
                 car.leader = car
                 car.follower = car
@@ -309,18 +356,28 @@ class LaneAbstract(ABC):
                     return car.a
                 if info_name == C_Info.gap:
                     return car.gap
+                if info_name == C_Info.dhw:
+                    return car.dhw
+                raise TrasimError(f"{info_name}未创建！")
+
+    def _get_car(self, id_):
+        for car in self.car_list:
+            if car.ID == id_:
+                return car
 
     def car_insert_middle(self, car_length: float, car_type: str, car_speed: float, car_acc: float,
                           cf_name: str, cf_param: dict[str, float], car_param: dict, front_car_id,
                           lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
-        follower_index = self.get_relative_id(front_car_id, -1)
-        follower_pos = self.get_car_info(follower_index, C_Info.x)
-        follower_gap = self.get_car_info(follower_index, C_Info.gap)
+        follower_id = self.get_relative_id(front_car_id, -1)
+        follower_pos = self.get_car_info(follower_id, C_Info.x)
+        follower_gap = self.get_car_info(follower_id, C_Info.gap)
+        follower_dhw = self.get_car_info(follower_id, C_Info.dhw)
+        front_length = self._get_car(front_car_id).length
 
-        if follower_gap < car_length:
+        if follower_dhw / 2 < car_length or follower_dhw / 2 < front_length:
             print("空间不足，插入失败！")
             return
-        pos = follower_pos + (follower_gap - car_length) / 2
+        pos = follower_pos + follower_dhw / 2
         car = self._make_car(car_length, car_type, pos, car_speed, car_acc,
                              cf_name, cf_param, car_param, lc_name, lc_param)
         self.car_insert_by_instance(car)
@@ -348,7 +405,7 @@ class LaneAbstract(ABC):
                         offset += 1
                 return car
 
-    def get_relative_car(self, pos: float):
+    def get_relative_car(self, pos: float) -> tuple[Optional[Vehicle], Optional[Vehicle]]:
         """获取指定位置的前后车"""
         for car in self.car_list:
             if car.x > pos:

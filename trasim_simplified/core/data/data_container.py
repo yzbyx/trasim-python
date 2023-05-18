@@ -28,6 +28,9 @@ class DataContainer:
             save_info = {}
         self.save_info.update(save_info)
 
+    def add_basic_info(self):
+        self.save_info.update([Info.lane_id, Info.id, Info.time, Info.step])
+
     def data_to_df(self):
         data: dict[str, list] = {info: [] for info in self.save_info}
         total_car_list_has_data = self.get_total_car_has_data()

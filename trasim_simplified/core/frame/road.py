@@ -3,20 +3,25 @@
 # @Author : yzbyx
 # @File : road.py
 # Software: PyCharm
+import time
+from typing import Optional
+
 import pandas as pd
 
+from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE
 from trasim_simplified.core.frame.lane_abstract import LaneAbstract
 from trasim_simplified.core.frame.open_lane import LaneOpen
 from trasim_simplified.core.frame.circle_lane import LaneCircle
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.util.decorator.mydecorator import _get_current_time
 
 
 class Road:
     """在不影响Lane功能的基础上实现多车道道路"""
     def __init__(self, length: float):
         self.yield_ = True
-        self.ID = "R1"
+        self.ID = 0
         self.lane_length = length
         self.lane_list: list[LaneAbstract] = []
         self.id_accumulate = 0
@@ -38,12 +43,13 @@ class Road:
                 lane = LaneOpen(self.lane_length)
             lane.ID = len(self.lane_list)
             lane.index = len(self.lane_list)
+            lane.road_control = True
             lane.road = self
             self.lane_list.append(lane)
         return self.lane_list
 
     def run(self, data_save=True, has_ui=True, **kwargs):
-        kwargs.update({"road_control": True, "yield": True})
+        kwargs.update({"yield": True})
         self.dt = kwargs.get("dt", 0.1)
         """仿真步长 [s]"""
         self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt))
@@ -55,37 +61,47 @@ class Road:
 
         lanes_iter = [lane.run(data_save=data_save, has_ui=False, **kwargs) for lane in self.lane_list]
 
+        timeIn = time.time()
+        timeStart = _get_current_time()
+
         while self.sim_step != self.step_:
             for i, lane_iter in enumerate(lanes_iter):
                 self.step_ = lane_iter.__next__()
-            if self.yield_: yield self.step_  # 跟驰
+            if self.yield_: yield self.step_, 0  # 跟驰
             for i, lane_iter in enumerate(lanes_iter):
                 self.step_ = lane_iter.__next__()
             self.step_lane_change()
-            if self.yield_: yield self.step_  # 换道
+            if self.yield_: yield self.step_, 1  # 换道
             self.update_lc_state()
             self.step_ += 1
             self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
 
+        timeOut = time.time()
+        log_string = '[' + self.run.__name__ + '] ' + 'time usage: ' + timeStart + ' + ' + \
+                     str((timeOut - timeIn) * 1000 // 1 / 1000) + ' s'
+        print(log_string)
+
     def step_lane_change(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
-                left, right = self.get_adjacent_lane(i)
-                car.step_lane_change(j, left, right)
+                if car.type != V_TYPE.OBSTACLE:
+                    left, right = self.get_available_adjacent_lane(i, car.x)
+                    car.step_lane_change(j, left, right)
 
     def update_lc_state(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list.copy()):
-                lc = car.lc_result.get("lc", 0)
-                if lc != 0:
-                    lane.car_remove(car)
-                    target_lane = self.lane_list[car.lane.index + lc]
-                    target_lane.car_insert_by_instance(car)
-                    car.x = car.lc_result.get("x", car.x)
-                    car.v = car.lc_result.get("v", car.v)
-                    car.a = car.lc_result.get("a", car.a)
-                    car.lc_result = {}
+                if car.type != V_TYPE.OBSTACLE:
+                    lc = car.lc_result.get("lc", 0)
+                    if lc != 0:
+                        lane.car_remove(car)
+                        target_lane = self.lane_list[car.lane.index + lc]
+                        target_lane.car_insert_by_instance(car)
+                        car.x = car.lc_result.get("x", car.x)
+                        car.v = car.lc_result.get("v", car.v)
+                        car.a = car.lc_result.get("a", car.a)
+                        car.lc_result = {"lc": 0}
 
     def get_new_car_id(self):
         self.id_accumulate += 1
@@ -94,7 +110,17 @@ class Road:
     def get_appropriate_car(self, lane_index=0):
         return self.lane_list[lane_index].get_appropriate_car()
 
-    def get_adjacent_lane(self, index: int):
+    def get_available_adjacent_lane(self, lane_index, pos) -> tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
+        lane = self.lane_list[lane_index]
+        left, right = self._get_adjacent_lane(lane_index)
+        section_type = lane.get_section_type(pos)
+        if SECTION_TYPE.NO_LEFT in section_type:
+            left = None
+        if SECTION_TYPE.NO_RIGHT in section_type:
+            right = None
+        return left, right
+
+    def _get_adjacent_lane(self, index: int) -> tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
         assert len(self.lane_list) > 0
         if len(self.lane_list) == 1:
             return None, None

@@ -11,7 +11,7 @@ from typing import Optional
 import numpy as np
 from matplotlib import pyplot as plt
 
-from trasim_simplified.core.constant import CFM
+from trasim_simplified.core.constant import CFM, V_TYPE
 from trasim_simplified.core.data.data_plot import Plot
 from trasim_simplified.core.frame.circle_lane import LaneCircle
 from trasim_simplified.core.data.data_processor import Info as P_Info
@@ -45,7 +45,7 @@ class BasicDiagram:
             occ_seq = np.array([occ_start])
         else:
             occ_seq = np.round(np.arange(occ_start, occ_end, d_occ), 6)
-        car_nums = np.round(np.ceil(occ_seq * self.lane_length / self.car_length))
+        car_nums = list(map(int, np.round(np.ceil(occ_seq * self.lane_length / self.car_length))))
 
         self.file_name = file_name if file_name is not None else "result_IDM.pkl"
         self.result = self.load_result()
@@ -54,6 +54,7 @@ class BasicDiagram:
         warm_up_step = 6000 * 2
         sim_step = 6000 * 3
         dt = kwargs.get("dt", 0.1)
+        jam = kwargs.get("jam", False)
         time_ = 0
 
         for i, car_num in enumerate(car_nums):
@@ -66,19 +67,23 @@ class BasicDiagram:
                   f" occ: {occ_seq[i]:.2f}, car_nums: {car_num}, density[veh/h]: {car_num / (self.lane_length / 1000)}",
                   end="\t\t\t")
 
-            params = [car_num, self.car_length, self.car_initial_speed,
-                      self.speed_with_random, self.cf_mode, self.cf_param]
+            params = [car_num, self.car_length, V_TYPE.PASSENGER, self.car_initial_speed,
+                      self.speed_with_random, self.cf_mode, self.cf_param, {}]
 
-            frame = LaneCircle(self.lane_length)
-            frame.car_config(*params)
-            frame.car_load()
+            lane = LaneCircle(self.lane_length)
+            lane.car_config(*params)
+            gap = 0 if jam else -1
+            lane.car_load(gap)
 
-            frame.data_container.config(save_info={C_Info.v})
+            lane.data_container.add_basic_info()
+            lane.data_container.config(save_info={C_Info.v})
 
-            for _ in frame.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+            for _ in lane.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
                 pass
 
-            result = frame.data_processor.kqv_cal()
+            df = lane.data_container.data_to_df()
+
+            result = lane.data_processor.kqv_cal(df, self.lane_length)
             self.result["occ"].append(occ_seq[i])
             self.result["V"].append(np.mean(result[P_Info.avg_speed]) * 3.6)
             self.result["Q"].append(np.mean(result[P_Info.avg_q_by_v_k]))
@@ -166,7 +171,10 @@ class BasicDiagram:
 
 
 if __name__ == '__main__':
-    diag = BasicDiagram(1000, 5, 0, False, cf_mode=CFM.OPTIMAL_VELOCITY, cf_param={})
-    diag.run(0.01, 0.7, 0.02, resume=True, file_name="result_OVM", dt=0.1)
-    diag.get_by_equilibrium_state_func()
+    cf_name = CFM.KK
+    tau = 1
+    cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True, "tau": tau}
+    diag = BasicDiagram(1000, 5, 0, False, cf_mode=cf_name, cf_param=cf_param)
+    diag.run(0.01, 0.7, 0.02, resume=False, file_name="result_" + cf_name, dt=tau, jam=True)
+    # diag.get_by_equilibrium_state_func()
     diag.plot()

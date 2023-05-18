@@ -29,6 +29,8 @@ class COLOR:
 # 跟驰模型
 # ******************************
 class CFM:
+    DUMMY = "Dummy"
+    """虚拟车辆对应模型"""
     IDM = 'IDM'
     """IDM模型"""
     GIPPS = 'Gipps'
@@ -63,6 +65,10 @@ class SECTION_TYPE:
     """入口匝道区域"""
     OFF_RAMP = "off_ramp"
     """出口匝道区域"""
+    NO_LEFT = "no_lc_to_left"
+    """禁止向左换道"""
+    NO_RIGHT = "no_lc_to_right"
+    """禁止向右换道"""
 
 
 # ******************************

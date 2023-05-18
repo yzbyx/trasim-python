@@ -51,7 +51,7 @@ class Vehicle(Obstacle):
         self.lc_model: Optional[LCModel] = None
 
         self.cf_acc = 0
-        self.lc_result = {"lc": 0, "a": 0, "v": None, "x": None}
+        self.lc_result = {"lc": 0, "a": None, "v": None, "x": None}
         """换道模型结果，lc（-1（向左换道）、0（保持当前车道）、1（向右换道）），a（换道位置调整加速度），v（速度），x（位置）"""
 
     def set_cf_model(self, cf_name: str, cf_param: dict):
@@ -65,6 +65,7 @@ class Vehicle(Obstacle):
 
     def step_lane_change(self, index: int, left_lane: 'LaneAbstract', right_lane: 'LaneAbstract'):
         self.lc_result = self.lc_model.step(index, left_lane, right_lane)
+        pass
 
     def get_dist(self, pos: float):
         """获取pos与车头的距离，如果为环形边界，选取距离最近的表述"""
@@ -151,7 +152,11 @@ class Vehicle(Obstacle):
     def gap(self):
         if self.leader is not None:
             dhw = self.dhw
-            return dhw - self.leader.length
+            gap = dhw - self.leader.length
+            # if gap < 0.:
+            #     raise TrasimError("gap < 0!")
+            #     pass
+            return gap
         else:
             return np.NaN
 
@@ -171,7 +176,7 @@ class Vehicle(Obstacle):
                 if self.lane.is_circle and self.lane.car_list[-1].ID == self.ID:
                     dhw += self.lane.lane_length
                 else:
-                    # raise TrasimError("车头间距小于0！")
+                    raise TrasimError("车头间距小于0！")
                     pass
             return dhw
         else:
