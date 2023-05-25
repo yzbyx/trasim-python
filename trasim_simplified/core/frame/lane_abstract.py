@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 
 
 class LaneAbstract(ABC):
-    def __init__(self, lane_length: float):
+    def __init__(self, lane_length: float, speed_limit: float = 30):
         self.ID = 0
         self.index = 0
         self.road: Optional[Road] = None
-        self.default_speed_limit = 30.
+        self._default_speed_limit = speed_limit
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
@@ -44,8 +44,6 @@ class LaneAbstract(ABC):
         self.car_param_list: list[dict] = []
         self.lc_name_list: list[str] = []
         self.lc_param_list: list[dict] = []
-        self.lc_out_list: list[Vehicle] = []
-        self.lc_add_list: list[Vehicle] = []
 
         self.car_list: list[Vehicle] = []
         self._dummy_car_list: list[Vehicle] = []
@@ -59,6 +57,8 @@ class LaneAbstract(ABC):
         """run()是否为迭代器"""
         self.road_control = False
         """是否为Road类控制"""
+        self.force_speed_limit = False
+        """是否强制车辆速度不超过道路限速"""
 
         self.dt = 0.1
         """仿真步长 [s]"""
@@ -69,7 +69,7 @@ class LaneAbstract(ABC):
 
         self.data_save = False
         self.data_container: DataContainer = DataContainer(self)
-        self.data_processor: DataProcessor = DataProcessor(self)
+        self.data_processor: DataProcessor = DataProcessor()
 
         self.has_ui = False
         self.ui: UI = UI(self)
@@ -96,6 +96,8 @@ class LaneAbstract(ABC):
             pos_ = self.section_type[key]
             if pos_[0] <= pos < pos_[1]:
                 type_.add(key)
+            if pos == self.lane_length and pos == pos_[1]:
+                type_.add(key)
         return type_
 
     def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1):
@@ -108,18 +110,18 @@ class LaneAbstract(ABC):
 
     def get_speed_limit(self, pos):
         if len(self.speed_limit) == 0:
-            return self.default_speed_limit
+            return self._default_speed_limit
         for key in self.speed_limit.keys():
             pos_ = self.speed_limit[key]
             if pos_[0] <= pos <= pos_[1]:
                 return key
-        return self.default_speed_limit
+        return self._default_speed_limit
 
     @property
     def car_num(self):
         return len(self.car_list)
 
-    def car_config(self, car_num: int, car_length: float, car_type: str, car_initial_speed: int,
+    def car_config(self, car_num: int, car_length: float, car_type: str, car_initial_speed: float,
                    speed_with_random: bool, cf_name: str, cf_param: dict[str, float], car_param: dict,
                    lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
@@ -198,6 +200,9 @@ class LaneAbstract(ABC):
         self.yield_ = kwargs.get("if_yield", True)
         """run()是否为迭代器"""
         self.has_ui = has_ui
+        """是否显示UI"""
+        self.force_speed_limit = kwargs.get("force_speed_limit", False)
+        """是否强制车辆速度不超过道路限速"""
 
         if self.has_ui and not self.road_control:
             self.ui.ui_init(caption=caption, frame_rate=frame_rate)
@@ -222,7 +227,7 @@ class LaneAbstract(ABC):
         car_speed_before = car.v
         car.v += car.cf_acc * self.dt
 
-        if car.v > car.cf_model.get_expect_speed():
+        if self.force_speed_limit and car.v > car.cf_model.get_expect_speed():
             expect_speed = car.cf_model.get_expect_speed()
             car.a = (expect_speed - car.v) / self.dt
             car.v = expect_speed
@@ -258,9 +263,9 @@ class LaneAbstract(ABC):
                 car.record()
 
     def _make_dummy_car(self, pos):
-        car = Vehicle(self, V_TYPE.OBSTACLE, -1, 0.1)
+        car = Vehicle(self, V_TYPE.OBSTACLE, -1, 0)
         car.set_cf_model(CFM.DUMMY, {})
-        car.x = pos + 0.1
+        car.x = pos
         car.v = 0
         car.a = 0
         return car
@@ -366,11 +371,10 @@ class LaneAbstract(ABC):
                 return car
 
     def car_insert_middle(self, car_length: float, car_type: str, car_speed: float, car_acc: float,
-                          cf_name: str, cf_param: dict[str, float], car_param: dict, front_car_id,
+                          cf_name: str, cf_param: dict[str, float], car_param: dict, front_car_id: int,
                           lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
         follower_id = self.get_relative_id(front_car_id, -1)
         follower_pos = self.get_car_info(follower_id, C_Info.x)
-        follower_gap = self.get_car_info(follower_id, C_Info.gap)
         follower_dhw = self.get_car_info(follower_id, C_Info.dhw)
         front_length = self._get_car(front_car_id).length
 

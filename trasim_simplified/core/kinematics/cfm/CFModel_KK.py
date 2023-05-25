@@ -9,7 +9,6 @@ import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM, SECTION_TYPE
-from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -39,7 +38,6 @@ class CFModel_KK(CFModel):
 
     'v_21': 15
     """
-
     def __init__(self, car: Optional['Vehicle'], f_param: dict[str, float]):
         super().__init__(car)
         # -----模型属性------ #
@@ -48,7 +46,6 @@ class CFModel_KK(CFModel):
 
         # -----模型变量------ #
         self._d = f_param.get("d", 7.5)
-        if "vf" in f_param.keys(): raise TrasimWarning("vf跟随车道限速！")
         self._tau = f_param.get("tau", 1)
 
         self._k = f_param.get("k", 3)
@@ -85,13 +82,17 @@ class CFModel_KK(CFModel):
         self.l_v = self.vehicle.leader.v
         self.l_length = self.vehicle.leader.length
 
+    @property
+    def v_safe_dispersed(self):
+        return self._v_safe_dispersed
+
     @staticmethod
     def update_v_safe(cf_model):
         lane = cf_model.vehicle.lane
         has_v_safe = hasattr(lane, "_v_safe")
         if not has_v_safe or (has_v_safe and int(getattr(lane, "_update_step") != lane.step_)):
             v_safe = [cal_v_safe(
-                cf_model._v_safe_dispersed,
+                cf_model.v_safe_dispersed,
                 cf_model.dt,
                 car.leader.v,
                 car.gap,
@@ -101,7 +102,7 @@ class CFModel_KK(CFModel):
             if lane.is_circle:
                 car = cf_model.vehicle.lane.car_list[-1]
                 v_safe.append(cal_v_safe(
-                    cf_model._v_safe_dispersed,
+                    cf_model.v_safe_dispersed,
                     cf_model.dt,
                     car.leader.v,
                     car.gap,
@@ -134,7 +135,8 @@ class CFModel_KK(CFModel):
 
         cf_model.v_safe = getattr(lane, "_v_safe")[cf_model.index]
         cf_model.v_a = getattr(lane, "_v_a")
-        cf_model.l_v_a = cf_model.v_a[cf_model.index + 1] if (cf_model.index <= len(cf_model.v_a) - 2) else cf_model.v_a[0]
+        cf_model.l_v_a = cf_model.v_a[cf_model.index + 1] \
+            if (cf_model.index <= len(cf_model.v_a) - 2) else cf_model.v_a[0]
         return cf_model.l_v_a
 
     def step(self, index, *args):
@@ -274,7 +276,7 @@ def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
         alpha_l = int(leaderV / (leader_dec * dt))
         beta_l = leaderV / (leader_dec * dt) - alpha_l
         X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
-        # if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
+        if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
         alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
         beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
 
@@ -289,4 +291,4 @@ def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
 
 
 if __name__ == '__main__':
-    print(cal_v_safe(True, 1, 0, 0, 1, 3))
+    print(cal_v_safe(True, 1, 0, 10, 1, 3))

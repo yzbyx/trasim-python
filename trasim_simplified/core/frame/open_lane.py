@@ -31,15 +31,17 @@ class LaneOpen(LaneAbstract):
         self.car_num_percent: Optional[np.ndarray] = None
         self.next_car_time = 0
 
-    def car_loader(self, flow_rate: int | float, thw_distribution: str = THW_DISTRI.Uniform):
+    def car_loader(self, flow_rate: int | float, thw_distribution: str = THW_DISTRI.Uniform, offset_time: float = 0):
         """
         车辆生成器配置
 
+        :param offset_time: 流量生成延迟 [s]
         :param thw_distribution: 车辆到达分布，None则默认均匀分布
         :param flow_rate: 总流量 (veh/h)
         """
         self.flow_rate = flow_rate / 3600
         self.thw_distri = thw_distribution
+        self.next_car_time += offset_time
         self.car_num_percent = np.array(self.car_num_list) / sum(self.car_num_list)
 
     def step(self):

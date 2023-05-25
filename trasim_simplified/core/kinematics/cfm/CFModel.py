@@ -42,5 +42,8 @@ class CFModel(Model, ABC):
     def get_expect_speed(self):
         pass
 
+    def get_speed_limit(self):
+        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
+
     def equilibrium_state(self, *args):
         pass

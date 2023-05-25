@@ -37,6 +37,12 @@ class CFModel_TPACC(CFModel):
         """v_safe计算是否离散化时间"""
         self._tau = f_param.get("tau", 1)
 
+        self.index = None
+
+    @property
+    def v_safe_dispersed(self):
+        return self._v_safe_dispersed
+
     def get_expect_dec(self):
         return self._b
 
@@ -44,7 +50,7 @@ class CFModel_TPACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.vehicle.lane.default_speed_limit
+        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
 
     def _update_dynamic(self):
         self.gap = self.vehicle.gap
@@ -56,13 +62,15 @@ class CFModel_TPACC(CFModel):
         self.l_v_a = CFModel_KK.update_v_safe(self)
 
     def step(self, index, *args):
+        self.index = index
         if self.vehicle.leader is None:
             return 0.
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
         is_first = True if self.vehicle.leader is None else False
         return calculate(*f_params, self.vehicle.leader.cf_model.get_expect_dec(),
-                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed())
+                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
+                         is_first, self.l_v_a)
 
 
 def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed,

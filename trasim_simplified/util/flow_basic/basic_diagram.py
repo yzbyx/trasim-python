@@ -11,7 +11,7 @@ from typing import Optional
 import numpy as np
 from matplotlib import pyplot as plt
 
-from trasim_simplified.core.constant import CFM, V_TYPE
+from trasim_simplified.core.constant import V_TYPE
 from trasim_simplified.core.data.data_plot import Plot
 from trasim_simplified.core.frame.circle_lane import LaneCircle
 from trasim_simplified.core.data.data_processor import Info as P_Info
@@ -20,10 +20,11 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model
 
 
 class BasicDiagram:
-    def __init__(self, lane_length: int, car_length: int, car_initial_speed: int, speed_with_random: bool,
-                 cf_mode: str, cf_param: dict[str, float]):
+    def __init__(self, lane_length: int, car_length: float, car_initial_speed: int, speed_with_random: bool,
+                 cf_mode: str, cf_param: dict[str, float], speed_limit=30):
         self.car_length = car_length
         self.lane_length = lane_length
+        self.speed_limit = speed_limit
         self.car_initial_speed = car_initial_speed
         self.speed_with_random = speed_with_random
         self.cf_mode = cf_mode
@@ -51,11 +52,13 @@ class BasicDiagram:
         self.result = self.load_result()
 
         self.occ_seq = occ_seq
-        warm_up_step = 6000 * 2
-        sim_step = 6000 * 3
         dt = kwargs.get("dt", 0.1)
+        warm_up_step = int(1800 / dt)
+        sim_step = warm_up_step + int(300 / dt)
         jam = kwargs.get("jam", False)
         time_ = 0
+
+        print(f"CFM: {self.cf_mode}, is_jam: {jam}")
 
         for i, car_num in enumerate(car_nums):
             time_epoch_begin = time.time()
@@ -64,13 +67,15 @@ class BasicDiagram:
                 continue
 
             print(f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
-                  f" occ: {occ_seq[i]:.2f}, car_nums: {car_num}, density[veh/h]: {car_num / (self.lane_length / 1000)}",
+                  f" occ: {occ_seq[i]:.2f}, car_nums: {car_num},"
+                  f" density[veh/km]: {car_num / (self.lane_length / 1000)}",
                   end="\t\t\t")
 
             params = [car_num, self.car_length, V_TYPE.PASSENGER, self.car_initial_speed,
                       self.speed_with_random, self.cf_mode, self.cf_param, {}]
 
             lane = LaneCircle(self.lane_length)
+            lane.set_speed_limit(self.speed_limit)
             lane.car_config(*params)
             gap = 0 if jam else -1
             lane.car_load(gap)
@@ -104,9 +109,10 @@ class BasicDiagram:
             dhw = self.lane_length / car_num
             speed /= 3.6
             result = cf_model.equilibrium_state(speed, dhw, self.car_length)
-            self.equilibrium_state_result["V"].append(result["V"])
-            self.equilibrium_state_result["Q"].append(result["Q"])
-            self.equilibrium_state_result["K"].append(result["K"])
+            if result is not None:
+                self.equilibrium_state_result["V"].append(result["V"])
+                self.equilibrium_state_result["Q"].append(result["Q"])
+                self.equilibrium_state_result["K"].append(result["K"])
 
     def plot(self, save_fig=True):
         fig, axes = plt.subplots(1, 3, figsize=(10, 3), layout="constrained", squeeze=False)
@@ -143,11 +149,11 @@ class BasicDiagram:
                              linewidth=1, markersize=2)
 
         fig.suptitle(self.cf_mode + "+" + get_cf_model(None, self.cf_mode, self.cf_param).get_param_map().__str__())
-        if save_fig: fig.savefig("./temp/" + self.file_name + ".png", dpi=500, bbox_inches='tight')
+        if save_fig: fig.savefig("./diag_result/" + self.file_name + ".png", dpi=500, bbox_inches='tight')
         plt.show()
 
     def save_result(self):
-        with open(f"./temp/{self.file_name}.pkl", "wb") as f:
+        with open(f"./diag_result/{self.file_name}.pkl", "wb") as f:
             pickle.dump(self.result, f)
 
     def load_result(self):
@@ -155,12 +161,12 @@ class BasicDiagram:
             self.clear_result()
             return {"occ": [], "Q": [], "K": [], "V": []}
         else:
-            with open(f"./temp/{self.file_name}.pkl", "rb") as f:
+            with open(f"./diag_result/{self.file_name}.pkl", "rb") as f:
                 return pickle.load(f)
 
     def clear_result(self):
-        if os.path.exists(f"./temp/{self.file_name}.pkl"):
-            os.remove(f"./temp/{self.file_name}.pkl")
+        if os.path.exists(f"./diag_result/{self.file_name}.pkl"):
+            os.remove(f"./diag_result/{self.file_name}.pkl")
 
     def check_contain_occ(self, occ):
         if not self.resume: return False
@@ -168,13 +174,3 @@ class BasicDiagram:
             if abs(occ_ - occ) < 1e-6:
                 return True
         return False
-
-
-if __name__ == '__main__':
-    cf_name = CFM.KK
-    tau = 1
-    cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True, "tau": tau}
-    diag = BasicDiagram(1000, 5, 0, False, cf_mode=cf_name, cf_param=cf_param)
-    diag.run(0.01, 0.7, 0.02, resume=False, file_name="result_" + cf_name, dt=tau, jam=True)
-    # diag.get_by_equilibrium_state_func()
-    diag.plot()

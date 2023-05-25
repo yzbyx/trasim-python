@@ -10,13 +10,12 @@ from trasim_simplified.core.data.data_plot import Plot
 from trasim_simplified.core.frame.circle_lane import LaneCircle
 from trasim_simplified.core.frame.open_lane import LaneOpen
 from trasim_simplified.util.decorator.mydecorator import timer_no_log
-from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
 
 
 @timer_no_log
 def test_circle():
-    _cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True}
+    _cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True}
     _car_param = {}
     take_over_index = -1
     follower_index = -1
@@ -29,25 +28,24 @@ def test_circle():
 
     if is_circle:
         sim = LaneCircle(1000)
-        sim.car_config(1, 7.5, V_TYPE.PASSENGER, 0, False, CFM.KK, _cf_param, {"color": COLOR.yellow})
+        sim.car_config(132, 7.5, V_TYPE.PASSENGER, 0, False, CFM.TPACC, _cf_param, {"color": COLOR.yellow})
         # sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.NON_LINEAR_GHR, _cf_param, {"color": COLOR.blue})
         sim.car_load(0)
-        sim.set_block(500)
+        # sim.set_block(800)
     else:
         sim = LaneOpen(10000)
         sim.car_config(40, 7.5, V_TYPE.PASSENGER, -1, False, CFM.KK, _cf_param, _car_param)
         sim.car_loader(2000)
 
     sim.data_container.config()
-    sim.data_processor.config()
-    for step in sim.run(data_save=True, has_ui=True, frame_rate=10,
+    for step in sim.run(data_save=True, has_ui=False, frame_rate=10,
                         warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         # 车辆减速扰动
         # if warm_up_step + offset_step == step:
         #     take_over_index = sim.get_appropriate_car()
         #     follower_index = sim.get_relative_id(take_over_index, -1)
         #     print(take_over_index, follower_index)
-        # if warm_up_step + offset_step < step <= warm_up_step + offset_step + 10 / dt:
+        # if warm_up_step + offset_step < step <= warm_up_step + offset_step + 100 / dt:
         #     sim.take_over(take_over_index, -3)
 
         # 居中插入车辆

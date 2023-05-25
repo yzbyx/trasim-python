@@ -65,7 +65,7 @@ class CFModel_IDM(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        f_param = [self._s0, self._s1, self._v0, self._T, self._omega, self._d, self._delta]
+        f_param = [self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d, self._delta]
         return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
                          self.vehicle.x + self.vehicle.dhw, self.vehicle.leader.length)
 

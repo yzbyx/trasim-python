@@ -3,7 +3,6 @@
 # @Author : yzbyx
 # @File : vehicle.py
 # @Software : PyCharm
-import warnings
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -13,7 +12,6 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
-from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.lane_abstract import LaneAbstract

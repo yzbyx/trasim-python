@@ -36,6 +36,12 @@ class CFModel_ACC(CFModel):
         """期望减速度，用于安全速度计算"""
         self._tau = f_param.get("tau", 1)
 
+        self.index = None
+
+    @property
+    def v_safe_dispersed(self):
+        return self._v_safe_dispersed
+
     def _update_dynamic(self):
         self.dt = self.vehicle.lane.dt
         self._tau = self.dt
@@ -56,7 +62,7 @@ class CFModel_ACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.vehicle.lane.default_speed_limit
+        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
 
     def step(self, index, *args):
         self.index = index

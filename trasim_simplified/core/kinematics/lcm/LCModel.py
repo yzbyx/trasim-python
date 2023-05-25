@@ -28,3 +28,13 @@ class LCModel(Model, ABC):
         self.mode = RUNMODE.NORMAL
         self.random = LCModel._RANDOM
         self.last_lc_time_ = - np.Inf
+
+    @abc.abstractmethod
+    def base_cal(self):
+        """基本路段的普通换道"""
+        pass
+
+    @abc.abstractmethod
+    def on_ramp_cal(self):
+        """强制换道（例如匝道汇入）"""
+        pass
