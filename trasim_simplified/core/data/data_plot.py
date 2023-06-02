@@ -75,6 +75,7 @@ class Plot:
         fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
         ax: plt.Axes = ax
         fig: plt.Figure = fig
+        ax.set_title(f"lane_id: {lane_id}")
         ax.set_xlabel("time(s)")
         ax.set_ylabel("location")
         value_range = (np.min(color_data), np.max(color_data))

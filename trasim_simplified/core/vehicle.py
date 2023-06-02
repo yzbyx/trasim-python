@@ -51,6 +51,12 @@ class Vehicle(Obstacle):
         self.cf_acc = 0
         self.lc_result = {"lc": 0, "a": None, "v": None, "x": None}
         """换道模型结果，lc（-1（向左换道）、0（保持当前车道）、1（向右换道）），a（换道位置调整加速度），v（速度），x（位置）"""
+        self.lc_res_pre = None
+
+    @property
+    def last_step_lc_statu(self):
+        """0为保持车道，-1为向左换道，1为向右换道"""
+        return self.lc_res_pre["lc"]
 
     def set_cf_model(self, cf_name: str, cf_param: dict):
         self.cf_model = get_cf_model(self, cf_name, cf_param)
@@ -63,10 +69,10 @@ class Vehicle(Obstacle):
 
     def step_lane_change(self, index: int, left_lane: 'LaneAbstract', right_lane: 'LaneAbstract'):
         self.lc_result = self.lc_model.step(index, left_lane, right_lane)
-        pass
+        self.lc_res_pre = self.lc_result
 
     def get_dist(self, pos: float):
-        """获取pos与车头的距离，如果为环形边界，选取距离最近的表述"""
+        """获取pos与车头的距离，如果为环形边界，选取距离最近的表述，如果为开边界，pos-self.x"""
         if self.lane.is_circle:
             if pos > self.x:
                 dist_head = pos - self.x
@@ -151,9 +157,6 @@ class Vehicle(Obstacle):
         if self.leader is not None:
             dhw = self.dhw
             gap = dhw - self.leader.length
-            # if gap < 0.:
-            #     raise TrasimError("gap < 0!")
-            #     pass
             return gap
         else:
             return np.NaN
@@ -174,7 +177,7 @@ class Vehicle(Obstacle):
                 if self.lane.is_circle and self.lane.car_list[-1].ID == self.ID:
                     dhw += self.lane.lane_length
                 else:
-                    raise TrasimError("车头间距小于0！")
+                    raise TrasimError(f"车头间距小于0！\n" + self.get_basic_info())
                     pass
             return dhw
         else:
@@ -229,3 +232,12 @@ class Vehicle(Obstacle):
     def set_car_param(self, param: dict):
         self.color = param.get("color", COLOR.yellow)
         self.width = param.get("width", 1.8)
+
+    def get_basic_info(self):
+        return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}\n" \
+               f"ego_lc: {self.last_step_lc_statu}, " \
+               f"ego_id: {self.ID}, ego_type: {self.cf_model.name}," \
+               f" ego_x: {self.x:.3f}, ego_v: {self.v:.3f}, ego_a: {self.a:.3f}\n" \
+               f"leader_lc: {self.leader.last_step_lc_statu}, leader_id: {self.leader.ID}," \
+               f" leader_type: {self.leader.cf_model.name}," \
+               f" leader_x: {self.leader.x:.3f}, leader_v: {self.leader.v:.3f}, leader_a: {self.leader.a:.3f}"

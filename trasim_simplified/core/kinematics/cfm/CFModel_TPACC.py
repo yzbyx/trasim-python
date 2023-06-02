@@ -64,11 +64,11 @@ class CFModel_TPACC(CFModel):
     def step(self, index, *args):
         self.index = index
         if self.vehicle.leader is None:
-            return 0.
+            return 3
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
         is_first = True if self.vehicle.leader is None else False
-        return calculate(*f_params, self.vehicle.leader.cf_model.get_expect_dec(),
+        return calculate(*f_params, self._b,
                          self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
                          is_first, self.l_v_a)
 

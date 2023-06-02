@@ -171,26 +171,34 @@ class DataProcessor:
                         d_a += lane_length - pos_data[0] + pos_data[-1]
                     else:
                         d_a += pos_data[-1] - pos_data[0]
+
                     t_a += (time[-1] - time[0])
+
+                    # 行驶距离补偿
+                    d_a += (speed[0] + speed[-1]) / 2 * dt
+                    # 行驶时间补偿
+                    t_a += dt
 
                     car_num_in += 1
             steps_has_car = len(
-                pos_in[(pos_in[C_Info.time] >= time_start) & (pos_in[C_Info.time] <= time_end)][C_Info.step].unique())
+                pos_in[(pos_in[C_Info.time] >= time_start) & (pos_in[C_Info.time] < time_end)])
 
             time_avg_speed_list.append(np.mean(avg_speed_list_per_traj))  # 时间平均车速
             # 地点车速的调和平均为空间平均车速
-            space_avg_speed_by_time_avg_speed_list.append(np.mean(1 / np.array(avg_speed_list_per_traj)))
+            space_avg_speed_by_time_avg_speed_list.append(1 / np.mean(1 / np.array(avg_speed_list_per_traj)))
             q_list.append(car_num_in / (d_step * dt))
             time_occ_list.append(steps_has_car / d_step)
 
             d_A_list.append(d_a)
             t_A_list.append(t_a)
 
-        aggregate_loop_result["loop_vs(m/s)"] = time_avg_speed_list
-        aggregate_loop_result["loop_vs_by_vt(m/s)"] = space_avg_speed_by_time_avg_speed_list
         aggregate_loop_result["loop_q(veh/h)"] = (np.array(q_list) * 3600).tolist()
         aggregate_loop_result["loop_time_occ"] = time_occ_list
         aggregate_loop_result["loop_k_by_time_occ(veh/km)"] = (np.array(time_occ_list) / width * 1000).tolist()
+        aggregate_loop_result["loop_vt(m/s)"] = time_avg_speed_list
+        aggregate_loop_result["loop_vt(km/h)"] = (np.array(time_avg_speed_list) * 3.6).tolist()
+        aggregate_loop_result["loop_vs_by_vt(m/s)"] = space_avg_speed_by_time_avg_speed_list
+        aggregate_loop_result["loop_vs_by_vt(km/h)"] = (np.array(space_avg_speed_by_time_avg_speed_list) * 3.6).tolist()
 
         aggregate_Edie_result["HCM_dA(m)"] = d_A_list
         aggregate_Edie_result["HCM_tA(s)"] = t_A_list
@@ -198,6 +206,7 @@ class DataProcessor:
         aggregate_Edie_result["HCM_qA(veh/h)"] = (np.array(d_A_list) / area_A * 3600).tolist()
         aggregate_Edie_result["HCM_kA(veh/km)"] = (np.array(t_A_list) / area_A * 1000).tolist()
         aggregate_Edie_result["HCM_vA(m/s)"] = (np.array(d_A_list) / np.array(t_A_list)).tolist()
+        aggregate_Edie_result["HCM_vA(km/h)"] = (np.array(d_A_list) / np.array(t_A_list) * 3.6).tolist()
 
         return aggregate_loop_result, aggregate_Edie_result
 

@@ -47,6 +47,7 @@ class LCModel_KK(LCModel):
         self.lane: Optional['LaneAbstract'] = None
 
     def _update_dynamic(self):
+        assert self.vehicle.lane.is_circle is False, "此换道模型在边界处由于xm"
         self.lane = self.vehicle.lane
         self.dt = self.lane.dt
 
@@ -70,24 +71,31 @@ class LCModel_KK(LCModel):
         right_ = False
 
         l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
+        # 判断是否选择左转
         if self.left_lane is not None:
             _f, _l = self.left_lane.get_relative_car(self.vehicle.x)
             safe_, left_d_l = self._safe_check(_f, _l)
             if not safe_:
                 left_ = False
             else:
-                if _l.v >= l_v + self._delta_1 and self.vehicle.v > l_v:
+                if _l is not None:
+                    if _l.v >= l_v + self._delta_1 and self.vehicle.v > l_v:
+                        left_ = True
+                else:
                     left_ = True
+        # 判断是否选择右转
         if self.right_lane is not None:
-            # TODO: 车辆的x需要换算到对应车道的位置
             _f, _l = self.right_lane.get_relative_car(self.vehicle.x)
             safe_, right_d_l = self._safe_check(_f, _l)
             if not safe_:
                 right_ = False
             else:
-                if _l.v >= l_v + self._delta_2 or _l.v >= self.vehicle.v + self._delta_2:
+                if _l is not None:
+                    if _l.v >= l_v + self._delta_2 or _l.v >= self.vehicle.v + self._delta_2:
+                        right_ = True
+                else:
                     right_ = True
-
+        # 概率选择是否换道
         if left_ or right_:
             if self.random.random() < self._p_0:
                 if left_ and right_:
@@ -139,7 +147,7 @@ class LCModel_KK(LCModel):
             head_safe = True
             d_l = np.Inf
         if _f is not None:
-            D_behind, behind_safe, _, _ = self._safe_func_on_ramp_common(_f, self.vehicle)
+            D_behind, behind_safe, _, _ = self._safe_func_on_ramp_common(_f, self.vehicle, v_hat)
         else:
             behind_safe = True
 
@@ -158,9 +166,19 @@ class LCModel_KK(LCModel):
 
         return head_safe and behind_safe, d_l, v_hat, x
 
-    def _safe_func_on_ramp_common(self, follower: 'Vehicle', leader: 'Vehicle'):
+    def _safe_func_on_ramp_common(self, follower: 'Vehicle', leader: 'Vehicle', v_hat=None):
+        """
+
+        :param follower:
+        :param leader:
+        :param v_hat: 是否为ego的后车和ego, 若是则需要传ego的v_hat
+        :return:
+        """
         d_l = - leader.get_dist(follower.x) - leader.length
-        v_hat = min(leader.v, follower.v + self._delta_vr_1)
-        D = cal_G(self._k, self._tau, self._a_0, v_hat, leader.v)
+        if v_hat is None:
+            v_hat = min(leader.v, follower.v + self._delta_vr_1)
+            D = cal_G(self._k, self._tau, self._a_0, v_hat, leader.v)
+        else:
+            D = cal_G(self._k, self._tau, self._a_0, follower.v, v_hat)
         safe = (d_l >= min(v_hat * self._tau, D))
         return D, safe, d_l, v_hat

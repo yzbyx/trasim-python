@@ -97,7 +97,7 @@ class CFModel_KK(CFModel):
                 car.leader.v,
                 car.gap,
                 car.cf_model.get_expect_dec(),
-                car.leader.cf_model.get_expect_dec()
+                car.cf_model.get_expect_dec()
             ) for car in lane.car_list[:-1]]
             if lane.is_circle:
                 car = cf_model.vehicle.lane.car_list[-1]
@@ -107,7 +107,7 @@ class CFModel_KK(CFModel):
                     car.leader.v,
                     car.gap,
                     car.cf_model.get_expect_dec(),
-                    car.leader.cf_model.get_expect_dec()
+                    car.cf_model.get_expect_dec()
                 ))
 
             v_a = [CFModel_KK.cal_v_a(

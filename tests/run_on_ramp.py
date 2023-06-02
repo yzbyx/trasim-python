@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2023/5/15 17:34
 # @Author : yzbyx
-# @File : test_on_ramp.py
+# @File : run_on_ramp.py
 # Software: PyCharm
 from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, SECTION_TYPE
 from trasim_simplified.core.data.data_plot import Plot
@@ -12,7 +12,7 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 
 
 @timer_no_log
-def test_road():
+def run_road():
     _cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True}
     _car_param = {}
     take_over_index = -1
@@ -25,21 +25,22 @@ def test_road():
     is_circle = False
     road_length = 15000
     lane_num = 2
+    v_length = 7.5
 
     if is_circle:
         sim = Road(road_length)
         lanes = sim.add_lanes(lane_num, is_circle=True)
         for i in range(lane_num):
             if i != lane_num - 1:
-                lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
+                lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
                                     lc_name=LCM.KK, lc_param={})
-                lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.blue},
+                lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.blue},
                                     lc_name=LCM.KK, lc_param={})
             else:
-                lanes[i].car_config(100, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
+                lanes[i].car_config(100, v_length, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
                                     lc_name=LCM.KK, lc_param={})
-                lanes[i].car_config(100, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.blue},
-                                    lc_name=LCM.KK, lc_param={})
+                lanes[i].car_config(100, v_length, V_TYPE.PASSENGER, 20, False, CFM.ACC, _cf_param, {"color": COLOR.blue},
+                                    lc_name=LCM.ACC, lc_param={})
             lanes[i].car_load()
             lanes[i].data_container.config()
             if i == lane_num - 2:
@@ -54,16 +55,16 @@ def test_road():
         sim = Road(road_length)
         lanes = sim.add_lanes(lane_num, is_circle=False)
         for i in range(lane_num):
-            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
-                                lc_name=LCM.KK, lc_param={})
-            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.blue},
-                                lc_name=LCM.KK, lc_param={})
+            lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
+                                CFM.KK, _cf_param, {"color": COLOR.yellow}, lc_name=LCM.KK, lc_param={})
+            lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
+                                CFM.ACC, _cf_param, {"color": COLOR.blue}, lc_name=LCM.ACC, lc_param={})
 
             lanes[i].data_container.config()
             if i != lane_num - 1:
-                lanes[i].car_loader(2000, THW_DISTRI.Exponential)
+                lanes[i].car_loader(2000, THW_DISTRI.Uniform)
             else:
-                lanes[i].car_loader(200, THW_DISTRI.Exponential)
+                lanes[i].car_loader(200, THW_DISTRI.Uniform)
 
             if i == lane_num - 2:
                 lanes[i].set_section_type(SECTION_TYPE.BASE)
@@ -79,20 +80,20 @@ def test_road():
 
     for step, stage in sim.run(data_save=True, has_ui=False, frame_rate=10,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
-        # if warm_up_step + offset_step == step and stage == 0:
-        #     take_over_index = sim.get_appropriate_car(lane_index=0)
-        #     print(take_over_index)
-        # if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
-        #     sim.take_over(take_over_index, -3, lc_result={"lc": 0})
-        if warm_up_step + offset_step == step and stage == 1:
+        if warm_up_step + offset_step == step and stage == 0:
             take_over_index = sim.get_appropriate_car(lane_index=0)
             print(take_over_index)
-            for lane in sim.lane_list:
-                lane.set_speed_limit(20, 5000, 10000)
+        # if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
+        #     sim.take_over(take_over_index, -3, lc_result={"lc": 0})
+        # if warm_up_step + offset_step == step and stage == 1:
+        #     take_over_index = sim.get_appropriate_car(lane_index=0)
+        #     print(take_over_index)
+        #     for lane in sim.lane_list:
+        #         lane.set_speed_limit(20, 5000, 10000)
         pass
 
     df = sim.data_to_df()
-    result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=road_length, pos=500, width=50,
+    result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=road_length, pos=5000, width=50,
                                                          dt=dt, d_step=int(300 / dt))
     sim.data_processor.print(result)
 
@@ -108,4 +109,4 @@ def test_road():
 
 
 if __name__ == '__main__':
-    test_road()
+    run_road()

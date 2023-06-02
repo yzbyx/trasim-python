@@ -99,7 +99,7 @@ def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, 
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
     # 计算与前车的净间距
-    gap = leaderX - xOffset - leaderL
+    gap = leaderX - xOffset - leaderL + 1e-12
     # 计算车辆下一时间步加速度
     finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 

@@ -3,21 +3,25 @@
 # @Author : yzbyx
 # @File : test_basic_diagram.py
 # Software: PyCharm
+import pytest
+
+from tests.run_basic_diagram import run_basic_diagram
 from trasim_simplified.core.constant import CFM
-from trasim_simplified.util.flow_basic.basic_diagram import BasicDiagram
 
 
-def test_basic_diagram():
-    cf_name = CFM.KK
-    tau = 1
-    is_jam = True
-    cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True, "tau": tau, "k2": 0.6}
-    diag = BasicDiagram(2000, 7.5, 0, False, cf_mode=cf_name, cf_param=cf_param)
-    diag.run(0.01, 1, 0.02, resume=False, file_name="result_" + cf_name + ("_jam" if is_jam else ""),
-             dt=tau, jam=is_jam)
-    diag.get_by_equilibrium_state_func()
-    diag.plot()
-
-
-if __name__ == '__main__':
-    test_basic_diagram()
+@pytest.mark.parametrize(
+    "cf_name, tau, is_jam, cf_param, car_length",
+    [
+        (CFM.ACC, 0.1, False, {"original_acc": True, "tau": 0.1}, 5),
+        (CFM.ACC, 1, False, {"original_acc": False, "v_safe_dispersed": True, "tau": 1}, 7.5),
+        (CFM.CACC, 0.1, False, {}, 5),
+        (CFM.TPACC, 1, False, {}, 7.5),
+        (CFM.KK, 1, False, {}, 7.5),
+        (CFM.GIPPS, 0.7, False, {}, 5),
+        (CFM.IDM, 0.1, False, {}, 5),
+        (CFM.OPTIMAL_VELOCITY, 0.1, False, {}, 5),
+        (CFM.WIEDEMANN_99, 0.1, False, {}, 5)
+    ],
+)
+def test_basic_diagram(cf_name, tau, is_jam, cf_param, car_length):
+    run_basic_diagram(cf_name, tau, is_jam, cf_param, car_length, start=0.1, end=0.91, step=0.2, plot=False)

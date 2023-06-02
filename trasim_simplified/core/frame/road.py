@@ -72,10 +72,10 @@ class Road:
                 self.step_ = lane_iter.__next__()
             if self.yield_: yield self.step_, 0  # 跟驰
             for i, lane_iter in enumerate(lanes_iter):
-                self.step_ = lane_iter.__next__()
+                self.step_ = lane_iter.__next__()  # 跟驰状态更新
             self.step_lane_change()
             if self.yield_: yield self.step_, 1  # 换道
-            self.update_lc_state()
+            self.update_lc_state()  # 换道状态更新
             self.step_ += 1
             self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
@@ -94,17 +94,34 @@ class Road:
 
     def update_lc_state(self):
         for i, lane in enumerate(self.lane_list):
-            for j, car in enumerate(lane.car_list.copy()):
+            car_lc_last = None
+            car_list = lane.car_list.copy()
+            car_list.reverse()
+            for j, car in enumerate(car_list):
                 if car.type != V_TYPE.OBSTACLE:
                     lc = car.lc_result.get("lc", 0)
                     if lc != 0:
-                        lane.car_remove(car)
                         target_lane = self.lane_list[car.lane.index + lc]
-                        target_lane.car_insert_by_instance(car)
-                        car.x = car.lc_result.get("x", car.x)
-                        car.v = car.lc_result.get("v", car.v)
-                        car.a = car.lc_result.get("a", car.a)
+                        if self._check_and_correct_lc_pos(target_lane, car_lc_last, car):
+                            lane.car_remove(car)
+                            car.x = car.lc_result.get("x", car.x)
+                            car.v = car.lc_result.get("v", car.v)
+                            car.a = car.lc_result.get("a", car.a)
+                            target_lane.car_insert_by_instance(car)
+                            car_lc_last = car
                         car.lc_result = {"lc": 0}
+
+    @staticmethod
+    def _check_and_correct_lc_pos(target_lane, car_lc_last, car):
+        target_pos = car.lc_result.get("x", car.x)
+        if target_lane.is_circle and target_pos > target_lane.lane_length:
+            car.lc_result["x"] -= target_lane.lane_length
+        if car_lc_last is None or car_lc_last.lane != target_lane:
+            return True
+        dist = car_lc_last.get_dist(target_pos)
+        if dist > car.length or dist < - car_lc_last.length:
+            return True
+        return False
 
     def get_new_car_id(self):
         self.id_accumulate += 1

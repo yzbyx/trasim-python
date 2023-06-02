@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2023/5/12 21:54
 # @Author : yzbyx
-# @File : test_road.py
+# @File : run_road.py
 # Software: PyCharm
 from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM
 from trasim_simplified.core.data.data_plot import Plot
@@ -12,8 +12,8 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 
 
 @timer_no_log
-def test_road():
-    _cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True}
+def run_road():
+    _cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True}
     _car_param = {}
     take_over_index = -1
     follower_index = -1
@@ -22,7 +22,7 @@ def test_road():
     sim_step = warm_up_step + int(1200 / dt)
     offset_step = int(300 / dt)
 
-    is_circle = True
+    is_circle = False
     road_length = 10000
     lane_num = 2
 
@@ -36,26 +36,27 @@ def test_road():
                                 lc_name=LCM.KK, lc_param={})
             lanes[i].car_load()
             lanes[i].data_container.config()
-            lanes[i].data_processor.config()
     else:
         sim = Road(road_length)
         lanes = sim.add_lanes(lane_num, is_circle=False)
         for i in range(lane_num):
-            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, -1, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
+            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
                                 lc_name=LCM.KK, lc_param={})
-            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, -1, False, CFM.TPACC, _cf_param, {"color": COLOR.blue},
+            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.TPACC, _cf_param, {"color": COLOR.blue},
                                 lc_name=LCM.ACC, lc_param={})
-            lanes[i].car_loader(2000, THW_DISTRI.Exponential)
+            if i == 0:
+                lanes[i].car_loader(2000, THW_DISTRI.Exponential)
+            else:
+                lanes[i].car_loader(1000, THW_DISTRI.Exponential)
             lanes[i].data_container.config()
-            lanes[i].data_processor.config()
 
-    for step in sim.run(data_save=True, has_ui=True, frame_rate=10,
-                        warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
-        if warm_up_step + offset_step == step:
+    for step, state in sim.run(data_save=True, has_ui=False, frame_rate=-1,
+                               warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+        if warm_up_step + offset_step == step and state == 0:
             take_over_index = sim.get_appropriate_car(lane_index=0)
             print(take_over_index)
-        if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
-            sim.take_over(take_over_index, -3, lc_result={"lc": 0})
+        # if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
+        #     sim.take_over(take_over_index, -3, lc_result={"lc": 0})
 
     df = sim.data_to_df()
     lane_ids = sim.find_on_lanes(take_over_index)
@@ -64,8 +65,8 @@ def test_road():
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
     Plot.spatial_time_plot(take_over_index, lane_id=1,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
-    Plot.spatial_time_plot(take_over_index, lane_id=2,
-                           color_info_name=C_Info.v, data_df=df, single_plot=False)
+    # Plot.spatial_time_plot(take_over_index, lane_id=2,
+    #                        color_info_name=C_Info.v, data_df=df, single_plot=False)
     Plot.show()
 
     # sim.data_processor.aggregate_as_detect_loop(0, 995, 6000)
@@ -73,4 +74,4 @@ def test_road():
 
 
 if __name__ == '__main__':
-    test_road()
+    run_road()

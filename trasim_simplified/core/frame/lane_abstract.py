@@ -227,23 +227,28 @@ class LaneAbstract(ABC):
         car_speed_before = car.v
         car.v += car.cf_acc * self.dt
 
-        if self.force_speed_limit and car.v > car.cf_model.get_expect_speed():
+        if self.force_speed_limit and car.v > self.get_speed_limit(car.x):
+            speed_limit = self.get_speed_limit(car.x)
+            car.a = (speed_limit - car_speed_before) / self.dt
+            car.v = speed_limit
+
+        if car.v > car.cf_model.get_expect_speed():
             expect_speed = car.cf_model.get_expect_speed()
-            car.a = (expect_speed - car.v) / self.dt
+            car.a = (expect_speed - car_speed_before) / self.dt
             car.v = expect_speed
         elif car.v < 0:
             # if car.v < - 1e-3:
             #     print("存在速度为负的车辆！")
-            car.cf_acc = - (car_speed_before / self.dt)
+            car.a = - (car_speed_before / self.dt)
             car.v = 0
         else:
             car.a = car.cf_acc
 
         car.x += (car_speed_before + car.v) * self.dt / 2
 
-        if car.leader is not None and car.leader.type == V_TYPE.OBSTACLE:
-            if car.x > car.leader.x:
-                car.x = car.leader.x
+        # if car.leader is not None and car.leader.type == V_TYPE.OBSTACLE:
+        #     if car.x > car.leader.x:
+        #         car.x = car.leader.x
 
     @abc.abstractmethod
     def update_state(self):
@@ -263,9 +268,9 @@ class LaneAbstract(ABC):
                 car.record()
 
     def _make_dummy_car(self, pos):
-        car = Vehicle(self, V_TYPE.OBSTACLE, -1, 0)
+        car = Vehicle(self, V_TYPE.OBSTACLE, -1, 1e-5)
         car.set_cf_model(CFM.DUMMY, {})
-        car.x = pos
+        car.x = pos + 1e-5
         car.v = 0
         car.a = 0
         return car
@@ -349,6 +354,7 @@ class LaneAbstract(ABC):
             if self.is_circle:
                 car.leader = car
                 car.follower = car
+        return True
 
     def get_car_info(self, id_: int, info_name: str):
         for car in self.car_list:
@@ -415,7 +421,10 @@ class LaneAbstract(ABC):
             if car.x > pos:
                 return car.follower, car
         if len(self.car_list) != 0:
-            return self.car_list[-1], self.car_list[0]
+            if self.is_circle is True:
+                return self.car_list[-1], self.car_list[0]
+            else:
+                return self.car_list[-1], None
         return None, None
 
     def __str__(self):

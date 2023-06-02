@@ -29,6 +29,10 @@ class COLOR:
 # 跟驰模型
 # ******************************
 class CFM:
+    LCM = "Longitude_control_model"
+    "Ni的纵向控制模型"
+    CACC = "CACC"
+    """CACC模型"""
     DUMMY = "Dummy"
     """虚拟车辆对应模型"""
     IDM = 'IDM'

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_G
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
@@ -72,7 +71,10 @@ class LCModel_ACC(LCModel):
             if not safe_:
                 left_ = False
             else:
-                if _l.v >= l_v + self._delta_1 and self.vehicle.v > l_v:
+                if _l is not None:
+                    if _l.v >= l_v + self._delta_1 and self.vehicle.v > l_v:
+                        left_ = True
+                else:
                     left_ = True
         if self.right_lane is not None:
             # TODO: 车辆的x需要换算到对应车道的位置
@@ -81,7 +83,10 @@ class LCModel_ACC(LCModel):
             if not safe_:
                 right_ = False
             else:
-                if _l.v >= l_v + self._delta_2 or _l.v >= self.vehicle.v + self._delta_2:
+                if _l is not None:
+                    if _l.v >= l_v + self._delta_2 or _l.v >= self.vehicle.v + self._delta_2:
+                        right_ = True
+                else:
                     right_ = True
 
         if left_ or right_:
