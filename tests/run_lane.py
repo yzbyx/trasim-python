@@ -7,15 +7,16 @@ import numpy as np
 
 from trasim_simplified.core.constant import CFM, V_TYPE, COLOR
 from trasim_simplified.core.data.data_plot import Plot
-from trasim_simplified.core.frame.circle_lane import LaneCircle
-from trasim_simplified.core.frame.open_lane import LaneOpen
-from trasim_simplified.util.decorator.mydecorator import timer_no_log
+from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
+from trasim_simplified.core.frame.micro.open_lane import LaneOpen
+from trasim_simplified.util.decorator.timer import timer_no_log
 from trasim_simplified.core.data.data_container import Info as C_Info
 
 
 @timer_no_log
 def run_circle():
     _cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True}
+    state_update_method = "Euler"  # Ballistic
     _car_param = {}
     take_over_index = -1
     follower_index = -1
@@ -29,9 +30,10 @@ def run_circle():
 
     if is_circle:
         sim = LaneCircle(lane_length)
-        sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.ACC, _cf_param, {"color": COLOR.yellow})
+        sim.car_config(50, 7.5, V_TYPE.PASSENGER, 0, False,
+                       CFM.TPACC, _cf_param, {"color": COLOR.yellow})
         # sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.NON_LINEAR_GHR, _cf_param, {"color": COLOR.blue})
-        sim.car_load()
+        sim.car_load(0)
         # sim.set_block(800)
     else:
         sim = LaneOpen(lane_length)
@@ -40,7 +42,7 @@ def run_circle():
 
     sim.data_container.config()
     for step in sim.run(data_save=True, has_ui=False, frame_rate=120,
-                        warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+                        warm_up_step=warm_up_step, sim_step=sim_step, dt=dt, state_update_method=state_update_method):
         # 车辆减速扰动
         if warm_up_step + offset_step == step:
             take_over_index = sim.get_appropriate_car()

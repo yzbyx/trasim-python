@@ -67,21 +67,20 @@ class CFModel_TPACC(CFModel):
             return 3
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
-        is_first = True if self.vehicle.leader is None else False
-        return calculate(*f_params, self._b,
+        return calculate(*f_params,
                          self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
-                         is_first, self.l_v_a)
+                         False, self.l_v_a)
 
 
-def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed,
-              l_dec_, dt, gap, v, l_v, v_free, is_first, l_v_a):
+def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
+              dt, gap, v, l_v, v_free, is_first, l_v_a):
     if gap > v * g_tau_:
         acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
     else:
         acc = kdv_ * (l_v - v)
     v_c = v + dt * max(- dec_, min(acc, acc_))
 
-    v_safe = cal_v_safe(v_safe_dispersed, dt, l_v, gap, dec_, l_dec_)
+    v_safe = cal_v_safe(v_safe_dispersed_, dt, l_v, gap, dec_, dec_)
     if not is_first:
         v_safe = min(v_safe, (gap / dt) + l_v_a)
     v_next = max(0, min(v_free, v_c, v_safe))

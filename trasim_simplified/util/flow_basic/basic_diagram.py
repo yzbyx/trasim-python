@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import V_TYPE
 from trasim_simplified.core.data.data_plot import Plot
-from trasim_simplified.core.frame.circle_lane import LaneCircle
+from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
 from trasim_simplified.core.data.data_processor import Info as P_Info
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.core.kinematics.cfm import get_cf_model
@@ -53,9 +53,10 @@ class BasicDiagram:
 
         self.occ_seq = occ_seq
         dt = kwargs.get("dt", 0.1)
-        warm_up_step = int(1800 / dt)
-        sim_step = warm_up_step + int(300 / dt)
+        warm_up_step = int(3600 / dt)
+        sim_step = warm_up_step + int(1800 / dt)
         jam = kwargs.get("jam", False)
+        update_method = kwargs.get("state_update_method", "Euler")
         time_ = 0
 
         print(f"CFM: {self.cf_mode}, is_jam: {jam}")
@@ -83,12 +84,13 @@ class BasicDiagram:
             lane.data_container.add_basic_info()
             lane.data_container.config(save_info={C_Info.v})
 
-            for _ in lane.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+            for _ in lane.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt,
+                              state_update_method=update_method):
                 pass
 
             df = lane.data_container.data_to_df()
 
-            result = lane.data_processor.kqv_cal(df, self.lane_length)
+            result = lane.data_processor.circle_kqv_cal(df, self.lane_length)
             self.result["occ"].append(occ_seq[i])
             self.result["V"].append(np.mean(result[P_Info.avg_speed]) * 3.6)
             self.result["Q"].append(np.mean(result[P_Info.avg_q_by_v_k]))

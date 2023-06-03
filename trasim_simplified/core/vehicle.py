@@ -14,7 +14,7 @@ from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
+    from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class Vehicle(Obstacle):

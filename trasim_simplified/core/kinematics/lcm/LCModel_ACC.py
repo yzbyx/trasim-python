@@ -11,7 +11,7 @@ from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
-    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
+    from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 from trasim_simplified.core.kinematics.lcm.LCModel import LCModel
 from trasim_simplified.core.constant import LCM, SECTION_TYPE

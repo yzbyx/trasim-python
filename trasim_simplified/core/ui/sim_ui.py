@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Optional, Union
 from pygame.time import Clock
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
-    from trasim_simplified.core.frame.road import Road
+    from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
+    from trasim_simplified.core.frame.micro.road import Road
 
 
 class UI:

@@ -18,7 +18,7 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.road import Road
+    from trasim_simplified.core.frame.micro.road import Road
 
 
 class LaneAbstract(ABC):
@@ -59,6 +59,8 @@ class LaneAbstract(ABC):
         """是否为Road类控制"""
         self.force_speed_limit = False
         """是否强制车辆速度不超过道路限速"""
+        self.state_update_method = "Euler"
+        """状态更新方式：Euler (x += v * dt), Ballistic (x += (pre_v + v) * dt / 2)"""
 
         self.dt = 0.1
         """仿真步长 [s]"""
@@ -203,6 +205,8 @@ class LaneAbstract(ABC):
         """是否显示UI"""
         self.force_speed_limit = kwargs.get("force_speed_limit", False)
         """是否强制车辆速度不超过道路限速"""
+        self.state_update_method = kwargs.get("state_update_method", "Euler")
+        """状态更新方式：Euler (x += v * dt), Ballistic (x += (pre_v + v) * dt / 2)"""
 
         if self.has_ui and not self.road_control:
             self.ui.ui_init(caption=caption, frame_rate=frame_rate)
@@ -244,7 +248,12 @@ class LaneAbstract(ABC):
         else:
             car.a = car.cf_acc
 
-        car.x += (car_speed_before + car.v) * self.dt / 2
+        if self.state_update_method == "Ballistic":
+            car.x += (car_speed_before + car.v) * self.dt / 2
+        elif self.state_update_method == "Euler":
+            car.x += car.v * self.dt
+        else:
+            TrasimError(f"{self.state_update_method}更新方式未实现！")
 
         # if car.leader is not None and car.leader.type == V_TYPE.OBSTACLE:
         #     if car.x > car.leader.x:

@@ -7,9 +7,8 @@ from typing import Optional
 
 import numpy as np
 
-from trasim_simplified.core.frame.lane_abstract import LaneAbstract
+from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.vehicle import Vehicle
-from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 
 class THW_DISTRI:

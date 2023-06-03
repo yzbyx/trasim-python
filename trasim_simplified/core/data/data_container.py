@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import pandas as pd
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.frame.lane_abstract import LaneAbstract
+    from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class DataContainer:

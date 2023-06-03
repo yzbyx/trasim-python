@@ -25,7 +25,7 @@ class DataProcessor:
         print()
 
     @staticmethod
-    def kqv_cal(df: pd.DataFrame, lane_length, lane_id=None, pos_range=None, time_range=None):
+    def circle_kqv_cal(df: pd.DataFrame, lane_length, lane_id=None, pos_range=None, time_range=None):
         assert df[C_Info.v] is not None, "调用本函数须使用record函数记录速度数据"
         if lane_id is not None:
             df = df[df[C_Info.lane_id] == lane_id]

@@ -3,10 +3,8 @@
 # @Author : yzbyx
 # @File : circle_lane.py
 # @Software : PyCharm
-import numpy as np
 
-from trasim_simplified.core.frame.lane_abstract import LaneAbstract
-from trasim_simplified.msg.trasimWarning import TrasimWarning
+from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class LaneCircle(LaneAbstract):

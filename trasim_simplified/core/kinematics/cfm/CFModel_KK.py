@@ -9,6 +9,7 @@ import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM, SECTION_TYPE
+from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
@@ -74,6 +75,8 @@ class CFModel_KK(CFModel):
     def _update_dynamic(self):
         self.dt = self.vehicle.lane.dt
         assert self.dt == self._tau
+        if self.vehicle.lane.state_update_method != "Euler" and self._v_safe_dispersed:
+            TrasimError("状态更新方式需要为Euler！")
         self._vf = self.get_expect_speed()
         self.update_v_safe(self)
 
@@ -97,7 +100,7 @@ class CFModel_KK(CFModel):
                 car.leader.v,
                 car.gap,
                 car.cf_model.get_expect_dec(),
-                car.cf_model.get_expect_dec()
+                car.cf_model.get_expect_dec()  # 前车期望减速度取当前车的期望减速度，下同
             ) for car in lane.car_list[:-1]]
             if lane.is_circle:
                 car = cf_model.vehicle.lane.car_list[-1]
@@ -276,7 +279,6 @@ def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
         alpha_l = int(leaderV / (leader_dec * dt))
         beta_l = leaderV / (leader_dec * dt) - alpha_l
         X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
-        if gap < 0: return 0  # TODO: 未能查出什么问题，目前遇到gap<0的情况，安全速度直接返回0
         alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
         beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
 
