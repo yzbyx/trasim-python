@@ -3,7 +3,11 @@
 # @Author : yzbyx
 # @File : ctm_road.py
 # Software: PyCharm
+from typing import Optional
+
+from trasim_simplified.core.frame.macro.ctm_lane import CTM_Lane
 
 
 class CTM_Road:
-    pass
+    def __init__(self):
+        self.lane_list: Optional[list[CTM_Lane]] = None

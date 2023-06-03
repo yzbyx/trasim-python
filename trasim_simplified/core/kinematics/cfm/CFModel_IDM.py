@@ -30,6 +30,7 @@ class CFModel_IDM(CFModel):
 
     'd': 1.67       # 期望减速度
     """
+
     def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
         super().__init__(vehicle)
         # -----模型属性------ #
@@ -65,7 +66,8 @@ class CFModel_IDM(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        f_param = [self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d, self._delta]
+        f_param = [self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d,
+                   self._delta]
         return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
                          self.vehicle.x + self.vehicle.dhw, self.vehicle.leader.length)
 
@@ -80,10 +82,26 @@ class CFModel_IDM(CFModel):
         """
         sStar = self._s0 + self._s1 * np.sqrt(speed / self._v0) + self._T * speed
         dhw = sStar / np.sqrt(1 - np.power(speed / self._v0, self._delta)) + v_length
-        k = 1000 / dhw
-        v = speed * 3.6
+        k = 1 / dhw
+        v = speed
         q = k * v
         return {"K": k, "Q": q, "V": v}
+
+    def basic_diagram_k_to_q(self, dhw, car_length, speed_limit=None):
+        import sympy
+        if speed_limit is not None:
+            v0 = speed_limit
+        else:
+            v0 = self._v0
+        v = sympy.symbols("v", real=True)
+        expr = self._omega * (1 - (v / v0) ** self._delta -
+                              ((self._s0 + self._s1 * sympy.sqrt(v / v0) + self._T * v) / (dhw - car_length)) ** 2)
+        res: list[float] = sympy.solve(expr, v)
+        res.sort()
+        return res[-1] * 3.6
+
+    def get_jam_density(self, car_length):
+        return 1 / (self._s0 + car_length)
 
     def get_expect_dec(self):
         return self._d
@@ -104,3 +122,8 @@ def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, 
     finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
     return finalAcc
+
+
+if __name__ == '__main__':
+    cf = CFModel_IDM(None, {})
+    print(cf.basic_diagram_k_to_q(10, 5))

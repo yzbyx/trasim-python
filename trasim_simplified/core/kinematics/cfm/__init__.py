@@ -15,6 +15,7 @@ from trasim_simplified.core.kinematics.cfm.CFModel_ACC import CFModel_ACC as ACC
 from trasim_simplified.core.kinematics.cfm.CFModel_CACC import CFModel_CACC as CACC
 from trasim_simplified.core.kinematics.cfm.CFModel_TPACC import CFModel_TPACC as TPACC
 from trasim_simplified.core.kinematics.cfm.CFModel_LCM import CFModel_LCM as LCM
+from trasim_simplified.core.kinematics.cfm.CFModel_CTM import CFModel_CTM as CTM
 from trasim_simplified.core.kinematics.cfm.CFModel_Dummy import CFModel_Dummy as Dummy
 from trasim_simplified.core.constant import CFM
 
@@ -50,5 +51,7 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
         return CACC(_driver, param)
     elif name == CFM.LCM:
         return LCM(_driver, param)
+    elif name == CFM.CTM:
+        return CTM(_driver, param)
     else:
         raise TrasimError(rem.NO_MODEL.format(name))

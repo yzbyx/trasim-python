@@ -41,7 +41,7 @@ def run_circle():
         sim.car_loader(2000)
 
     sim.data_container.config()
-    for step in sim.run(data_save=True, has_ui=False, frame_rate=120,
+    for step in sim.run(data_save=True, has_ui=True, frame_rate=10,
                         warm_up_step=warm_up_step, sim_step=sim_step, dt=dt, state_update_method=state_update_method):
         # 车辆减速扰动
         if warm_up_step + offset_step == step:

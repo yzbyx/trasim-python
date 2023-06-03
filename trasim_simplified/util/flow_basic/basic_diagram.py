@@ -112,9 +112,9 @@ class BasicDiagram:
             speed /= 3.6
             result = cf_model.equilibrium_state(speed, dhw, self.car_length)
             if result is not None:
-                self.equilibrium_state_result["V"].append(result["V"])
-                self.equilibrium_state_result["Q"].append(result["Q"])
-                self.equilibrium_state_result["K"].append(result["K"])
+                self.equilibrium_state_result["V"].append(result["V"] * 3.6)
+                self.equilibrium_state_result["Q"].append(result["Q"] * 3600)
+                self.equilibrium_state_result["K"].append(result["K"] * 1000)
 
     def plot(self, save_fig=True):
         fig, axes = plt.subplots(1, 3, figsize=(10, 3), layout="constrained", squeeze=False)

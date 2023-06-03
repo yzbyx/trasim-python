@@ -29,6 +29,8 @@ class COLOR:
 # 跟驰模型
 # ******************************
 class CFM:
+    CTM = "CTM"
+    """CTM系列"""
     LCM = "Longitude_control_model"
     "Ni的纵向控制模型"
     CACC = "CACC"

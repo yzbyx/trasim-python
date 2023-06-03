@@ -47,3 +47,15 @@ class CFModel(Model, ABC):
 
     def equilibrium_state(self, *args):
         pass
+
+    def basic_diagram_k_to_q(self, dhw, car_length, speed_limit):
+        """veh/s"""
+        pass
+
+    def get_jam_density(self, car_length):
+        """veh/m"""
+        pass
+
+    def get_qm(self):
+        """veh/s"""
+        pass
