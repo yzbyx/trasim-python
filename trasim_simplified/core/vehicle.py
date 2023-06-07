@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.constant import COLOR
+from trasim_simplified.core.constant import COLOR, V_TYPE
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel
 from trasim_simplified.core.obstacle import Obstacle
@@ -51,7 +51,7 @@ class Vehicle(Obstacle):
         self.cf_acc = 0
         self.lc_result = {"lc": 0, "a": None, "v": None, "x": None}
         """换道模型结果，lc（-1（向左换道）、0（保持当前车道）、1（向右换道）），a（换道位置调整加速度），v（速度），x（位置）"""
-        self.lc_res_pre = None
+        self.lc_res_pre = self.lc_result.copy()
 
     @property
     def last_step_lc_statu(self):
@@ -85,6 +85,11 @@ class Vehicle(Obstacle):
         else:
             dist = pos - self.x
         return dist
+
+    @property
+    def is_first(self):
+        """主要供TP模型使用"""
+        return self.leader is None or self.leader.type == V_TYPE.OBSTACLE
 
     def get_data_list(self, info):
         from trasim_simplified.core.data.data_container import Info as C_Info
@@ -233,11 +238,15 @@ class Vehicle(Obstacle):
         self.color = param.get("color", COLOR.yellow)
         self.width = param.get("width", 1.8)
 
-    def get_basic_info(self):
-        return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}\n" \
+    def get_basic_info(self, sep="\n"):
+        return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}{sep}" \
                f"ego_lc: {self.last_step_lc_statu}, " \
                f"ego_id: {self.ID}, ego_type: {self.cf_model.name}," \
-               f" ego_x: {self.x:.3f}, ego_v: {self.v:.3f}, ego_a: {self.a:.3f}\n" \
+               f" ego_x: {self.x:.3f}, ego_v: {self.v:.3f}, ego_a: {self.a:.3f}{sep}" \
                f"leader_lc: {self.leader.last_step_lc_statu}, leader_id: {self.leader.ID}," \
                f" leader_type: {self.leader.cf_model.name}," \
                f" leader_x: {self.leader.x:.3f}, leader_v: {self.leader.v:.3f}, leader_a: {self.leader.a:.3f}"
+
+    def __repr__(self):
+        return f"type: {self.cf_model.name}, step: {self.lane.step_}" +\
+            f" x: {self.x:.3f}, v: {self.v:.3f}, a: {self.a:.3f}, gap: {self.gap}"

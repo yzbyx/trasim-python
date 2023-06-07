@@ -153,13 +153,15 @@ class LaneAbstract(ABC):
 
         for index, i in enumerate(car_type_index_list):
             vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
+            vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
+            vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
+            if self.car_initial_speed_list[i] < 0:
+                self.car_initial_speed_list[i] = vehicle.cf_model.get_expect_speed()
             vehicle.x = x
             vehicle.v = np.random.uniform(
                 max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
             ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
             vehicle.a = 0
-            vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
-            vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
             vehicle.set_car_param(self.car_param_list[i])
 
             self.car_list.append(vehicle)
@@ -184,6 +186,8 @@ class LaneAbstract(ABC):
         if self.is_circle is True:
             self.car_list[0].follower = self.car_list[-1]
             self.car_list[-1].leader = self.car_list[0]
+
+        return [car.ID for car in self.car_list]
 
     def run(self, data_save=True, has_ui=True, **kwargs):
         if kwargs is None:
@@ -436,7 +440,14 @@ class LaneAbstract(ABC):
                 return self.car_list[-1], None
         return None, None
 
-    def __str__(self):
+    def car_param_update(self, id_,  cf_param: dict[str, float] = None, lc_param: dict[str, float] = None,
+                         car_param: dict[str, float] = None):
+        car = self._get_car(id_)
+        car.cf_model.param_update(cf_param if cf_param is not None else {})
+        car.lc_model.param_update(lc_param if lc_param is not None else {})
+        car.set_car_param(car_param if car_param is not None else {})
+
+    def __repr__(self):
         return "lane_length: " + str(self.lane_length) + \
             "\tcar_num: " + str(self.car_num_list) + \
             "\tcar_length: " + str(self.car_length_list) + \

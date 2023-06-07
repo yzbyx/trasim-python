@@ -20,7 +20,7 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model
 
 
 class BasicDiagram:
-    def __init__(self, lane_length: int, car_length: float, car_initial_speed: int, speed_with_random: bool,
+    def __init__(self, lane_length: int, car_length: float, car_initial_speed: float, speed_with_random: bool,
                  cf_mode: str, cf_param: dict[str, float], speed_limit=30):
         self.car_length = car_length
         self.lane_length = lane_length
@@ -40,7 +40,7 @@ class BasicDiagram:
     def run(self, occ_start: float, occ_end: float, d_occ: float, resume=False, file_name=None, **kwargs):
         self.resume = resume
         assert 0 < occ_start <= (occ_end - d_occ) <= 1, "请输入有效的occ起始点！"
-        assert d_occ * self.lane_length >= self.car_length,\
+        assert d_occ * self.lane_length >= self.car_length, \
             f"每次occ的增加量至少能够增加一辆车，最小occ步长为{d_occ * self.lane_length}"
         if occ_end - occ_start <= d_occ:
             occ_seq = np.array([occ_start])
@@ -49,7 +49,7 @@ class BasicDiagram:
         car_nums = list(map(int, np.round(np.ceil(occ_seq * self.lane_length / self.car_length))))
 
         self.file_name = file_name if file_name is not None else "result_IDM.pkl"
-        self.result = self.load_result()
+        self.result = self.load_result(self.resume, self.file_name)
 
         self.occ_seq = occ_seq
         dt = kwargs.get("dt", 0.1)
@@ -96,7 +96,7 @@ class BasicDiagram:
             self.result["Q"].append(np.mean(result[P_Info.avg_q_by_v_k]))
             self.result["K"].append(np.mean(result[P_Info.avg_k_by_car_num_lane_length]))
 
-            self.save_result()
+            self.save_result(self.file_name, self.result)
 
             time_epoch_end = time.time()
             time_epoch = time_epoch_end - time_epoch_begin
@@ -154,21 +154,67 @@ class BasicDiagram:
         if save_fig: fig.savefig("./diag_result/" + self.file_name + ".png", dpi=500, bbox_inches='tight')
         plt.show()
 
-    def save_result(self):
-        with open(f"./diag_result/{self.file_name}.pkl", "wb") as f:
-            pickle.dump(self.result, f)
+    @staticmethod
+    def save_result(file_name, result, full_path=False):
+        if not full_path:
+            with open(f"./diag_result/{file_name}.pkl", "wb") as f:
+                pickle.dump(result, f)
+        else:
+            with open(f"{file_name}", "wb") as f:
+                pickle.dump(result, f)
 
-    def load_result(self):
-        if not self.resume:
-            self.clear_result()
+    @staticmethod
+    def load_result(resume, file_name, full_path=False):
+        if not resume:
+            BasicDiagram.clear_result(file_name, full_path)
             return {"occ": [], "Q": [], "K": [], "V": []}
         else:
-            with open(f"./diag_result/{self.file_name}.pkl", "rb") as f:
-                return pickle.load(f)
+            if not full_path:
+                with open(f"./diag_result/{file_name}.pkl", "rb") as f:
+                    return pickle.load(f)
+            else:
+                with open(f"{file_name}", "rb") as f:
+                    return pickle.load(f)
 
-    def clear_result(self):
-        if os.path.exists(f"./diag_result/{self.file_name}.pkl"):
-            os.remove(f"./diag_result/{self.file_name}.pkl")
+    @staticmethod
+    def clear_result(file_name, full_path=False):
+        if not full_path:
+            if os.path.exists(f"./diag_result/{file_name}.pkl"):
+                os.remove(f"./diag_result/{file_name}.pkl")
+        else:
+            if os.path.exists(f"{file_name}"):
+                os.remove(f"{file_name}")
+
+    @staticmethod
+    def overlay_map(file_name_list: list[str], labels=None, full_path=False):
+        """将基本图进行叠加"""
+        fig, axes = plt.subplots(1, 3, figsize=(10, 3), layout="constrained", squeeze=False)
+        fig: plt.Figure = fig
+        axes: list[list[plt.Axes]] = axes
+
+        result_list = []
+        for file_name in file_name_list:
+            result_list.append(BasicDiagram.load_result(True, file_name, full_path))
+
+        if labels is None:
+            labels = list(range(len(file_name_list)))
+
+        ax = axes[0][0]
+        Plot.custom_plot(ax, "Occ", "Q(veh/h)", [result["occ"] for result in result_list],
+                         [result["Q"] for result in result_list], data_label=[str(label) for label in labels],
+                         linewidth=2, markersize=3, marker="s")
+
+        ax = axes[0][1]
+        Plot.custom_plot(ax, "Q(veh/h)", "V(km/h)", [result["Q"] for result in result_list],
+                         [result["V"] for result in result_list], data_label=[str(label) for label in labels],
+                         linewidth=2, markersize=3, marker="s")
+
+        ax = axes[0][2]
+        Plot.custom_plot(ax, "K(veh/km)", "V(km/h)", [result["K"] for result in result_list],
+                         [result["V"] for result in result_list], data_label=[str(label) for label in labels],
+                         linewidth=2, markersize=3, marker="s")
+
+        plt.show()
 
     def check_contain_occ(self, occ):
         if not self.resume: return False
@@ -176,3 +222,10 @@ class BasicDiagram:
             if abs(occ_ - occ) < 1e-6:
                 return True
         return False
+
+
+if __name__ == '__main__':
+    BasicDiagram.overlay_map([
+        r"E:\PyProject\car-following-model-test\tests\diag_result\result_Three-Phase_TPACC_-1_False.pkl",
+        r"E:\PyProject\car-following-model-test\tests\diag_result\result_Three-Phase_TPACC_0_False.pkl"
+    ], labels=["maxV ", "still "], full_path=True)

@@ -19,47 +19,61 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 
 class Plot:
     @staticmethod
-    def basic_plot(id_=0, lane_id=-1, axes: plt.Axes = None, fig: plt.Figure = None, data_df: pd.DataFrame = None):
+    def basic_plot(id_: Union[int, list[int]] = 0, lane_id=-1, axes: plt.Axes = None, fig: plt.Figure = None,
+                   data_df: pd.DataFrame = None, time_range=None):
         """绘制车辆index"""
+        if isinstance(id_, int):
+            id_list = [id_]
+        else:
+            id_list = id_
+
         if lane_id >= 0:
             data_df = data_df[data_df[C_Info.lane_id] == lane_id]
-        car_df = data_df[data_df[C_Info.id] == id_]
-        time_ = car_df[C_Info.time]
+
+        if time_range is not None:
+            data_df = data_df[(data_df[C_Info.time] >= time_range[0]) & (data_df[C_Info.time] < time_range[1])]
+
+        car_dfs = [data_df[data_df[C_Info.id] == id_] for id_ in id_list]
 
         if axes is None or fig is None:
             fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
-        Plot.custom_plot(ax, "time(s)", "speed(m/s)", time_, car_df[C_Info.v],
-                         data_label=f"index={id_}")
+        Plot.custom_plot(ax, "time(s)", "speed(m/s)", [car_df[C_Info.time] for car_df in car_dfs],
+                         [car_df[C_Info.v] for car_df in car_dfs],
+                         data_label=[f"index={id_}" for id_ in id_list])
 
         ax = axes[0, 1]
         Plot.custom_plot(ax, "speed(m/s)", "gap(m)",
-                         car_df[C_Info.v], car_df[C_Info.gap],
-                         data_label=f"index={id_}")
+                         [car_df[C_Info.v] for car_df in car_dfs], [car_df[C_Info.gap] for car_df in car_dfs],
+                         data_label=[f"index={id_}" for id_ in id_list])
 
         ax = axes[1, 0]
         Plot.custom_plot(ax, "dv(m/s)", "gap(m)",
-                         car_df[C_Info.dv], car_df[C_Info.gap],
-                         data_label=f"index={id_}")
+                         [car_df[C_Info.dv] for car_df in car_dfs], [car_df[C_Info.gap] for car_df in car_dfs],
+                         data_label=[f"index={id_}" for id_ in id_list])
 
         ax = axes[1, 1]
-        Plot.custom_plot(ax, "time(s)", "acc(m/s^2)", time_, car_df[C_Info.a],
-                         data_label=f"index={id_}")
+        Plot.custom_plot(ax, "time(s)", "acc(m/s^2)", [car_df[C_Info.time] for car_df in car_dfs],
+                         [car_df[C_Info.a] for car_df in car_dfs],
+                         data_label=[f"index={id_}" for id_ in id_list])
 
-        if P_Info.safe_tit in car_df.columns:
+        if P_Info.safe_tit in car_dfs[0].columns:
             ax = axes[0, 2]
-            Plot.custom_plot(ax, "time(s)", "tit(s)", time_,
-                             car_df[C_Info.safe_tit], data_label=f"index={id_}")
+            Plot.custom_plot(ax, "time(s)", "tit(s)", [car_df[C_Info.time] for car_df in car_dfs],
+                             [car_df[C_Info.safe_tit] for car_df in car_dfs],
+                             data_label=[f"index={id_}" for id_ in id_list])
 
-        if P_Info.safe_picud in car_df.columns:
+        if P_Info.safe_picud in car_dfs[0].columns:
             ax = axes[1, 2]
-            Plot.custom_plot(ax, "time(s)", "picud(m)", time_,
-                             car_df[C_Info.safe_picud], data_label=f"index={id_}")
+            Plot.custom_plot(ax, "time(s)", "picud(m)", [car_df[C_Info.time] for car_df in car_dfs],
+                             [car_df[C_Info.safe_picud] for car_df in car_dfs],
+                             data_label=[f"index={id_}" for id_ in id_list])
 
         ax = axes[2][0]
-        Plot.custom_plot(ax, "time(s)", "gap(m)", time_,
-                         car_df[C_Info.gap], data_label=f"index={id_}")
+        Plot.custom_plot(ax, "time(s)", "gap(m)", [car_df[C_Info.time] for car_df in car_dfs],
+                         [car_df[C_Info.gap] for car_df in car_dfs],
+                         data_label=[f"index={id_}" for id_ in id_list])
 
     @staticmethod
     def spatial_time_plot(car_id=0, lane_id=0, color_info_name=None, data_df: pd.DataFrame = None, single_plot=False):

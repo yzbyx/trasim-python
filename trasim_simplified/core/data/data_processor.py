@@ -34,7 +34,9 @@ class DataProcessor:
         if time_range is not None:
             df = df[((df[C_Info.time] >= time_range[0]) & (df[C_Info.time] < time_range[1]))]
 
-        avg_speed = df[C_Info.v].mean()
+        avg_speed = np.mean(df.groupby(by=[C_Info.step]).mean()[C_Info.v])
+
+        # avg_speed = df[C_Info.v].mean()
         avg_k_by_car_num_lane_length = len(df[C_Info.id].unique()) / lane_length * 1000
         avg_q_by_v_k = avg_speed * 3.6 * avg_k_by_car_num_lane_length
 

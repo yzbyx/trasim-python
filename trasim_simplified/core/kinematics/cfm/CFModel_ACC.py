@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM
+from trasim_simplified.core.constant import CFM, V_TYPE
 
 
 class CFModel_ACC(CFModel):
@@ -62,7 +62,7 @@ class CFModel_ACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.get_speed_limit()
+        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
 
     def step(self, index, *args):
         self.index = index
@@ -70,21 +70,21 @@ class CFModel_ACC(CFModel):
             return 3
         self._update_dynamic()
         f_params = [self._k1, self._k2, self._thw, self._a, self._b, self._original_acc, self._v_safe_dispersed]
-        is_first = True if self.vehicle.leader is None else False
-        return calculate(*f_params, self._b,
-                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(), is_first,
-                         self.l_v_a)
+        leader_is_dummy = True if self.vehicle.leader.type == V_TYPE.OBSTACLE else False
+        return calculate(*f_params,
+                         self._tau, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
+                         leader_is_dummy, self.l_v_a)
 
 
 def calculate(k1_, k2_, thw_, acc_, dec_, original_acc_, v_safe_dispersed_,
-              l_dec_, tau, gap, v, l_v, v_free, is_first, l_v_a):
+              tau, gap, v, l_v, v_free, leader_is_dummy, l_v_a):
     acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
     if original_acc_:
         return acc
 
     v_c = v + tau * max(- dec_, min(acc, acc_))
-    v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, l_dec_)
-    if not is_first:
+    v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
+    if not leader_is_dummy:
         v_safe = min(v_safe, (gap / tau) + l_v_a)
     v_next = max(0, min(v_free, v_c, v_safe))
     return (v_next - v) / tau

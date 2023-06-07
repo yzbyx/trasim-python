@@ -93,7 +93,7 @@ class CFModel_KK(CFModel):
     def update_v_safe(cf_model):
         lane = cf_model.vehicle.lane
         has_v_safe = hasattr(lane, "_v_safe")
-        if not has_v_safe or (has_v_safe and int(getattr(lane, "_update_step") != lane.step_)):
+        if not has_v_safe or (has_v_safe and int(getattr(lane, "_update_step")) != lane.step_):
             v_safe = [cal_v_safe(
                 cf_model.v_safe_dispersed,
                 cf_model.dt,
@@ -118,7 +118,8 @@ class CFModel_KK(CFModel):
                 car.gap,
                 v_safe[i],
                 car.v,
-                car.cf_model.get_expect_acc()
+                car.cf_model.get_expect_acc(),
+                car.is_first
             ) for i, car in enumerate(lane.car_list[:-1])]
             if not lane.is_circle:
                 v_a.append(lane.car_list[-1].v)
@@ -129,7 +130,8 @@ class CFModel_KK(CFModel):
                     car.gap,
                     v_safe[-1],
                     car.v,
-                    car.cf_model.get_expect_acc()
+                    car.cf_model.get_expect_acc(),
+                    car.is_first
                 ))
 
             setattr(lane, "_v_safe", v_safe)
@@ -137,9 +139,13 @@ class CFModel_KK(CFModel):
             setattr(lane, "_update_step", lane.step_)
 
         cf_model.v_safe = getattr(lane, "_v_safe")[cf_model.index]
-        cf_model.v_a = getattr(lane, "_v_a")
-        cf_model.l_v_a = cf_model.v_a[cf_model.index + 1] \
-            if (cf_model.index <= len(cf_model.v_a) - 2) else cf_model.v_a[0]
+        cf_model.v_a_list = getattr(lane, "_v_a")
+        if lane.is_circle:
+            cf_model.l_v_a = cf_model.v_a_list[cf_model.index + 1] \
+                if (cf_model.index < len(cf_model.v_a_list) - 1) else cf_model.v_a_list[0]
+        else:
+            cf_model.l_v_a = cf_model.v_a_list[cf_model.index + 1] \
+                if (cf_model.index < len(cf_model.v_a_list) - 1) else None
         return cf_model.l_v_a
 
     def step(self, index, *args):
@@ -197,8 +203,12 @@ class CFModel_KK(CFModel):
         return max(0, min(30, (_l.v if _l is not None else speed_limit_target) + delta_vr_2))
 
     @staticmethod
-    def cal_v_a(dt, gap, v_safe, v, expect_acc):
-        return max(0, min(v_safe, v, gap / dt) - expect_acc * dt)
+    def cal_v_a(dt, gap, v_safe, v, expect_acc, is_first):
+        if is_first:
+            v_a = v
+        else:
+            v_a = max(0, min(v_safe, v, gap / dt) - expect_acc * dt)
+        return v_a
 
     def get_expect_acc(self):
         return self._a
