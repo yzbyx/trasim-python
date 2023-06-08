@@ -149,14 +149,47 @@ def run_road():
     Plot.show()
     
     # 设置虚拟检测范围，获取集计指标结果
-    result = sim.data_processor.aggregate_as_detect_loop(df, 0, road_length, 0, 995, dt, 300, [warm_up_step, sim_step])
+    result = sim.data_processor.aggregate_as_detect_loop(
+        df, 0, road_length, 0, 995, dt, 300, [warm_up_step, sim_step]
+    )
     # 打印输出结果
     sim.data_processor.print(result)
 
 
 if __name__ == '__main__':
     run_road()
+```
 
+### 2. 基本图仿真绘制
+
+```python
+from trasim_simplified.core.constant import CFM
+from trasim_simplified.util.flow_basic.basic_diagram import BasicDiagram
+
+def run_basic_diagram(cf_name_, tau_, is_jam_, cf_param_, initial_v=0., random_v=False,
+                      car_length_=5., start=0.01, end=1., step=0.02, plot=True, resume=False):
+    diag = BasicDiagram(1000, car_length_, initial_v, random_v, cf_mode=cf_name_, cf_param=cf_param_)
+    diag.run(start, end, step, resume=resume, file_name="result_" + cf_name_ + ("_jam" if is_jam_ else "") +
+                                                        f"_{initial_v}_{random_v}",
+             dt=tau_, jam=is_jam_, state_update_method="Euler")
+    diag.get_by_equilibrium_state_func()
+    if plot: diag.plot()
+
+
+if __name__ == '__main__':
+    cf_name = CFM.KK
+    """跟驰模型名称"""
+    tau = 1
+    """仿真步长 [s]"""
+    speed = 0  # 初始速度为负代表真实的初始速度为跟驰模型期望速度
+    """初始速度 [m/s]"""
+    cf_param = {"lambda": 0.8, "original_acc": False, "v_safe_dispersed": True, "tau": tau, "k2": 0.3}
+    """跟驰模型参数"""
+    car_length = 7.5
+    """车辆长度 [m]"""
+    # 运行基本图程序，参数包括：跟驰模型、仿真步长、初始是否为阻塞状态、跟驰模型参数、初始速度、是否添加初始随机速度扰动、
+    # 车辆长度、开始Occ、结束Occ、步进Occ、是否绘图、是否接续之前的结果继续运行
+    run_basic_diagram(cf_name, tau, False, cf_param, car_length_=car_length, initial_v=speed, resume=False)
 ```
 
 ## 说明文档
