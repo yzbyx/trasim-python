@@ -89,8 +89,9 @@ class Road:
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
-                    left, right = self.get_available_adjacent_lane(i, car.x)
-                    car.step_lane_change(j, left, right)
+                    if car.lc_model is not None:
+                        left, right = self.get_available_adjacent_lane(i, car.x)
+                        car.step_lane_change(j, left, right)
 
     def update_lc_state(self):
         for i, lane in enumerate(self.lane_list):

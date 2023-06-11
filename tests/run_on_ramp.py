@@ -19,8 +19,8 @@ def run_road():
     follower_index = -1
     dt = 1
     warm_up_step = 0
-    sim_step = warm_up_step + int(2400 / dt)
-    offset_step = int(600 / dt)
+    sim_step = warm_up_step + int(3600 / dt)
+    offset_step = int(1800 / dt)
 
     is_circle = False
     road_length = 15000
@@ -56,20 +56,21 @@ def run_road():
         lanes = sim.add_lanes(lane_num, is_circle=False)
         for i in range(lane_num):
             lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
-                                CFM.KK, _cf_param, {"color": COLOR.yellow}, lc_name=LCM.KK, lc_param={})
-            lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
-                                CFM.ACC, _cf_param, {"color": COLOR.blue}, lc_name=LCM.ACC, lc_param={})
+                                CFM.TPACC, _cf_param, {"color": COLOR.yellow}, lc_name=LCM.ACC, lc_param={})
+            # lanes[i].car_config(200, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
+            #                     CFM.ACC, _cf_param, {"color": COLOR.blue}, lc_name=LCM.ACC, lc_param={})
 
             lanes[i].data_container.config()
             if i != lane_num - 1:
                 lanes[i].car_loader(2000, THW_DISTRI.Uniform)
             else:
-                lanes[i].car_loader(200, THW_DISTRI.Uniform)
+                lanes[i].car_loader(700, THW_DISTRI.Uniform, 400)
 
             if i == lane_num - 2:
                 lanes[i].set_section_type(SECTION_TYPE.BASE)
                 lanes[i].set_section_type(SECTION_TYPE.NO_RIGHT)
             if i == lane_num - 1:
+
                 lanes[i].set_section_type(SECTION_TYPE.ON_RAMP, 10000, -1)
                 lanes[i].set_section_type(SECTION_TYPE.NO_LEFT, 0, 10000)
                 lanes[i].set_section_type(SECTION_TYPE.BASE, 0, 10000)
@@ -93,16 +94,18 @@ def run_road():
         pass
 
     df = sim.data_to_df()
-    result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=road_length, pos=5000, width=50,
-                                                         dt=dt, d_step=int(300 / dt))
-    sim.data_processor.print(result)
+    # result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=road_length, pos=5000, width=50,
+    #                                                      dt=dt, d_step=int(300 / dt))
+    # sim.data_processor.print(result)
 
-    lane_ids = sim.find_on_lanes(take_over_index)
-    Plot.basic_plot(take_over_index, lane_id=lane_ids[0], data_df=df)
+    # lane_ids = sim.find_on_lanes(take_over_index)
+    # Plot.basic_plot(take_over_index, lane_id=lane_ids[0], data_df=df)
+    Plot.spatial_time_plot(take_over_index, lane_id=0,
+                           color_info_name=C_Info.safe_picud, data_df=df, single_plot=False)
     Plot.spatial_time_plot(take_over_index, lane_id=0,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
     Plot.spatial_time_plot(take_over_index, lane_id=1,
-                           color_info_name=C_Info.v, data_df=df, single_plot=False)
+                           color_info_name=C_Info.safe_tet, data_df=df, single_plot=False)
     # Plot.spatial_time_plot(take_over_index, lane_id=2,
     #                        color_info_name=C_Info.v, data_df=df, single_plot=False)
     Plot.show()

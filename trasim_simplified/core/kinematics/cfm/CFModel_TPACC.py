@@ -75,7 +75,7 @@ class CFModel_TPACC(CFModel):
 
 def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
               dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a):
-    if gap > v * g_tau_:
+    if gap <= v * g_tau_:
         acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
     else:
         acc = kdv_ * (l_v - v)

@@ -146,7 +146,7 @@ class LCModel_ACC(LCModel):
 
         xm = np.NAN
         if _l is not None and _f is not None:
-            xm = _f.x + _f.dhw / 2
+            xm = _f.x + _f.dhw / 2  # 避免circle边界前车小于后车坐标的问题
         if not (head_safe and behind_safe):
             if _l is not None and _f is not None:
                 if _f.gap > self._lambda_b * _f.v + self.vehicle.length:

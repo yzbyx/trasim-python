@@ -55,7 +55,9 @@ class LaneOpen(LaneAbstract):
             assert self.car_num_percent is not None
             if len(self.car_list) != 0:
                 first = self.car_list[0]
-                if first.x - first.length - first.v * self.dt < 0:
+                # if first.x - first.length - first.v * self.dt < 0:
+                if first.x - first.length < 0:
+                    print("生成车辆失败！")
                     return
 
             i = np.random.choice(self.car_num_percent, p=self.car_num_percent.ravel())

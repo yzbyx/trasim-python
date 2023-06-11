@@ -1,6 +1,8 @@
 /trasim_simplified/util/calibrate/figure/
 /trasim_simplified/util/calibrate/data/
 /trasim_simplified/util/flow_basic/temp/
-/tests/fig/
+/tests/thesis_experiment/fig/
 /tests/diag_result/
 /tests/.pytest_cache/
+.idea
+/tests/thesis_experiment/
