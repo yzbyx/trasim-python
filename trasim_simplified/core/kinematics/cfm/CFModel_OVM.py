@@ -77,7 +77,7 @@ class CFModel_OVM(CFModel):
         return 3.
 
     def get_expect_speed(self):
-        return self._V0
+        return min(self.get_speed_limit(), self._V0)
 
 
 def calculate(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):

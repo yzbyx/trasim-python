@@ -75,6 +75,10 @@ class SECTION_TYPE:
     """禁止向左换道"""
     NO_RIGHT = "no_lc_to_right"
     """禁止向右换道"""
+    NO_LEFT_CAR = "no_left_car"
+    """禁止左侧车辆换入"""
+    NO_RIGHT_CAR = "no_right_car"
+    """禁止右侧车辆换入"""
 
 
 # ******************************
@@ -88,6 +92,15 @@ class V_TYPE:
     # 公交车
     BUS = 'bus'
     OBSTACLE = "obstacle"
+
+    @classmethod
+    def get_all_v_type_no_obstacle(cls):
+        dict_ = V_TYPE.__dict__
+        values = {}
+        for key in dict_.keys():
+            if isinstance(dict_[key], str) and key[:2] != "__" and key != V_TYPE.OBSTACLE:
+                values.update({key: dict_[key]})
+        return values
 
 
 # ******************************

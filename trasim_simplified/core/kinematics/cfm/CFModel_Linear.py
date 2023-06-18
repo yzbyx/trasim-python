@@ -55,7 +55,7 @@ class CFModel_Linear(CFModel):
         return self.DEFAULT_EXPECT_ACC
 
     def get_expect_speed(self):
-        return self.DEFAULT_EXPECT_SPEED
+        return self.get_speed_limit()
 
 
 def calculate(lambda_, speed, leaderV):

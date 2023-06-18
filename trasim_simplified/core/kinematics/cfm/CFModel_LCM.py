@@ -38,7 +38,7 @@ class CFModel_LCM(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self._v0
+        return min(self.get_speed_limit(), self._v0)
 
     def _update_dynamic(self):
         self.gap = self.vehicle.gap

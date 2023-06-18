@@ -28,7 +28,7 @@ class DataProcessor:
     def circle_kqv_cal(df: pd.DataFrame, lane_length, lane_id=None, pos_range=None, time_range=None):
         assert df[C_Info.v] is not None, "调用本函数须使用record函数记录速度数据"
         if lane_id is not None:
-            df = df[df[C_Info.lane_id] == lane_id]
+            df = df[df[C_Info.lane_add_num] == lane_id]
         if pos_range is not None:
             df = df[(df[C_Info.x] >= pos_range[0]) & (df[C_Info.x] < pos_range[1])]
         if time_range is not None:
@@ -50,7 +50,7 @@ class DataProcessor:
     def aggregate(df: pd.DataFrame, lane_id: int, lane_length: float):
         """集计指标计算"""
         if lane_id >= 0:
-            df = df[df[C_Info.lane_id] == lane_id]
+            df = df[df[C_Info.lane_add_num] == lane_id]
         aggregate_all_result = {}
         # 由于总车辆数恒定，因此直接对所有车辆数据求平均是可行的
         group = df.groupby(by=[C_Info.id]).mean()
@@ -112,7 +112,7 @@ class DataProcessor:
         :return: 包含顺序集计交通参数列表的字典
         """
         if lane_id >= 0:
-            df = df[df[C_Info.lane_id] == lane_id]
+            df = df[df[C_Info.lane_add_num] == lane_id]
         min_width = dt * np.max(df[C_Info.v])
         assert width > min_width, f"至少将传感线圈的宽度设置在{min_width}以上！"
 

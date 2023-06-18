@@ -110,7 +110,7 @@ class CFModel_IDM(CFModel):
         return self._omega
 
     def get_expect_speed(self):
-        return self._v0
+        return min(self.get_speed_limit(), self._v0)
 
 
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:

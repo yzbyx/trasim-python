@@ -119,19 +119,19 @@ def run_road():
                 lanes[i].set_block(10300)
             else:
                 pass
-    
+
     # 仿真主循环，step代表此时的仿真步，
     # state代表单个循环的状态（0代表跟驰计算完成、1代表换道计算完成）
     for step, state in sim.run(data_save=True, has_ui=False, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         # 当跟驰计算完成后获取距离道路中心最近的车辆ID作为受控车辆
         if warm_up_step + offset_step == step and state == 0:
-            take_over_index = sim.get_appropriate_car(lane_index=0)
+            take_over_index = sim.get_appropriate_car(lane_add_num=0)
             print(take_over_index)
         # 接管受控车辆，使其以指定的加速度和换道选择进行运动
         if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
             sim.take_over(take_over_index, -3, lc_result={"lc": 0})
-    
+
     # 获取记录的车辆指标数据，格式为pandas.DataFrame
     df = sim.data_to_df()
     # 获取受控车辆经过的车道ID列表
@@ -139,15 +139,15 @@ def run_road():
     # 绘制受控车辆在单一车道上的基本指标关系的时间序列曲线
     Plot.basic_plot(take_over_index, lane_id=lane_ids[0], data_df=df)
     # 绘制指定车道的时空图，指定控制轨迹颜色的指标，并高亮受控车辆的轨迹
-    Plot.spatial_time_plot(take_over_index, lane_id=0,
+    Plot.spatial_time_plot(take_over_index, lane_add_num=0,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
-    Plot.spatial_time_plot(take_over_index, lane_id=1,
+    Plot.spatial_time_plot(take_over_index, lane_add_num=1,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
-    Plot.spatial_time_plot(take_over_index, lane_id=2,
+    Plot.spatial_time_plot(take_over_index, lane_add_num=2,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
     # 显示绘图结果
     Plot.show()
-    
+
     # 设置虚拟检测范围，获取集计指标结果
     result = sim.data_processor.aggregate_as_detect_loop(
         df, 0, road_length, 0, 995, dt, 300, [warm_up_step, sim_step]

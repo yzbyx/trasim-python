@@ -15,6 +15,7 @@ from trasim_simplified.core.frame.micro.open_lane import LaneOpen
 from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.msg.trasimWarning import TrasimWarning
 from trasim_simplified.util.decorator.timer import _get_current_time
 
 
@@ -38,17 +39,34 @@ class Road:
 
         self.data_processor: DataProcessor = DataProcessor()
 
-    def add_lanes(self, lane_num: int, is_circle=True):
+    def add_lanes(self, lane_num: int, is_circle=True, real_index: Optional[list[int]] = None):
+        """
+
+        :param lane_num:
+        :param is_circle:
+        :param real_index: 道路从内到外对应的真实车道编号
+        :return:
+        """
+        real_index = real_index if real_index is not None else list(range(lane_num))
         for i in range(lane_num):
             if is_circle:
                 lane = LaneCircle(self.lane_length)
             else:
                 lane = LaneOpen(self.lane_length)
-            lane.ID = len(self.lane_list)
-            lane.index = len(self.lane_list)
+            lane.index = real_index[len(self.lane_list)]
+            lane.add_num = len(self.lane_list)
+            lane.ID = f"{lane.index}-{lane.add_num}"
             lane.road_control = True
             lane.road = self
+            lane.left_neighbour_lanes = []
+            lane.right_neighbour_lanes = []
             self.lane_list.append(lane)
+        for i, lane in enumerate(self.lane_list):
+            for lane_ in self.lane_list:
+                if lane.index - 1 == lane_.index:
+                    lane.left_neighbour_lanes.append(lane_)
+                elif lane.index + 1 == lane_.index:
+                    lane.right_neighbour_lanes.append(lane_)
         return self.lane_list
 
     def run(self, data_save=True, has_ui=True, **kwargs):
@@ -90,7 +108,7 @@ class Road:
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
                     if car.lc_model is not None:
-                        left, right = self.get_available_adjacent_lane(i, car.x)
+                        left, right = self.get_available_adjacent_lane(lane, car.x, car.type)
                         car.step_lane_change(j, left, right)
 
     def update_lc_state(self):
@@ -128,41 +146,62 @@ class Road:
         self.id_accumulate += 1
         return self.id_accumulate
 
-    def get_appropriate_car(self, lane_index=0):
-        return self.lane_list[lane_index].get_appropriate_car()
+    def get_appropriate_car(self, lane_add_num=0):
+        return self.lane_list[lane_add_num].get_appropriate_car()
 
-    def get_available_adjacent_lane(self, lane_index, pos) -> tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
-        lane = self.lane_list[lane_index]
-        left, right = self._get_adjacent_lane(lane_index)
-        section_type = lane.get_section_type(pos)
-        if SECTION_TYPE.NO_LEFT in section_type:
-            left = None
-        if SECTION_TYPE.NO_RIGHT in section_type:
-            right = None
-        return left, right
-
-    def _get_adjacent_lane(self, index: int) -> tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
-        assert len(self.lane_list) > 0
-        if len(self.lane_list) == 1:
-            return None, None
-        if index == 0:
-            return None, self.lane_list[1]
-        elif index == len(self.lane_list) - 1:
-            return self.lane_list[-2], None
+    def get_car_info(self, car_id: int, info: str, lane_add_num=None):
+        if lane_add_num is None:
+            for lane in self.lane_list:
+                result = lane.get_car_info(car_id, info)
+                if result is not None:
+                    return result
         else:
-            return self.lane_list[index - 1], self.lane_list[index + 1]
+            result = self.lane_list[lane_add_num].get_car_info(car_id, info)
+            if result is not None:
+                return result
+
+        TrasimWarning("未找到车辆！")
+
+    def car_insert_middle(self, lane_add_num: int = 0, *args, **kwargs):
+        return self.lane_list[lane_add_num].car_insert_middle(*args, **kwargs)
+
+    @staticmethod
+    def get_available_adjacent_lane(lane: LaneAbstract, pos, car_type) -> \
+            tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
+        lefts, rights = lane.left_neighbour_lanes, lane.right_neighbour_lanes
+        section_type = lane.get_section_type(pos, car_type)
+
+        if SECTION_TYPE.NO_LEFT in section_type:
+            lefts = [None]
+        else:
+            for left in lefts:
+                if SECTION_TYPE.NO_RIGHT_CAR in left.get_section_type(pos, car_type):
+                    lefts.pop(left)
+            if len(lefts) == 0: lefts = [None]
+
+        if SECTION_TYPE.NO_RIGHT in section_type:
+            rights = [None]
+        else:
+            for right in rights:
+                if SECTION_TYPE.NO_LEFT_CAR in right.get_section_type(pos, car_type):
+                    rights.pop(right)
+            if len(rights) == 0: rights = [None]
+
+        assert (len(lefts) == 1) and (len(rights) == 1), "有重叠车道！"
+
+        return lefts[0], rights[0]
 
     def data_to_df(self):
         if self.total_data is None:
             self.total_data = pd.concat([lane.data_container.data_to_df() for lane in self.lane_list], axis=0,
                                         ignore_index=True)
-            self.total_data = self.total_data.sort_values(by=[C_Info.lane_id, C_Info.id, C_Info.step])\
+            self.total_data = self.total_data.sort_values(by=[C_Info.lane_add_num, C_Info.id, C_Info.step])\
                 .reset_index(drop=True)
         return self.total_data
 
     def find_on_lanes(self, car_id: int):
         df = self.data_to_df()
-        return df[df[C_Info.id] == car_id][C_Info.lane_id].unique().tolist()
+        return df[df[C_Info.id] == car_id][C_Info.lane_add_num].unique().tolist()
 
     def take_over(self, car_id: int, acc_values: float, lc_result: dict):
         """控制指定车辆运动"""

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.constant import COLOR, V_TYPE
-from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel
-from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel
+from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
+from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
 
@@ -44,6 +44,7 @@ class Vehicle(Obstacle):
         self.ttc_star = 1.5
         self.tet_list = []
         self.picud_list = []
+        self.picud_KK_list = []
 
         self.cf_model: Optional[CFModel] = None
         self.lc_model: Optional[LCModel] = None
@@ -93,7 +94,7 @@ class Vehicle(Obstacle):
 
     def get_data_list(self, info):
         from trasim_simplified.core.data.data_container import Info as C_Info
-        if C_Info.lane_id == info:
+        if C_Info.lane_add_num == info:
             return self.lane_id_list
         elif C_Info.id == info:
             return [self.ID] * len(self.pos_list)
@@ -115,6 +116,11 @@ class Vehicle(Obstacle):
             return self.time_list
         elif C_Info.step == info:
             return self.step_list
+        elif C_Info.cf_id == info:
+            return [get_cf_id(self.cf_model.name)] * len(self.pos_list)
+        elif C_Info.lc_id == info:
+            return [get_lc_id(None if self.lc_model is None else self.lc_model.name)] * len(self.pos_list)
+
         elif C_Info.safe_ttc == info:
             return self.ttc_list
         elif C_Info.safe_tit == info:
@@ -123,12 +129,16 @@ class Vehicle(Obstacle):
             return self.tet_list
         elif C_Info.safe_picud == info:
             return self.picud_list
+        elif C_Info.safe_picud_KK == info:
+            return self.picud_KK_list
+        else:
+            TrasimError(f"{info}未创建！")
 
     def record(self):
         from trasim_simplified.core.data.data_container import Info as C_Info
         for info in self.lane.data_container.save_info:
-            if C_Info.lane_id == info:
-                self.lane_id_list.append(self.lane.ID)
+            if C_Info.lane_add_num == info:
+                self.lane_id_list.append(self.lane.add_num)
             if C_Info.a == info:
                 self.acc_list.append(self.a)
             elif C_Info.v == info:
@@ -156,6 +166,10 @@ class Vehicle(Obstacle):
                 self.tet_list.append(self.tet)
             elif C_Info.safe_picud == info:
                 self.picud_list.append(self.picud)
+            elif C_Info.safe_picud_KK == info:
+                self.picud_KK_list.append(self.picud_KK)
+            else:
+                TrasimError(f"{info}未创建！")
 
     @property
     def gap(self):
@@ -228,6 +242,27 @@ class Vehicle(Obstacle):
             xd_l = (l_v ** 2) / (2 * l_dec)
             xd = (self.v ** 2) / (2 * dec)
             return (l_x + xd_l) - (self.x + self.v * self.lane.dt + xd) - l_length
+        else:
+            return np.NaN
+
+    @property
+    def picud_KK(self):
+        if self.leader is not None:
+            l_v = self.leader.v
+            l_x = self.leader.x if self.leader.x > self.x else (self.leader.x + self.lane.lane_length)
+            l_length = self.leader.length
+            dec = self.cf_model.get_expect_dec()
+            tau = self.lane.dt
+
+            alpha = int(l_v / (dec * tau))  # 使用当前车的最大期望减速度
+            beta = l_v / (dec * tau) - int(l_v / (dec * tau))
+            xd_l = dec * tau * tau * (alpha * beta + 0.5 * alpha * (alpha - 1))
+
+            alpha = int(self.v / (dec * tau))
+            beta = self.v / (dec * tau) - int(self.v / (dec * tau))
+            xd = dec * tau * tau * (alpha * beta + 0.5 * alpha * (alpha - 1))
+
+            return (l_x + xd_l) - (self.x + self.v * tau + xd) - l_length
         else:
             return np.NaN
 

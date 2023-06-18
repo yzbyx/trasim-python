@@ -33,7 +33,7 @@ def run_integrated_simulation():
     for step, state in sim.run(data_save=True, has_ui=False, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         if warm_up_step + offset_step == step and state == 0:
-            take_over_index = sim.get_appropriate_car(lane_index=0)
+            take_over_index = sim.get_appropriate_car(lane_add_num=0)
             print(take_over_index)
         # if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
         #     sim.take_over(take_over_index, -3, lc_result={"lc": 0})
@@ -41,9 +41,9 @@ def run_integrated_simulation():
     df = sim.data_to_df()
     lane_ids = sim.find_on_lanes(take_over_index)
     Plot.basic_plot(take_over_index, lane_id=lane_ids[0], data_df=df)
-    Plot.spatial_time_plot(take_over_index, lane_id=0,
+    Plot.spatial_time_plot(car_id=take_over_index, lane_add_num=0,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
-    Plot.spatial_time_plot(take_over_index, lane_id=1,
+    Plot.spatial_time_plot(car_id=take_over_index, lane_add_num=1,
                            color_info_name=C_Info.v, data_df=df, single_plot=False)
     # Plot.spatial_time_plot(take_over_index, lane_id=2,
     #                        color_info_name=C_Info.v, data_df=df, single_plot=False)

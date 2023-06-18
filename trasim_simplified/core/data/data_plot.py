@@ -3,7 +3,7 @@
 # @Author : yzbyx
 # @File : data_plot.py
 # @Software : PyCharm
-from typing import Union, Sequence
+from typing import Union, Sequence, Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,8 @@ from matplotlib.cm import ScalarMappable
 import matplotlib.colors as mc
 import matplotlib.collections as mcoll
 from matplotlib.colorbar import Colorbar
+from matplotlib.lines import Line2D
+from matplotlib.colors import Colormap
 
 from trasim_simplified.core.data.data_processor import Info as P_Info, DataProcessor
 from trasim_simplified.core.data.data_container import Info as C_Info
@@ -19,7 +21,7 @@ from trasim_simplified.core.data.data_container import Info as C_Info
 
 class Plot:
     @staticmethod
-    def basic_plot(id_: Union[int, list[int]] = 0, lane_id=-1, axes: plt.Axes = None, fig: plt.Figure = None,
+    def basic_plot(id_: Union[int, list[int]] = 0, lane_id=-1, axes: np.ndarray[plt.Axes] = None,
                    data_df: pd.DataFrame = None, time_range=None):
         """绘制车辆index"""
         if isinstance(id_, int):
@@ -28,14 +30,14 @@ class Plot:
             id_list = id_
 
         if lane_id >= 0:
-            data_df = data_df[data_df[C_Info.lane_id] == lane_id]
+            data_df = data_df[data_df[C_Info.lane_add_num] == lane_id]
 
         if time_range is not None:
             data_df = data_df[(data_df[C_Info.time] >= time_range[0]) & (data_df[C_Info.time] < time_range[1])]
 
         car_dfs = [data_df[data_df[C_Info.id] == id_] for id_ in id_list]
 
-        if axes is None or fig is None:
+        if axes is None:
             fig, axes = plt.subplots(3, 3, figsize=(10.5, 7.5), layout="constrained")
 
         ax = axes[0, 0]
@@ -75,25 +77,58 @@ class Plot:
                          [car_df[C_Info.gap] for car_df in car_dfs],
                          data_label=[f"index={id_}" for id_ in id_list])
 
+        return axes
+
     @staticmethod
-    def spatial_time_plot(car_id=0, lane_id=0, color_info_name=None, data_df: pd.DataFrame = None, single_plot=False):
-        data_df = data_df[data_df[C_Info.lane_id] == lane_id]
+    def add_plot_2D(ax: Optional[plt.Axes], func_: Callable, x_step: float,
+                    x_range: Optional[list[float, float]] = None, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
+        if x_range is None:
+            lines: list[Line2D] = ax.get_lines()
+            x_data = []
+            for i in range(len(lines)):
+                x_data.extend(list(lines[i].get_data()[0]))
+            x_range = (min(x_data), max(x_data))
+        range_ = np.arange(x_range[0], x_range[1], x_step)
+        y_ = func_(range_)
+        ax.plot(range_, y_, **kwargs)
+        return ax
+
+    @staticmethod
+    def spatial_time_plot(
+            car_id=-1, lane_add_num=0, color_info_name=None, data_df: pd.DataFrame = None,
+            single_plot=False, color_lambda_: Optional[Callable] = None,
+            color_value_remove_outliers=False, base_line_width: float = 0.2,
+            fig: plt.Figure = None, ax: plt.Axes = None, color_bar=True
+    ):
+        data_df = data_df[data_df[C_Info.lane_add_num] == lane_add_num]
         data_df = data_df.sort_values(by=[C_Info.id, C_Info.time]).reset_index(drop=True)
         if color_info_name is None:
             color_data = data_df[C_Info.v]
-            color_bar_name = C_Info.v
+            color_info_name = C_Info.v
         else:
             color_data = data_df[color_info_name]
-            color_bar_name = color_info_name
+        color_bar_name = color_info_name
 
-        fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
-        ax: plt.Axes = ax
-        fig: plt.Figure = fig
-        ax.set_title(f"lane_id: {lane_id}")
-        ax.set_xlabel("time(s)")
-        ax.set_ylabel("location")
-        value_range = (np.min(color_data), np.max(color_data))
-        cmap = plt.get_cmap('rainbow')
+        if color_lambda_ is not None:
+            color_data = color_data.apply(color_lambda_)
+            data_df[color_info_name] = color_data
+
+        if fig is None or ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
+            ax: plt.Axes = ax
+            fig: plt.Figure = fig
+            ax.set_title(f"lane_add_num: {lane_add_num}")
+            ax.set_xlabel("time(s)")
+            ax.set_ylabel("location")
+
+        c_data = color_data.to_numpy() if not color_value_remove_outliers else \
+            Plot.remove_outliers(color_data.to_numpy())
+        value_range = (np.min(c_data), np.max(c_data))
+        cmap: Colormap = plt.get_cmap('rainbow')
+        cmap.set_over("w")
+        cmap.set_under("k")
         for id_ in data_df[C_Info.id].unique():
             if car_id != id_ and single_plot: continue
             car_info = data_df[data_df[C_Info.id] == id_]
@@ -106,10 +141,24 @@ class Plot:
             for time__, temp__, pos in DataProcessor.data_shear(temp_, pos_, time_, step_):
                 if pos[1] - pos[0] > 1:
                     Plot._lines_color(ax, time__, temp__, color_data_single[pos[0]: pos[1]],
-                                      value_range, cmap, line_width=0.2 if car_id != id_ else 1)
+                                      value_range, cmap,
+                                      line_width=base_line_width if car_id != id_ else base_line_width * 5)
 
-        cb: Colorbar = fig.colorbar(ScalarMappable(mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap))
-        cb.set_label(color_bar_name)
+        if color_bar:
+            cb: Colorbar = fig.colorbar(ScalarMappable(mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap))
+            cb.set_label(color_bar_name)
+        return fig, ax
+
+    @staticmethod
+    def remove_outliers(data: np.ndarray):
+        data = data[~np.isnan(data)]
+        q1 = np.quantile(data, 0.25)
+        q3 = np.quantile(data, 0.75)
+        iqr = q3 - q1
+        fence_low = q1 - 1.5 * iqr
+        fence_high = q3 + 1.5 * iqr
+        result = data[np.where((data >= fence_low) & (data <= fence_high))]
+        return result
 
     @staticmethod
     def show():
@@ -145,3 +194,4 @@ class Plot:
         for i, x_data_ in enumerate(x_data):
             ax.plot(x_data_, y_data[i], *args, label=data_label[i], **kwargs)
         ax.legend()
+        return ax

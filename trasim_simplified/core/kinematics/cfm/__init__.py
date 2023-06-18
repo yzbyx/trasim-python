@@ -21,7 +21,7 @@ from trasim_simplified.core.constant import CFM
 
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 
-__All__ = ['get_cf_model', 'CFModel']
+__All__ = ['get_cf_model', 'CFModel', 'get_cf_id']
 
 
 def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
@@ -53,5 +53,36 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
         return LCM(_driver, param)
     elif name == CFM.CTM:
         return CTM(_driver, param)
+    else:
+        raise TrasimError(rem.NO_MODEL.format(name))
+
+
+def get_cf_id(name) -> int:
+    if name == CFM.IDM:
+        return 0
+    elif name == CFM.GIPPS:
+        return 1
+    elif name == CFM.LINEAR:
+        return 2
+    elif name == CFM.WIEDEMANN_99:
+        return 3
+    elif name == CFM.NON_LINEAR_GHR:
+        return 4
+    elif name == CFM.OPTIMAL_VELOCITY:
+        return 5
+    elif name == CFM.KK:
+        return 6
+    elif name == CFM.ACC:
+        return 7
+    elif name == CFM.TPACC:
+        return 8
+    elif name == CFM.DUMMY:
+        return -1
+    elif name == CFM.CACC:
+        return 9
+    elif name == CFM.LCM:
+        return 10
+    elif name == CFM.CTM:
+        return 11
     else:
         raise TrasimError(rem.NO_MODEL.format(name))

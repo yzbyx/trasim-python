@@ -54,7 +54,7 @@ class LCModel_KK(LCModel):
     def step(self, index, *args):
         self._update_dynamic()
         self.left_lane, self.right_lane = args
-        type_ = self.lane.get_section_type(self.vehicle.x)
+        type_ = self.lane.get_section_type(self.vehicle.x, self.vehicle.type)
         if SECTION_TYPE.BASE in type_:
             return self.base_cal()
         if SECTION_TYPE.ON_RAMP in type_:

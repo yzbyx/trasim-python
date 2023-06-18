@@ -36,6 +36,12 @@ class CFModel_TPACC(CFModel):
         self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
         """v_safe计算是否离散化时间"""
         self._tau = f_param.get("tau", 1)
+        """仿真步长即反应时间 [s]"""
+
+        self._record_cf_info = f_param.get("record_cf_info", False)
+        self.cf_info: Optional[TPACCInfo] = None
+        if self._record_cf_info:
+            self.cf_info = TPACCInfo()
 
         self.index = None
 
@@ -50,7 +56,7 @@ class CFModel_TPACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
+        return self.get_speed_limit()
 
     def _update_dynamic(self):
         self.gap = self.vehicle.gap
@@ -68,21 +74,61 @@ class CFModel_TPACC(CFModel):
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
         leader_is_dummy = True if self.vehicle.leader.type == V_TYPE.OBSTACLE else False
-        return calculate(*f_params,
-                         self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
-                         leader_is_dummy, self.l_v_a)
+        result = calculate(*f_params,
+                           self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
+                           leader_is_dummy, self.l_v_a)
+        if self._record_cf_info:
+            self.cf_info.step.append(self.vehicle.lane.step_)
+            self.cf_info.time.append(self.vehicle.lane.time_)
+            self.cf_info.is_speed_adaptive.append(result[1])
+            self.cf_info.is_acc_constraint.append(result[2])
+            self.cf_info.is_thw_constraint.append(result[3])
+            self.cf_info.is_v_free_constraint.append(result[4])
+            self.cf_info.is_v_safe_constraint.append(result[5])
+
+        return result[0]
 
 
 def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
               dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a):
     if gap > v * g_tau_:
         acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
+        is_speed_adaptive = 0
     else:
         acc = kdv_ * (l_v - v)
+        is_speed_adaptive = 1
+
+    is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
     v_c = v + dt * max(- dec_, min(acc, acc_))
 
     v_safe = cal_v_safe(v_safe_dispersed_, dt, l_v, gap, dec_, dec_)
+    is_thw_constraint = 0
     if not leader_is_dummy:
-        v_safe = min(v_safe, (gap / dt) + l_v_a)
+        temp = (gap / dt) + l_v_a
+        is_thw_constraint = 1 if v_safe > temp else 0
+        v_safe = min(v_safe, temp)
+
+    is_v_free_constraint = 1 if v_free < v_c else 0
+    is_v_safe_constraint = 1 if v_safe < v_c else 0
     v_next = max(0, min(v_free, v_c, v_safe))
-    return (v_next - v) / dt
+
+    return (v_next - v) / dt, \
+        is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
+
+
+class TPACCInfo:
+    def __init__(self):
+        self.step = []
+        """对应时间步"""
+        self.time = []
+        """对应时间 [s]"""
+        self.is_speed_adaptive = []
+        """是否处于速度适配区间"""
+        self.is_acc_constraint = []
+        """计算出的加速度是否被最大加减速限制"""
+        self.is_thw_constraint = []
+        """安全速度是否被期望时距限制"""
+        self.is_v_free_constraint = []
+        """vc是否被vFree限制"""
+        self.is_v_safe_constraint = []
+        """vc是否被vSafe限制"""

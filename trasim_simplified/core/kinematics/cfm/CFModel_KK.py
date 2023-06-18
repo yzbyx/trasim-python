@@ -161,12 +161,14 @@ class CFModel_KK(CFModel):
         a_n, b_n = self.cal_an_bn()
 
         # ----G计算---- #
-        if SECTION_TYPE.ON_RAMP in self.vehicle.lane.get_section_type(self.vehicle.x):
+        if SECTION_TYPE.ON_RAMP in self.vehicle.lane.get_section_type(self.vehicle.x, self.vehicle.type):
             # 只计算向左换道
             pos = self.vehicle.x
-            left, _ = self.vehicle.lane.road.get_available_adjacent_lane(self.vehicle.lane.index, pos)
+            left, _ = self.vehicle.lane.road.get_available_adjacent_lane(self.vehicle.lane, pos, self.vehicle.type)
             _, left_leader = left.get_relative_car(pos)
-            v_hat_leader = self.v_hat_leader_on_ramp(left_leader, left.get_speed_limit(pos), self._delta_vr_2)
+            v_hat_leader = self.v_hat_leader_on_ramp(
+                left_leader, left.get_speed_limit(pos, self.vehicle.type), self._delta_vr_2
+            )
             self.G = cal_G(self._k, self._tau, self._a, self.v, v_hat_leader)
             gap = np.Inf if left_leader is None else (- left_leader.get_dist(self.vehicle.x) - left_leader.length)
 
@@ -189,7 +191,7 @@ class CFModel_KK(CFModel):
 
         # ----最终v和x计算---- #
         status = S
-        final_speed = max(0, min(self._vf, v_hat + xi, self.v + self._a * self.dt, v_s))
+        final_speed = max(0., min(self._vf, v_hat + xi, self.v + self._a * self.dt, v_s))
         final_acc = (final_speed - self.v) / self.dt
 
         return final_acc, status
@@ -217,7 +219,7 @@ class CFModel_KK(CFModel):
         return self._b
 
     def get_expect_speed(self):
-        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
+        return self.get_speed_limit()
 
     def cal_an_bn(self):
         r2 = self.random.random()
@@ -244,7 +246,7 @@ class CFModel_KK(CFModel):
             v_c = self.v + a_n * self._tau
         return v_c
 
-    def _cal_xi(self, v_hat, interval, speed):
+    def _cal_xi(self, v_hat, interval, speed) -> tuple[float, int]:
         # ----xi扰动计算---- #
         r1 = self.random.random()
         xi_a = self._a_a * interval * self._sig_func(self._p_a - r1)

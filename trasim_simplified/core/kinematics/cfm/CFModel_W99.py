@@ -108,7 +108,7 @@ class CFModel_W99(CFModel):
         return self._CC9
 
     def get_expect_speed(self):
-        return self._vDesire
+        return min(self.get_speed_limit(), self._vDesire)
 
 
 def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive, status,

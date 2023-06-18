@@ -11,7 +11,7 @@ from trasim_simplified.core.kinematics.lcm.LCModel_ACC import LCModel_ACC
 from trasim_simplified.core.kinematics.lcm.LCModel_KK import LCModel_KK
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 
-__All__ = ['get_lc_model', 'LCModel']
+__All__ = ['get_lc_model', 'LCModel', 'get_lc_id']
 
 
 def get_lc_model(_driver, name=LCM.KK, param=None) -> Optional[LCModel]:
@@ -23,5 +23,16 @@ def get_lc_model(_driver, name=LCM.KK, param=None) -> Optional[LCModel]:
         return LCModel_ACC(_driver, param)
     if name is None:
         return None
+    else:
+        raise TrasimError(rem.NO_MODEL.format(name))
+
+
+def get_lc_id(name) -> int:
+    if name == LCM.KK:
+        return 0
+    elif name == LCM.ACC:
+        return 1
+    elif name is None:
+        return -1
     else:
         raise TrasimError(rem.NO_MODEL.format(name))

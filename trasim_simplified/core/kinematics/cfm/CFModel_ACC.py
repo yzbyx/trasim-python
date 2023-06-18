@@ -62,7 +62,7 @@ class CFModel_ACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.vehicle.lane.get_speed_limit(self.vehicle.x)
+        return self.get_speed_limit()
 
     def step(self, index, *args):
         self.index = index

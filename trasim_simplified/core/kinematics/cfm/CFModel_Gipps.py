@@ -65,7 +65,7 @@ class CFModel_Gipps(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self._v0
+        return min(self.get_speed_limit(), self._v0)
 
 
 def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX) -> dict:

@@ -5,7 +5,7 @@
 # @Software : PyCharm
 import abc
 from abc import ABC
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Union
 
 import numpy as np
 
@@ -16,6 +16,7 @@ from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.vehicle import Vehicle
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimError import TrasimError
+from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.road import Road
@@ -25,13 +26,17 @@ class LaneAbstract(ABC):
     def __init__(self, lane_length: float, speed_limit: float = 30):
         self.ID = 0
         self.index = 0
+        self.add_num = None
         self.road: Optional[Road] = None
+        self.left_neighbour_lanes: Optional[list[LaneAbstract]] = None
+        self.right_neighbour_lanes: Optional[list[LaneAbstract]] = None
+
         self._default_speed_limit = speed_limit
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
-        self.section_type: dict[str, list[float, float]] = {}
-        self.speed_limit: dict[float, list[float, float]] = {}
+        self.section_type: dict[str, dict[str, list[float, float]]] = {}
+        self.speed_limit: dict[str, dict[float, list[float, float]]] = {}
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
@@ -60,7 +65,19 @@ class LaneAbstract(ABC):
         self.force_speed_limit = False
         """是否强制车辆速度不超过道路限速"""
         self.state_update_method = "Euler"
-        """状态更新方式：Euler (x += v * dt), Ballistic (x += (pre_v + v) * dt / 2)"""
+        """状态更新方式：
+        
+        1.
+        Euler欧拉 (v(t + Δt) += a(t) * Δt, x(t + Δt) += v(t + Δt) * Δt),
+        
+        2.
+        Ballistic抛物线 (v(t + Δt) += a(t) * Δt, x(t + Δt) += (v(t) + v(t + Δt)) * Δt / 2), 
+        
+        3. 
+        Treiber, M., Kanagaraj, V., 2015.
+         Comparing numerical integration schemes for time-continuous car-following models. Physica A 419, 183–195.
+        
+        Trapezoidal梯形 (v(t + Δt) += 0.5(a(t) + a(t + Δt)) * Δt, x(t + Δt) += (v(t) + v(t + Δt)) * Δt / 2)"""
 
         self.dt = 0.1
         """仿真步长 [s]"""
@@ -83,50 +100,74 @@ class LaneAbstract(ABC):
         else:
             return self.road.get_new_car_id()
 
-    def set_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1):
+    def set_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1,
+                         car_types: Optional[list[str]] = None):
         if start_pos < 0:
             start_pos = 0
         if end_pos < 0:
             end_pos = self.lane_length
-        self.section_type.update({type_: [start_pos, end_pos]})
 
-    def get_section_type(self, pos) -> set[str]:
+        if car_types is None or len(car_types) == 0:
+            car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
+
+        for car_type in car_types:
+            if car_type in self.section_type.keys():
+                self.section_type[car_type].update({type_: [start_pos, end_pos]})
+            else:
+                self.section_type.update({car_type: {type_: [start_pos, end_pos]}})
+
+    def get_section_type(self, pos, car_type: str) -> set[str]:
         type_ = set()
         if len(self.section_type) == 0:
             type_.add(SECTION_TYPE.BASE)
-        for key in self.section_type.keys():
-            pos_ = self.section_type[key]
-            if pos_[0] <= pos < pos_[1]:
-                type_.add(key)
-            if pos == self.lane_length and pos == pos_[1]:
-                type_.add(key)
+        for car_type_ in self.section_type.keys():
+            if car_type_ == car_type:
+                for key in self.section_type[car_type_].keys():
+                    pos_ = self.section_type[car_type_][key]
+                    if pos_[0] <= pos < pos_[1]:
+                        type_.add(key)
+                    if pos == self.lane_length and pos == pos_[1]:
+                        type_.add(key)
         return type_
 
-    def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1):
+    def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1,
+                        car_types: Optional[list[str]] = None):
         assert speed_limit >= 0
         if start_pos < 0:
             start_pos = 0
         if end_pos < 0:
             end_pos = self.lane_length
-        self.speed_limit.update({speed_limit: [start_pos, end_pos]})
 
-    def get_speed_limit(self, pos):
+        if car_types is None or len(car_types) == 0:
+            car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
+
+        for car_type in car_types:
+            if car_type in self.speed_limit.keys():
+                self.speed_limit[car_type].update({speed_limit: [start_pos, end_pos]})
+            else:
+                self.speed_limit.update({car_type: {speed_limit: [start_pos, end_pos]}})
+
+    def get_speed_limit(self, pos, car_type: str) -> float:
         if len(self.speed_limit) == 0:
             return self._default_speed_limit
-        for key in self.speed_limit.keys():
-            pos_ = self.speed_limit[key]
-            if pos_[0] <= pos <= pos_[1]:
-                return key
+        for car_type_ in self.speed_limit.keys():
+            if car_type_ == car_type:
+                for key in self.speed_limit[car_type_].keys():
+                    pos_ = self.speed_limit[car_type_][key]
+                    if pos_[0] <= pos <= pos_[1]:
+                        return key
         return self._default_speed_limit
 
     @property
     def car_num(self):
         return len(self.car_list)
 
-    def car_config(self, car_num: int, car_length: float, car_type: str, car_initial_speed: float,
+    def car_config(self, car_num: Union[int, float], car_length: float, car_type: str, car_initial_speed: float,
                    speed_with_random: bool, cf_name: str, cf_param: dict[str, float], car_param: dict,
                    lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
+        if 0 < car_num < 1:
+            car_num = int(np.floor(self.lane_length * car_num / car_length))
         self.car_num_list.append(car_num)
         self.car_length_list.append(car_length)
         self.car_type_list.append(car_type)
@@ -138,7 +179,7 @@ class LaneAbstract(ABC):
         self.lc_name_list.append(lc_name)
         self.lc_param_list.append(lc_param)
 
-    def car_load(self, car_gap=-1):
+    def car_load(self, car_gap=-1, jam_num=-1):
         car_num_total = sum(self.car_num_list)
         car_length_total = np.sum(np.array(self.car_num_list) * np.array(self.car_length_list))
         gap = (self.lane_length - car_length_total) / car_num_total
@@ -150,6 +191,14 @@ class LaneAbstract(ABC):
         for i in range(len(self.car_num_list)):
             car_type_index_list.extend([i] * self.car_num_list[i])
         np.random.shuffle(car_type_index_list)
+
+        num_node = []  # 记录分段阻塞对应的头车index
+        jam_gap = None
+        if jam_num > 1:
+            car_num = int(np.floor(car_num_total / jam_num))
+            jam_gap = (self.lane_length - car_length_total) / jam_num
+            for j in range(jam_num - 1):
+                num_node.append(car_num * (j + 1))
 
         for index, i in enumerate(car_type_index_list):
             vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
@@ -165,12 +214,20 @@ class LaneAbstract(ABC):
             vehicle.set_car_param(self.car_param_list[i])
 
             self.car_list.append(vehicle)
+
             if index != car_num_total - 1:
                 length = self.car_length_list[car_type_index_list[index + 1]]
-                if car_gap < 0:
-                    x = x + gap + length
+                if jam_num > 1:
+                    if len(num_node) > 0 and num_node[0] == car_count:
+                        x = x + jam_gap + length
+                        num_node.pop(0)
+                    else:
+                        x = x + length
                 else:
-                    x = x + car_gap + length
+                    if car_gap < 0:
+                        x = x + gap + length
+                    else:
+                        x = x + car_gap + length
             car_count += 1
 
         if len(self.car_list) > 2:
@@ -210,7 +267,6 @@ class LaneAbstract(ABC):
         self.force_speed_limit = kwargs.get("force_speed_limit", False)
         """是否强制车辆速度不超过道路限速"""
         self.state_update_method = kwargs.get("state_update_method", "Euler")
-        """状态更新方式：Euler (x += v * dt), Ballistic (x += (pre_v + v) * dt / 2)"""
 
         if self.has_ui and not self.road_control:
             self.ui.ui_init(caption=caption, frame_rate=frame_rate)
@@ -233,10 +289,17 @@ class LaneAbstract(ABC):
 
     def car_state_update_common(self, car: Vehicle):
         car_speed_before = car.v
-        car.v += car.cf_acc * self.dt
+        car_acc_before = car.a
 
-        if self.force_speed_limit and car.v > self.get_speed_limit(car.x):
-            speed_limit = self.get_speed_limit(car.x)
+        if self.state_update_method in ["Ballistic", "Euler"]:
+            car.v += car.cf_acc * self.dt
+        elif self.state_update_method == "Trapezoidal":
+            car.v += (car.cf_acc + car.a) * self.dt / 2
+        else:
+            TrasimError(f"{self.state_update_method}更新方式未实现！")
+
+        if self.force_speed_limit and car.v > self.get_speed_limit(car.x, car.type):
+            speed_limit = self.get_speed_limit(car.x, car.type)
             car.a = (speed_limit - car_speed_before) / self.dt
             car.v = speed_limit
 
@@ -245,8 +308,7 @@ class LaneAbstract(ABC):
             car.a = (expect_speed - car_speed_before) / self.dt
             car.v = expect_speed
         elif car.v < 0:
-            # if car.v < - 1e-3:
-            #     print("存在速度为负的车辆！")
+            TrasimWarning(f"车辆速度出现负数！" + car.get_basic_info())
             car.a = - (car_speed_before / self.dt)
             car.v = 0
         else:
@@ -256,12 +318,10 @@ class LaneAbstract(ABC):
             car.x += (car_speed_before + car.v) * self.dt / 2
         elif self.state_update_method == "Euler":
             car.x += car.v * self.dt
+        elif self.state_update_method == "Trapezoidal":
+            car.x += car_speed_before * self.dt + car.a * (self.dt ** 2) / 2
         else:
             TrasimError(f"{self.state_update_method}更新方式未实现！")
-
-        # if car.leader is not None and car.leader.type == V_TYPE.OBSTACLE:
-        #     if car.x > car.leader.x:
-        #         car.x = car.leader.x
 
     @abc.abstractmethod
     def update_state(self):
@@ -383,6 +443,7 @@ class LaneAbstract(ABC):
                 if info_name == C_Info.dhw:
                     return car.dhw
                 raise TrasimError(f"{info_name}未创建！")
+        return None
 
     def _get_car(self, id_):
         for car in self.car_list:
@@ -440,7 +501,7 @@ class LaneAbstract(ABC):
                 return self.car_list[-1], None
         return None, None
 
-    def car_param_update(self, id_,  cf_param: dict[str, float] = None, lc_param: dict[str, float] = None,
+    def car_param_update(self, id_, cf_param: dict[str, float] = None, lc_param: dict[str, float] = None,
                          car_param: dict[str, float] = None):
         car = self._get_car(id_)
         car.cf_model.param_update(cf_param if cf_param is not None else {})
