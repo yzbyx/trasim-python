@@ -80,11 +80,13 @@ class Info:
     """跟驰模型类别ID"""
     lc_id = "lc model ID"
     """换到模型类别ID"""
+    car_type = "car type"
+    """车辆类型"""
 
-    safe_ttc = "ttc(s)"
+    safe_ttc = "ttc (s)"
     safe_tet = "tet"
-    safe_tit = "tit(s)"
-    safe_picud = "picud(m)"
+    safe_tit = "tit (s)"
+    safe_picud = "picud (m)"
     safe_picud_KK = "picud_KK (m)"
     """KK模型适用的picud计算方式（前车最大减速度等于当前车的最大减速度）"""
 

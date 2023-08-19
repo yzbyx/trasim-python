@@ -165,7 +165,7 @@ class CFModel_KK(CFModel):
             # 只计算向左换道
             pos = self.vehicle.x
             left, _ = self.vehicle.lane.road.get_available_adjacent_lane(self.vehicle.lane, pos, self.vehicle.type)
-            _, left_leader = left.get_relative_car(pos)
+            _, left_leader = left.get_relative_car(self.vehicle)
             v_hat_leader = self.v_hat_leader_on_ramp(
                 left_leader, left.get_speed_limit(pos, self.vehicle.type), self._delta_vr_2
             )
@@ -304,5 +304,27 @@ def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
         return v_safe
 
 
+def picud(v_safe_dispersed, tau, v, l_v, gap, dec, leader_dec):
+    if v_safe_dispersed:
+        alpha = int(l_v / (dec * tau))  # 使用当前车的最大期望减速度
+        beta = l_v / (dec * tau) - int(l_v / (dec * tau))
+        xd_l = dec * tau * tau * (alpha * beta + 0.5 * alpha * (alpha - 1))
+
+        alpha = int(v / (dec * tau))
+        beta = v / (dec * tau) - int(v / (dec * tau))
+        xd = dec * tau * tau * (alpha * beta + 0.5 * alpha * (alpha - 1))
+
+        return (gap + xd_l) - (v * tau + xd)
+    else:
+        l_dec = leader_dec
+        dec = dec
+        xd_l = (l_v ** 2) / (2 * l_dec)
+        xd = (v ** 2) / (2 * dec)
+        return (gap + xd_l) - (v * tau + xd)
+
+
 if __name__ == '__main__':
-    print(cal_v_safe(True, 1, 0, 10, 1, 3))
+    print(cal_v_safe(True, 1, 30, 54 / 2 - 7.5, 3, 3))
+    print(cal_v_safe(False, 1, 30, 54 / 2 - 7.5, 3, 3))
+    print(picud(True, 1, 30, 30, 30, 3, 3))
+    print(picud(False, 1, 30, 30, 54 - 7.5, 3, 3))

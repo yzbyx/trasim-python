@@ -26,7 +26,7 @@ class LaneAbstract(ABC):
     def __init__(self, lane_length: float, speed_limit: float = 30):
         self.ID = 0
         self.index = 0
-        self.add_num = None
+        self.add_num = 0
         self.road: Optional[Road] = None
         self.left_neighbour_lanes: Optional[list[LaneAbstract]] = None
         self.right_neighbour_lanes: Optional[list[LaneAbstract]] = None
@@ -35,8 +35,8 @@ class LaneAbstract(ABC):
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
-        self.section_type: dict[str, dict[str, list[float, float]]] = {}
-        self.speed_limit: dict[str, dict[float, list[float, float]]] = {}
+        self.section_type: dict[int, dict[str, list[float, float]]] = {}
+        self.speed_limit: dict[int, dict[float, list[float, float]]] = {}
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
@@ -101,12 +101,14 @@ class LaneAbstract(ABC):
             return self.road.get_new_car_id()
 
     def set_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1,
-                         car_types: Optional[list[str]] = None):
+                         car_types: Optional[Union[list[int], int]] = None):
         if start_pos < 0:
             start_pos = 0
         if end_pos < 0:
             end_pos = self.lane_length
 
+        if isinstance(car_types, int):
+            car_types = [car_types]
         if car_types is None or len(car_types) == 0:
             car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
 
@@ -116,28 +118,31 @@ class LaneAbstract(ABC):
             else:
                 self.section_type.update({car_type: {type_: [start_pos, end_pos]}})
 
-    def get_section_type(self, pos, car_type: str) -> set[str]:
+    def get_section_type(self, pos, car_type: int) -> set[str]:
         type_ = set()
         if len(self.section_type) == 0:
             type_.add(SECTION_TYPE.BASE)
-        for car_type_ in self.section_type.keys():
-            if car_type_ == car_type:
-                for key in self.section_type[car_type_].keys():
-                    pos_ = self.section_type[car_type_][key]
-                    if pos_[0] <= pos < pos_[1]:
-                        type_.add(key)
-                    if pos == self.lane_length and pos == pos_[1]:
-                        type_.add(key)
+
+        section_type_for_type = self.section_type.get(car_type, None)
+        if section_type_for_type is not None:
+            for key in section_type_for_type.keys():
+                pos_ = section_type_for_type[key]
+                if pos_[0] <= pos < pos_[1]:
+                    type_.add(key)
+                if pos == self.lane_length and pos == pos_[1]:
+                    type_.add(key)
         return type_
 
     def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1,
-                        car_types: Optional[list[str]] = None):
+                        car_types: Optional[Union[list[int], int]] = None):
         assert speed_limit >= 0
         if start_pos < 0:
             start_pos = 0
         if end_pos < 0:
             end_pos = self.lane_length
 
+        if isinstance(car_types, int):
+            car_types = [car_types]
         if car_types is None or len(car_types) == 0:
             car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
 
@@ -147,15 +152,16 @@ class LaneAbstract(ABC):
             else:
                 self.speed_limit.update({car_type: {speed_limit: [start_pos, end_pos]}})
 
-    def get_speed_limit(self, pos, car_type: str) -> float:
+    def get_speed_limit(self, pos, car_type: int) -> float:
         if len(self.speed_limit) == 0:
             return self._default_speed_limit
-        for car_type_ in self.speed_limit.keys():
-            if car_type_ == car_type:
-                for key in self.speed_limit[car_type_].keys():
-                    pos_ = self.speed_limit[car_type_][key]
-                    if pos_[0] <= pos <= pos_[1]:
-                        return key
+
+        speed_limit_for_type = self.speed_limit.get(car_type, None)
+        if speed_limit_for_type is not None:
+            for key in speed_limit_for_type.keys():
+                pos_ = speed_limit_for_type[key]
+                if pos_[0] <= pos <= pos_[1]:
+                    return key
         return self._default_speed_limit
 
     @property
@@ -289,7 +295,6 @@ class LaneAbstract(ABC):
 
     def car_state_update_common(self, car: Vehicle):
         car_speed_before = car.v
-        car_acc_before = car.a
 
         if self.state_update_method in ["Ballistic", "Euler"]:
             car.v += car.cf_acc * self.dt
@@ -489,8 +494,77 @@ class LaneAbstract(ABC):
                         offset += 1
                 return car
 
-    def get_relative_car(self, pos: float) -> tuple[Optional[Vehicle], Optional[Vehicle]]:
-        """获取指定位置的前后车"""
+    def get_relative_car(self, car: Vehicle = None)\
+            -> tuple[Optional[Vehicle], Optional[Vehicle]]:
+        """获取指定位置的前后车(用于换道)"""
+        follower_ = leader_ = None
+        pos = car.x
+
+        if self in car.lane.left_neighbour_lanes:
+            relative_pos = -1
+            pre_leader_follower = car.pre_left_leader_follower
+        elif self in car.lane.right_neighbour_lanes:
+            relative_pos = 1
+            pre_leader_follower = car.pre_right_leader_follower
+        else:
+            relative_pos = 0
+            pre_leader_follower = None
+
+        if pre_leader_follower is None:
+            follower_, leader_ = self._common_get_relative_car(pos)
+        else:
+            leader, follower = pre_leader_follower
+            leader_on_lane = \
+                True if (leader is not None and leader.lane == self and not leader.is_run_out) else False
+            follower_on_lane = \
+                True if (follower is not None and follower.lane == self and not follower.is_run_out) else False
+            if leader_on_lane or follower_on_lane:
+                base_car = follower if follower_on_lane else leader
+                if base_car.get_dist(pos) >= 0:  # pos在目标车前方
+                    temp = base_car.leader
+                    if temp is None:
+                        follower_ = base_car
+                    else:
+                        while temp != base_car:
+                            if temp.x > pos:
+                                follower_ = temp.follower
+                                leader_ = temp
+                                break
+                            if temp.leader is not None:
+                                temp = temp.leader
+                            else:
+                                break
+                            if temp.leader is None and follower_ is None and leader_ is None:
+                                follower_ = temp
+                else:
+                    temp = base_car.follower
+                    if temp is None:
+                        leader_ = base_car
+                    else:
+                        while temp != base_car:
+                            if temp.x < pos:
+                                follower_ = temp
+                                leader_ = temp.leader
+                                break
+                            if temp.follower is not None:
+                                temp = temp.follower
+                            else:
+                                break
+                        if temp.follower is None and follower_ is None and leader_ is None:
+                            leader_ = temp
+        # if follower_ is not None:
+        #     assert follower_.x <= car.x
+        # if leader_ is not None:
+        #     assert leader_.x >= car.x
+
+        # FIXME: 此段代码结果有误
+        # if relative_pos == -1:
+        #     car.pre_left_leader_follower = [follower_, leader_]
+        # elif relative_pos == 1:
+        #     car.pre_right_leader_follower = [follower_, leader_]
+        return follower_, leader_
+
+    def _common_get_relative_car(self, pos: float):
         for car in self.car_list:
             if car.x > pos:
                 return car.follower, car

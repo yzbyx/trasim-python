@@ -132,6 +132,13 @@ class Road:
 
     @staticmethod
     def _check_and_correct_lc_pos(target_lane, car_lc_last, car):
+        """
+        对可能的多车换到同一车道的检查
+        :param target_lane:
+        :param car_lc_last:
+        :param car:
+        :return:
+        """
         target_pos = car.lc_result.get("x", car.x)
         if target_lane.is_circle and target_pos > target_lane.lane_length:
             car.lc_result["x"] -= target_lane.lane_length

@@ -19,13 +19,13 @@ def run_circle():
     _car_param = {}
     take_over_index = -1
     follower_index = [-1]
-    dt = 1
+    dt = 0.1
     warm_up_step = 3600
     sim_step = warm_up_step + int(1800 / dt)
     offset_step = int(300 / dt) + warm_up_step
-    dec_step = int(5 / dt) + offset_step
-    maintain_step = int(0 / dt) + dec_step
-    acc_step = int(5 / dt) + maintain_step
+    dec_step = int(50 / dt) + offset_step
+    maintain_step = int(100 / dt) + dec_step
+    acc_step = int(50 / dt) + maintain_step
 
     is_circle = True
     lane_length = 10000
@@ -34,16 +34,16 @@ def run_circle():
 
     if is_circle:
         sim = LaneCircle(lane_length)
-        sim.car_config(0.81, 7.5, V_TYPE.PASSENGER, 0.5, True, CFM.TPACC, _cf_param, {"color": COLOR.yellow})
+        sim.car_config(0.1, 7.5, V_TYPE.PASSENGER, 0, False, CFM.IDM, _cf_param, {"color": COLOR.yellow})
         # sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.NON_LINEAR_GHR, _cf_param, {"color": COLOR.blue})
-        sim.car_load()
+        sim.car_load(5)
     else:
         sim = LaneOpen(lane_length)
-        sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, _car_param)
+        sim.car_config(50, 7.5, V_TYPE.PASSENGER, 0, False, CFM.ACC, _cf_param, _car_param)
         sim.car_loader(2000)
 
     sim.data_container.config()
-    for step in sim.run(data_save=True, has_ui=False, frame_rate=1,
+    for step in sim.run(data_save=True, has_ui=False, frame_rate=-1,
                         warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         # 头车控制车队扰动
         # if step < 30 / dt:
@@ -58,14 +58,14 @@ def run_circle():
             take_over_index = sim.get_appropriate_car()
             follower_index = [sim.get_relative_id(take_over_index, - i - 1) for i in range(5)]
             print(take_over_index, follower_index)
-        # if offset_step < step <= dec_step:
-        #     sim.take_over(take_over_index, -1)
-        # if dec_step < step <= maintain_step:
-        #     sim.take_over(take_over_index, 0)
-        # if maintain_step < step <= acc_step:
-        #     sim.take_over(take_over_index, 1)
-        # if step > acc_step:
-        #     sim.take_over(take_over_index, 0)
+        if offset_step < step <= dec_step:
+            sim.take_over(take_over_index, -1)
+        if dec_step < step <= maintain_step:
+            sim.take_over(take_over_index, 0)
+        if maintain_step < step <= acc_step:
+            sim.take_over(take_over_index, 1)
+        if step > acc_step:
+            sim.take_over(take_over_index, 0)
 
         # 居中插入车辆
         # if offset_step == step:
@@ -83,20 +83,20 @@ def run_circle():
     # sim.data_container.save_df_to_csv(
     #     df, r"E:\PyProject\car-following-model-test\tests\thesis_experiment\data\TPACC_OCC0.25"
     # )
-    result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=lane_length, pos=0, width=900,
-                                                         dt=dt, d_step=int(300 / dt))
-    print(sim.data_processor.circle_kqv_cal(df, lane_length))
-    sim.data_processor.print(result)
+    # result = sim.data_processor.aggregate_as_detect_loop(df, lane_id=0, lane_length=lane_length, pos=0, width=900,
+    #                                                      dt=dt, d_step=int(300 / dt))
+    # print(sim.data_processor.circle_kqv_cal(df, lane_length))
+    # sim.data_processor.print(result)
 
     print(f"TET_sum: {np.sum(sim.data_container.data_df[C_Info.safe_tet])}")
     print(f"TIT_sum: {np.sum(sim.data_container.data_df[C_Info.safe_tit])}")
 
-    axes = Plot.basic_plot(follower_index, lane_id=0, data_df=df, time_range=(4300, 4800))
-    Plot.add_plot_2D(axes[0, 1], func_=lambda x: x * 1.4, x_step=1)
-    Plot.add_plot_2D(axes[0, 1], func_=lambda x: x, x_step=1)
+    axes = Plot.basic_plot(follower_index, lane_id=-1, data_df=df, time_range=(offset_step, acc_step + 50))
+    # Plot.add_plot_2D(axes[0, 1], func_=lambda x: x * 1.4, x_step=1)
+    # Plot.add_plot_2D(axes[0, 1], func_=lambda x: x, x_step=1)
     # Plot.spatial_time_plot(follower_index[0], lane_id=0, color_info_name=C_Info.safe_picud_KK, data_df=df,
     #                        color_lambda_=lambda x: -1 if x < 0 else 0)
-    # Plot.spatial_time_plot(follower_index[0], lane_id=0, color_info_name=C_Info.safe_picud_KK, data_df=df)
+    Plot.spatial_time_plot(follower_index[0], lane_add_num=0, data_df=df)
     # # Plot.spatial_time_plot(follower_index[0], lane_id=0, color_info_name=C_Info.a, data_df=df,
     # #                        color_lambda_=lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
     # Plot.spatial_time_plot(follower_index[0], lane_id=0, color_info_name=C_Info.v, data_df=df)

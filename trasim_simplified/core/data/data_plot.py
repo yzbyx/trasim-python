@@ -69,7 +69,7 @@ class Plot:
         if P_Info.safe_picud in car_dfs[0].columns:
             ax = axes[1, 2]
             Plot.custom_plot(ax, "time(s)", "picud(m)", [car_df[C_Info.time] for car_df in car_dfs],
-                             [car_df[C_Info.safe_picud] for car_df in car_dfs],
+                             [car_df[C_Info.safe_picud_KK] for car_df in car_dfs],
                              data_label=[f"index={id_}" for id_ in id_list])
 
         ax = axes[2][0]

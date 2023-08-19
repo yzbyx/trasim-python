@@ -59,7 +59,7 @@ class CFM:
 
 class LCM:
     KK = 'KK'
-    """KK模型的换道策略"""
+    """"""
     ACC = "ACC/TPACC"
     """Kerner对自动驾驶类车辆的换道规则"""
 
@@ -86,19 +86,19 @@ class SECTION_TYPE:
 # ******************************
 class V_TYPE:
     # 汽车
-    PASSENGER = 'passenger'
+    PASSENGER = 0
     # 货车
-    TRUCK = 'truck'
+    TRUCK = 1
     # 公交车
-    BUS = 'bus'
-    OBSTACLE = "obstacle"
+    BUS = 2
+    OBSTACLE = -1
 
     @classmethod
     def get_all_v_type_no_obstacle(cls):
         dict_ = V_TYPE.__dict__
         values = {}
         for key in dict_.keys():
-            if isinstance(dict_[key], str) and key[:2] != "__" and key != V_TYPE.OBSTACLE:
+            if isinstance(dict_[key], int) and key[:2] != "__" and key != V_TYPE.OBSTACLE:
                 values.update({key: dict_[key]})
         return values
 

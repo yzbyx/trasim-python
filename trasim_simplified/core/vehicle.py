@@ -53,6 +53,10 @@ class Vehicle(Obstacle):
         self.lc_result = {"lc": 0, "a": None, "v": None, "x": None}
         """换道模型结果，lc（-1（向左换道）、0（保持当前车道）、1（向右换道）），a（换道位置调整加速度），v（速度），x（位置）"""
         self.lc_res_pre = self.lc_result.copy()
+        self.is_run_out = False
+        """是否驶离路外"""
+        self.pre_left_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
+        self.pre_right_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
 
     @property
     def last_step_lc_statu(self):
@@ -98,6 +102,8 @@ class Vehicle(Obstacle):
             return self.lane_id_list
         elif C_Info.id == info:
             return [self.ID] * len(self.pos_list)
+        elif C_Info.car_type == info:
+            return [self.type] * len(self.pos_list)
         elif C_Info.a == info:
             return self.acc_list
         elif C_Info.v == info:

@@ -66,7 +66,7 @@ class LCModel_ACC(LCModel):
 
         l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
         if self.left_lane is not None:
-            _f, _l = self.left_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l = self._safe_check(_f, _l)
             if not safe_:
                 left_ = False
@@ -78,7 +78,7 @@ class LCModel_ACC(LCModel):
                     left_ = True
         if self.right_lane is not None:
             # TODO: 车辆的x需要换算到对应车道的位置
-            _f, _l = self.right_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.right_lane.get_relative_car(self.vehicle)
             safe_, right_d_l = self._safe_check(_f, _l)
             if not safe_:
                 right_ = False
@@ -119,7 +119,7 @@ class LCModel_ACC(LCModel):
     def on_ramp_cal(self):
         """限制仅向左换道"""
         if self.left_lane is not None:
-            _f, _l = self.left_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l, v_hat, x = self._safe_check_on_ramp(_f, _l)
         else:
             safe_ = False

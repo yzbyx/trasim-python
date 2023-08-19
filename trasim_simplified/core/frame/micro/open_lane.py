@@ -55,7 +55,7 @@ class LaneOpen(LaneAbstract):
     def car_summon(self):
         if 0 < self.time_ < self.next_car_time:
             return
-        if self.next_car_time <= self.time_:
+        if self.next_car_time <= self.time_ and self.flow_rate > 0:
             # 车辆类别随机
             assert self.car_num_percent is not None
             if len(self.car_list) != 0:
@@ -63,7 +63,7 @@ class LaneOpen(LaneAbstract):
                 # if first.x - first.length - first.v * self.dt < 0:
                 if first.x - first.length < 0:
                     self.fail_summon_num += 1
-                    print(f"车道{self.ID}生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
+                    # print(f"车道{self.ID}在{self.step_}仿真步生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
                     return
 
             i = np.random.choice(self.car_num_percent, p=self.car_num_percent.ravel())
@@ -81,10 +81,22 @@ class LaneOpen(LaneAbstract):
                     max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
                 ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
             else:
-                if len(self.car_list) == 0:
-                    vehicle.v = vehicle.cf_model.get_expect_speed()
+                if self.car_initial_speed_list[i] == -1:
+                    if len(self.car_list) == 0:
+                        vehicle.v = vehicle.cf_model.get_expect_speed()
+                    else:
+                        vehicle.v = self.car_list[0].v
                 else:
-                    vehicle.v = self.car_list[0].v
+                    # 新的车辆汇入方式（效果不行，堵塞带依旧影响发车）
+                    if len(self.car_list) != 0:
+                        leader = self.car_list[0]
+                        vehicle.v = leader.v
+                        l_d = leader.dhw
+                        if not np.isnan(l_d):
+                            x = leader.x - l_d - leader.length
+                            vehicle.x = x if x >= vehicle.x else vehicle.x
+                    else:
+                        vehicle.v = vehicle.cf_model.get_expect_speed()
             vehicle.a = 0
             vehicle.set_car_param(self.car_param_list[i])
 
@@ -121,8 +133,5 @@ class LaneOpen(LaneAbstract):
             self.car_state_update_common(car)
 
             if car.x > self.lane_length:
+                car.is_run_out = True
                 self.car_remove(car, car.has_data())
-
-
-class CarLoader:
-    pass

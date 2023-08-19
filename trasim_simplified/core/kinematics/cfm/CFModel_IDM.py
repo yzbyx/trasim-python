@@ -125,5 +125,6 @@ def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, 
 
 
 if __name__ == '__main__':
+    print(calculate(2, 0, 30, 1.6, 0.73, 1.67, 4, 0, 0, 3.2849107205123032, 7.5554292492096922, 7.5))
     cf = CFModel_IDM(None, {})
     print(cf.basic_diagram_k_to_q(10, 5))

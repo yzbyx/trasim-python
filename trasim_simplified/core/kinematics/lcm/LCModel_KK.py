@@ -73,7 +73,7 @@ class LCModel_KK(LCModel):
         l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
         # 判断是否选择左转
         if self.left_lane is not None:
-            _f, _l = self.left_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l = self._safe_check(_f, _l)
             if not safe_:
                 left_ = False
@@ -85,7 +85,7 @@ class LCModel_KK(LCModel):
                     left_ = True
         # 判断是否选择右转
         if self.right_lane is not None:
-            _f, _l = self.right_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.right_lane.get_relative_car(self.vehicle)
             safe_, right_d_l = self._safe_check(_f, _l)
             if not safe_:
                 right_ = False
@@ -129,7 +129,7 @@ class LCModel_KK(LCModel):
     def on_ramp_cal(self):
         """限制仅向左换道"""
         if self.left_lane is not None:
-            _f, _l = self.left_lane.get_relative_car(self.vehicle.x)
+            _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l, v_hat, x = self._safe_check_on_ramp(_f, _l)
         else:
             safe_ = False
