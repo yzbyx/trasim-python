@@ -1,7 +1,7 @@
 # -*- coding = uft-8 -*-
 # @Time : 2022-08-01 8:08
 # @Author : yzbyx
-# @File : dataAnalysis.py
+# @File : data_analysis.py
 # @Software : PyCharm
 import random
 
