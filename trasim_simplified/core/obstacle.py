@@ -7,7 +7,7 @@ from trasim_simplified.core.constant import COLOR
 
 
 class Obstacle:
-    def __init__(self, type_: str):
+    def __init__(self, type_: int):
         self.x = 0
         self.v = 0
         self.a = 0

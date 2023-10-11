@@ -13,6 +13,7 @@ from trasim_simplified.core.data.data_processor import DataProcessor
 from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.frame.micro.open_lane import LaneOpen
 from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
+from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimWarning import TrasimWarning
@@ -21,14 +22,17 @@ from trasim_simplified.util.decorator.timer import _get_current_time
 
 class Road:
     """在不影响Lane功能的基础上实现多车道道路"""
-    def __init__(self, length: float):
+    def __init__(self, length: float, pyqtgraph=False):
         self.yield_ = True
         self.ID = 0
         self.lane_length = length
         self.lane_list: list[LaneAbstract] = []
         self.id_accumulate = 0
 
-        self.ui: UI = UI(self)
+        if pyqtgraph:
+            self.ui: PyqtUI = PyqtUI(self)
+        else:
+            self.ui: UI = UI(self)
         self.step_ = 0
         self.sim_step = None
         self.dt = None

@@ -50,7 +50,7 @@ def run_road():
                 lanes[i].car_loader(400, THW_DISTRI.Uniform)
             lanes[i].data_container.config()
 
-    for step, state in sim.run(data_save=True, has_ui=False, frame_rate=-1,
+    for step, state in sim.run(data_save=True, has_ui=True, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         pass
         # if step == 0 and state == 0:

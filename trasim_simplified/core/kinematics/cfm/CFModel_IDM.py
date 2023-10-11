@@ -4,7 +4,7 @@
 # @File : CFModel_IDM.py
 # @Software : PyCharm
 from typing import TYPE_CHECKING, Optional
-
+import numba
 import numpy as np
 
 if TYPE_CHECKING:
@@ -66,9 +66,8 @@ class CFModel_IDM(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        f_param = [self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d,
-                   self._delta]
-        return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
+        return calculate(self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d,
+                         self._delta, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
                          self.vehicle.x + self.vehicle.dhw, self.vehicle.leader.length)
 
     def equilibrium_state(self, speed, dhw, v_length):
@@ -110,9 +109,10 @@ class CFModel_IDM(CFModel):
         return self._omega
 
     def get_expect_speed(self):
-        return min(self.get_speed_limit(), self._v0)
+        return self._v0
 
 
+@numba.njit()
 def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))

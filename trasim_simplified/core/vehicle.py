@@ -12,13 +12,14 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
+from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class Vehicle(Obstacle):
-    def __init__(self, lane: 'LaneAbstract', type_: str, id_: int, length: float):
+    def __init__(self, lane: 'LaneAbstract', type_: int, id_: int, length: float):
         super().__init__(type_)
         self.ID = id_
         self.length = length
@@ -46,6 +47,8 @@ class Vehicle(Obstacle):
         self.picud_list = []
         self.picud_KK_list = []
 
+        self.preceding_id_list = []
+
         self.cf_model: Optional[CFModel] = None
         self.lc_model: Optional[LCModel] = None
 
@@ -61,7 +64,7 @@ class Vehicle(Obstacle):
     @property
     def last_step_lc_statu(self):
         """0为保持车道，-1为向左换道，1为向右换道"""
-        return self.lc_res_pre["lc"]
+        return self.lc_res_pre.get("lc", 0)
 
     def set_cf_model(self, cf_name: str, cf_param: dict):
         self.cf_model = get_cf_model(self, cf_name, cf_param)
@@ -97,13 +100,16 @@ class Vehicle(Obstacle):
         return self.leader is None or self.leader.type == V_TYPE.OBSTACLE
 
     def get_data_list(self, info):
-        from trasim_simplified.core.data.data_container import Info as C_Info
         if C_Info.lane_add_num == info:
             return self.lane_id_list
         elif C_Info.id == info:
             return [self.ID] * len(self.pos_list)
+        if C_Info.Preceding_ID == info:
+            return self.preceding_id_list
         elif C_Info.car_type == info:
             return [self.type] * len(self.pos_list)
+        elif C_Info.v_Length == info:
+            return [self.length] * len(self.pos_list)
         elif C_Info.a == info:
             return self.acc_list
         elif C_Info.v == info:
@@ -141,10 +147,11 @@ class Vehicle(Obstacle):
             TrasimError(f"{info}未创建！")
 
     def record(self):
-        from trasim_simplified.core.data.data_container import Info as C_Info
         for info in self.lane.data_container.save_info:
             if C_Info.lane_add_num == info:
                 self.lane_id_list.append(self.lane.add_num)
+            if C_Info.Preceding_ID == info:
+                self.preceding_id_list.append(self.leader.ID if self.leader is not None else np.NaN)
             if C_Info.a == info:
                 self.acc_list.append(self.a)
             elif C_Info.v == info:
@@ -283,10 +290,11 @@ class Vehicle(Obstacle):
         return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}{sep}" \
                f"ego_lc: {self.last_step_lc_statu}, " \
                f"ego_id: {self.ID}, ego_type: {self.cf_model.name}," \
-               f" ego_x: {self.x:.3f}, ego_v: {self.v:.3f}, ego_a: {self.a:.3f}{sep}" \
+               f" ego_x: {self.x:.3f}, ego_v: {self.v:.3f}, ego_a: {self.a:.3f}{sep}" + \
                f"leader_lc: {self.leader.last_step_lc_statu}, leader_id: {self.leader.ID}," \
                f" leader_type: {self.leader.cf_model.name}," \
-               f" leader_x: {self.leader.x:.3f}, leader_v: {self.leader.v:.3f}, leader_a: {self.leader.a:.3f}"
+               f" leader_x: {self.leader.x:.3f}, leader_v: {self.leader.v:.3f}, leader_a: {self.leader.a:.3f}" \
+            if self.leader is not None else ""
 
     def __repr__(self):
         return f"type: {self.cf_model.name}, step: {self.lane.step_}" +\

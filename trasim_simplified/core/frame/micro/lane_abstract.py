@@ -40,7 +40,7 @@ class LaneAbstract(ABC):
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
-        self.car_type_list: list[str] = []
+        self.car_type_list: list[int] = []
         self.car_length_list: list[float] = []
         self.car_initial_speed_list: list[float] = []
         self.speed_with_random_list: list[bool] = []
@@ -153,6 +153,8 @@ class LaneAbstract(ABC):
                 self.speed_limit.update({car_type: {speed_limit: [start_pos, end_pos]}})
 
     def get_speed_limit(self, pos, car_type: int) -> float:
+        if self.force_speed_limit is False:
+            return np.Inf
         if len(self.speed_limit) == 0:
             return self._default_speed_limit
 
@@ -168,7 +170,7 @@ class LaneAbstract(ABC):
     def car_num(self):
         return len(self.car_list)
 
-    def car_config(self, car_num: Union[int, float], car_length: float, car_type: str, car_initial_speed: float,
+    def car_config(self, car_num: Union[int, float], car_length: float, car_type: int, car_initial_speed: float,
                    speed_with_random: bool, cf_name: str, cf_param: dict[str, float], car_param: dict,
                    lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
@@ -308,11 +310,7 @@ class LaneAbstract(ABC):
             car.a = (speed_limit - car_speed_before) / self.dt
             car.v = speed_limit
 
-        if car.v > car.cf_model.get_expect_speed():
-            expect_speed = car.cf_model.get_expect_speed()
-            car.a = (expect_speed - car_speed_before) / self.dt
-            car.v = expect_speed
-        elif car.v < 0:
+        if car.v < 0:
             TrasimWarning(f"车辆速度出现负数！" + car.get_basic_info())
             car.a = - (car_speed_before / self.dt)
             car.v = 0
@@ -383,6 +381,8 @@ class LaneAbstract(ABC):
         if put_out_car_has_data:
             self.out_car_has_data.append(car)
         self.car_list.remove(car)
+        if hasattr(car, "plot_item"):
+            car.screen.removeItem(car.plot_item)
         if car.leader is not None:
             car.leader.follower = car.follower
         if car.follower is not None:

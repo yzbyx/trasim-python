@@ -8,6 +8,8 @@ import random
 from abc import ABC
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
+
 from trasim_simplified.core.constant import RUNMODE, RANDOM_SEED
 from trasim_simplified.core.kinematics.model import Model
 
@@ -43,6 +45,8 @@ class CFModel(Model, ABC):
         pass
 
     def get_speed_limit(self):
+        if self.vehicle.lane.force_speed_limit is False:
+            return np.Inf
         return self.vehicle.lane.get_speed_limit(self.vehicle.x, self.vehicle.type)
 
     def equilibrium_state(self, *args):
