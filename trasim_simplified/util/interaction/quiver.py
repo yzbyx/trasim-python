@@ -4,7 +4,6 @@
 # @File : quiver.py
 # Software: PyCharm
 import threading
-from multiprocessing import Process
 
 import matplotlib.pyplot as plt
 import numpy as np

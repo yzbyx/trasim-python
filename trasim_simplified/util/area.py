@@ -52,8 +52,8 @@ def get_hysteresis_by_integral(speed: np.ndarray, spacing: np.ndarray):
     """
     要首尾相连，即最后一个点的位置等于第一个点
 
-    :_param speed: 点序列的x坐标
-    :_param spacing: 点序列的y坐标
+    :param speed: 点序列的x坐标
+    :param spacing: 点序列的y坐标
     :return: 返回点列围合平面的平均y差值，顺时针为正，逆时针为负
     """
     assert (speed[0] == speed[-1]) and (spacing[0] == spacing[-1]), "要首尾相连，即最后一个点的位置等于第一个点"
