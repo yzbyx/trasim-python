@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 try:
-    from tools.info import Info as C_Info
+    from traj_process.tools import Info as C_Info
 except ImportError:
     from trasim_simplified.core.data.data_container import Info as C_Info
 

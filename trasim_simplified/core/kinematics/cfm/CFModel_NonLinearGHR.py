@@ -5,6 +5,7 @@
 # @Software : PyCharm
 from typing import Optional, TYPE_CHECKING
 
+import numba
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
@@ -58,10 +59,7 @@ class CFModel_NonLinearGHR(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        return self._calculate(self.vehicle.v, self.pre_x, self.l_pre_x, self.pre_v, self.l_pre_v)
-
-    def _calculate(self, speed, pre_x, l_pre_x, pre_v, l_pre_v) -> float:
-        return self._a * (speed ** self._m) * (l_pre_v - pre_v) / ((l_pre_x - pre_x) ** self._l)
+        return calculate(self.vehicle.v, self.pre_x, self.l_pre_x, self.pre_v, self.l_pre_v)
 
     def get_expect_dec(self):
         return self.DEFAULT_EXPECT_DEC
@@ -71,3 +69,8 @@ class CFModel_NonLinearGHR(CFModel):
 
     def get_expect_speed(self):
         return self.get_speed_limit()
+
+
+@numba.njit()
+def calculate(a, m, l, speed, pre_x, l_pre_x, pre_v, l_pre_v) -> float:
+    return a * (speed ** m) * (l_pre_v - pre_v) / ((l_pre_x - pre_x) ** l)

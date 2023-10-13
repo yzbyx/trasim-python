@@ -65,6 +65,7 @@ class QuiverInteract:
         t1 = threading.Thread(name="draw_quiver", target=self.draw_quiver)
         t2 = threading.Thread(name="draw_traj", target=self.draw_hysteresis)
         self.show_wait()
+        self.fig.canvas.draw()
         t1.start()
         t2.start()
         t1.join()
@@ -155,8 +156,8 @@ class QuiverInteract:
 
 
 def cf_IDM_acc(s0, s1, v0, T, omega, d, delta, speed, leaderV, gap, **kwargs):
-    sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
-    # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
+    # sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
+    sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
     # 计算车辆下一时间步加速度
     finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
@@ -173,23 +174,37 @@ def cf_Zhang_acc(alpha, beta, v0, s0, T, speed, leaderV, gap, **kwargs):
 
 
 def cf_Zhang_equilibrium(alpha, beta, v0, s0, T, v, **kwargs):
+    if alpha == 0:
+        return np.nan * v
     gap = v * T + s0
     return gap
 
 
-if __name__ == '__main__':
-    # q_IDM = QuiverInteract(
-    #     cf_func=cf_IDM_acc,
-    #     cf_e_func=cf_IDM_equilibrium,
-    #     default={"s0": 2, "s1": 0, "v0": 33.3, "T": 1.6, "omega": 0.73, "d": 1.67, "delta": 4},
-    #     range={"s0": [0, 5], "s1": [0, 5], "v0": [0, 40], "T": [0, 5], "omega": [0, 5], "d": [0, 5], "delta": [0, 10]},
-    #     step={"s0": 0.1, "s1": 0.1, "v0": 0.1, "T": 0.1, "omega": 0.1, "d": 0.1, "delta": 1}
-    # )
+def cf_OVM_acc(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
+    bf += leaderL
+    bc += leaderL       # 期望最小车头间距
 
-    q_Zhang = QuiverInteract(
-        cf_func=cf_Zhang_acc,
-        cf_e_func=cf_Zhang_equilibrium,
-        default={"alpha": 0.5, "beta": 0.5, "v0": 30, "s0": 2, "T": 1.6},
-        range={"alpha": [0, 10], "beta": [0, 10], "v0": [0, 40], "s0": [0, 5], "T": [0, 5]},
-        step={"alpha": 0.1, "beta": 0.1, "v0": 0.1, "s0": 0.1, "T": 0.1}
+    headway = leaderX - xOffset
+    V = V0 * (np.tanh(m * (headway - bf)) - np.tanh(m * (bc - bf)))
+    # V = V0 * (np.tanh(gap / b - C1) + C2)
+    finalAcc = a * (V - speed)
+
+    return finalAcc
+
+
+if __name__ == '__main__':
+    q_IDM = QuiverInteract(
+        cf_func=cf_IDM_acc,
+        cf_e_func=cf_IDM_equilibrium,
+        default={"s0": 2, "s1": 0, "v0": 33.3, "T": 1.6, "omega": 0.73, "d": 1.67, "delta": 4},
+        range={"s0": [0, 5], "s1": [0, 5], "v0": [0, 40], "T": [0, 5], "omega": [0, 5], "d": [0, 5], "delta": [0, 10]},
+        step={"s0": 0.1, "s1": 0.1, "v0": 0.1, "T": 0.1, "omega": 0.1, "d": 0.1, "delta": 1}
     )
+
+    # q_Zhang = QuiverInteract(
+    #     cf_func=cf_Zhang_acc,
+    #     cf_e_func=cf_Zhang_equilibrium,
+    #     default={"alpha": 0.5, "beta": 0.5, "v0": 30, "s0": 2, "T": 1.6},
+    #     range={"alpha": [0, 10], "beta": [0, 10], "v0": [0, 40], "s0": [0, 5], "T": [0, 5]},
+    #     step={"alpha": 0.1, "beta": 0.1, "v0": 0.1, "s0": 0.1, "T": 0.1}
+    # )

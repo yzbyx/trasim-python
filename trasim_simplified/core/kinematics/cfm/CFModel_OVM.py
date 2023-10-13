@@ -5,6 +5,7 @@
 # @Software : PyCharm
 from typing import Optional, TYPE_CHECKING
 
+import numba
 import numpy as np
 
 if TYPE_CHECKING:
@@ -80,6 +81,7 @@ class CFModel_OVM(CFModel):
         return min(self.get_speed_limit(), self._V0)
 
 
+@numba.njit()
 def calculate(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     bf += leaderL
     bc += leaderL       # 期望最小车头间距

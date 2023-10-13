@@ -5,6 +5,7 @@
 # @Software : PyCharm
 from typing import Optional, TYPE_CHECKING
 
+import numba
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
@@ -68,6 +69,7 @@ class CFModel_Gipps(CFModel):
         return min(self.get_speed_limit(), self._v0)
 
 
+@numba.njit()
 def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX) -> dict:
     # 计算车头间距
     deltaX = leaderX - xOffset

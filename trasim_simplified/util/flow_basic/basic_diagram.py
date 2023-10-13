@@ -5,10 +5,12 @@
 # @Software : PyCharm
 import os
 import pickle
+import threading
 import time
 from typing import Optional
 
 import numpy as np
+from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import V_TYPE
@@ -47,30 +49,27 @@ class BasicDiagram:
         else:
             occ_seq = np.round(np.arange(occ_start, occ_end, d_occ), 6)
         car_nums = list(map(int, np.round(np.ceil(occ_seq * self.lane_length / self.car_length))))
+        real_occ_seq = np.round(np.array(car_nums) * self.car_length / self.lane_length, 6)
 
         self.file_name = file_name if file_name is not None else "result_IDM.pkl"
         self.result = self.load_result(self.resume, self.file_name)
 
-        self.occ_seq = occ_seq
+        self.occ_seq = real_occ_seq
         dt = kwargs.get("dt", 0.1)
         warm_up_step = int(3600 / dt)
         sim_step = warm_up_step + int(1800 / dt)
         jam = kwargs.get("jam", False)
         update_method = kwargs.get("state_update_method", "Euler")
-        time_ = 0
 
         print(f"CFM: {self.cf_mode}, is_jam: {jam}")
 
-        for i, car_num in enumerate(car_nums):
+        time_ = time.time()
+
+        def cal(i, car_num):
             time_epoch_begin = time.time()
 
-            if self.check_contain_occ(self.occ_seq[i]):
-                continue
-
-            print(f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
-                  f" occ: {occ_seq[i]:.2f}, car_nums: {car_num},"
-                  f" density[veh/km]: {car_num / (self.lane_length / 1000)}",
-                  end="\t\t\t")
+            if not kwargs.get("parallel", False) and self.check_contain_occ(self.occ_seq[i]):
+                return
 
             params = [car_num, self.car_length, V_TYPE.PASSENGER, self.car_initial_speed,
                       self.speed_with_random, self.cf_mode, self.cf_param, {}]
@@ -91,18 +90,38 @@ class BasicDiagram:
             df = lane.data_container.data_to_df()
 
             result = lane.data_processor.circle_kqv_cal(df, self.lane_length)
-            self.result["occ"].append(occ_seq[i])
-            self.result["V"].append(np.mean(result[P_Info.avg_speed]) * 3.6)
-            self.result["Q"].append(np.mean(result[P_Info.avg_q_by_v_k]))
-            self.result["K"].append(np.mean(result[P_Info.avg_k_by_car_num_lane_length]))
+            if not kwargs.get("parallel", False):
+                self.result["occ"].append(self.occ_seq[i])
+                self.result["V"].append(np.mean(result[P_Info.avg_speed]) * 3.6)
+                self.result["Q"].append(np.mean(result[P_Info.avg_q_by_v_k]))
+                self.result["K"].append(np.mean(result[P_Info.avg_k_by_car_num_lane_length]))
 
-            self.save_result(self.file_name, self.result)
+                self.save_result(self.file_name, self.result)
 
             time_epoch_end = time.time()
             time_epoch = time_epoch_end - time_epoch_begin
             cal_speed = car_num * sim_step / time_epoch
-            time_ += time_epoch
-            print(f"time_used: {time_:.2f}s + time_epoch: {time_epoch:.2f}s + cal_speed: {cal_speed:.2f}cal/s^-1")
+            print(
+                f"Thread: {threading.current_thread()} "
+                f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
+                f" occ: {self.occ_seq[i]:.2f}, car_nums: {car_num},"
+                f" density[veh/km]: {car_num / (self.lane_length / 1000)}",
+                f"\t\t\t"
+                f"time_used: {time.time() - time_:.2f}s "
+                f"time_epoch: {time_epoch:.2f}s "
+                f"cal_speed: {cal_speed:.2f}cal/s^-1"
+            )
+            if kwargs.get("parallel", True):
+                return self.occ_seq[i], np.mean(result[P_Info.avg_speed]) * 3.6, np.mean(result[P_Info.avg_q_by_v_k]), \
+                          np.mean(result[P_Info.avg_k_by_car_num_lane_length])
+
+        if not kwargs.get("parallel", False):
+            for i_, car_num_ in enumerate(car_nums):
+                cal(i_, car_num_)
+        else:
+            self.result["occ"], self.result["V"], self.result["Q"], self.result["K"] \
+                = zip(*Parallel(n_jobs=-1)(delayed(cal)(i, car_num) for i, car_num in enumerate(car_nums)))
+            self.save_result(self.file_name, self.result)
 
     def get_by_equilibrium_state_func(self):
         cf_model = get_cf_model(None, self.cf_mode, self.cf_param)

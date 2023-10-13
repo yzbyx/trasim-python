@@ -88,12 +88,15 @@ class CFModel_W99(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        f_param = [self._CC0, self._CC1, self._CC2, self._CC3, self._CC4, self._CC5, self._CC6, self._CC7,
-                   self._CC8, self._CC9, self._vDesire, self._aggressive]
-        result = calculate(*f_param, self.status, self.dt, self.vehicle.v, self.vehicle.a, self.vehicle.x,
-                           self.vehicle.length,
-                           self.vehicle.leader.v, self.vehicle.leader.a, self.vehicle.x + self.vehicle.dhw,
-                           self.vehicle.leader.length)
+        result = calculate(
+            self._CC0, self._CC1, self._CC2, self._CC3, self._CC4, self._CC5, self._CC6, self._CC7,
+            self._CC8, self._CC9, self._vDesire, self._aggressive,
+
+            self.status, self.dt, self.vehicle.v, self.vehicle.a, self.vehicle.x,
+            self.vehicle.length,
+            self.vehicle.leader.v, self.vehicle.leader.a, self.vehicle.x + self.vehicle.dhw,
+            self.vehicle.leader.length)
+
         acc, self.status = result
         return acc
 

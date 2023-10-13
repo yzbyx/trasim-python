@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from trasim_simplified.core.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM
 
 
 class CFModel_Dummy(CFModel):
