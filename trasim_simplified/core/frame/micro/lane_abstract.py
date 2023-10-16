@@ -64,7 +64,7 @@ class LaneAbstract(ABC):
         """是否为Road类控制"""
         self.force_speed_limit = False
         """是否强制车辆速度不超过道路限速"""
-        self.state_update_method = "Euler"
+        self.state_update_method = "Euler"  # TODO
         """状态更新方式：
         
         1.
@@ -77,7 +77,11 @@ class LaneAbstract(ABC):
         Treiber, M., Kanagaraj, V., 2015.
          Comparing numerical integration schemes for time-continuous car-following models. Physica A 419, 183–195.
         
-        Trapezoidal梯形 (v(t + Δt) += 0.5(a(t) + a(t + Δt)) * Δt, x(t + Δt) += (v(t) + v(t + Δt)) * Δt / 2)"""
+        Trapezoidal梯形 (v(t + Δt) += 0.5(a(t) + a(t + Δt)) * Δt, x(t + Δt) += (v(t) + v(t + Δt)) * Δt / 2)
+        
+        4. the standard fourth-order Runge–Kutta method (RK4)
+        ...
+        """
 
         self.dt = 0.1
         """仿真步长 [s]"""
@@ -297,6 +301,7 @@ class LaneAbstract(ABC):
 
     def car_state_update_common(self, car: Vehicle):
         car_speed_before = car.v
+        car_acc_before = car.a
 
         if self.state_update_method in ["Ballistic", "Euler"]:
             car.v += car.cf_acc * self.dt
@@ -382,7 +387,7 @@ class LaneAbstract(ABC):
             self.out_car_has_data.append(car)
         self.car_list.remove(car)
         if hasattr(car, "plot_item"):
-            car.screen.removeItem(car.plot_item)
+            car.__getattribute__("screen").removeItem(car.plot_item)
         if car.leader is not None:
             car.leader.follower = car.follower
         if car.follower is not None:

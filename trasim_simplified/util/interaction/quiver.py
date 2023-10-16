@@ -10,6 +10,8 @@ import numpy as np
 
 from matplotlib.widgets import Button, Slider
 
+from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc, cf_IDM_equilibrium
+
 
 class QuiverInteract:
     def __init__(self, cf_func, cf_e_func, fig_size=(14, 5), **kwargs):
@@ -153,19 +155,6 @@ class QuiverInteract:
     def reset(self, event):
         for _, slider in self.slider_map.items():
             slider.reset()
-
-
-def cf_IDM_acc(s0, s1, v0, T, omega, d, delta, speed, leaderV, gap, **kwargs):
-    # sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
-    sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
-    # 计算车辆下一时间步加速度
-    finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
-
-    return finalAcc
-
-
-def cf_IDM_equilibrium(s0, s1, v0, T, delta, v, **kwargs):
-    return (s0 + v * T + s1 * np.sqrt(v / v0)) / np.sqrt(1 - np.power(v / v0, delta))
 
 
 def cf_Zhang_acc(alpha, beta, v0, s0, T, speed, leaderV, gap, **kwargs):

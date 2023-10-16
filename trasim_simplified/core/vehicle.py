@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.constant import COLOR, V_TYPE
+from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
-from trasim_simplified.core.data.data_container import Info as C_Info
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract

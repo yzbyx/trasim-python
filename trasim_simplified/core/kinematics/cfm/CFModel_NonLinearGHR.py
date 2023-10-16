@@ -59,7 +59,7 @@ class CFModel_NonLinearGHR(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        return calculate(self.vehicle.v, self.pre_x, self.l_pre_x, self.pre_v, self.l_pre_v)
+        return cf_NonLinearGHR_acc_jit(self.vehicle.v, self.pre_x, self.l_pre_x, self.pre_v, self.l_pre_v)
 
     def get_expect_dec(self):
         return self.DEFAULT_EXPECT_DEC
@@ -72,5 +72,9 @@ class CFModel_NonLinearGHR(CFModel):
 
 
 @numba.njit()
-def calculate(a, m, l, speed, pre_x, l_pre_x, pre_v, l_pre_v) -> float:
+def cf_NonLinearGHR_acc_jit(a, m, l, speed, pre_x, l_pre_x, pre_v, l_pre_v) -> float:
     return a * (speed ** m) * (l_pre_v - pre_v) / ((l_pre_x - pre_x) ** l)
+
+
+def cf_NonLinearGHR_acc(m, l, a, speed, gap, leaderV, leaderL, **kwargs):
+    return a * (speed ** m) * (leaderV - speed) / ((gap + leaderL) ** l)

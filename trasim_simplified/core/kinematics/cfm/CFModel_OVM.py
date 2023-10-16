@@ -53,9 +53,9 @@ class CFModel_OVM(CFModel):
             return self.get_expect_acc()
         self._update_dynamic()
         f_param = [self._a, self._V0, self._m, self._bf, self._bc]
-        return calculate(*f_param, self.vehicle.v, self.vehicle.x,
-                         self.vehicle.x + self.vehicle.dhw,
-                         self.vehicle.leader.length)
+        return cf_OVM_acc_jit(*f_param, self.vehicle.v, self.vehicle.x,
+                              self.vehicle.x + self.vehicle.dhw,
+                              self.vehicle.leader.length)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -82,7 +82,7 @@ class CFModel_OVM(CFModel):
 
 
 @numba.njit()
-def calculate(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
+def cf_OVM_acc_jit(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     bf += leaderL
     bc += leaderL       # 期望最小车头间距
 
@@ -92,3 +92,7 @@ def calculate(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     finalAcc = a * (V - speed)
 
     return finalAcc
+
+
+def cf_OVM_acc(a, V0, m, bf, bc, speed, gap, **kwargs):
+    return a * (V0 * (np.tanh(m * (gap + kwargs.get("leaderL") - bf)) - np.tanh(m * (bc - bf))) - speed)

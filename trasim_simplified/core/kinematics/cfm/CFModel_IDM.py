@@ -66,9 +66,8 @@ class CFModel_IDM(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        return calculate(self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d,
-                         self._delta, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
-                         self.vehicle.x + self.vehicle.dhw, self.vehicle.leader.length)
+        return cf_IDM_acc_jit(self._s0, self._s1, min(self._v0, self.get_speed_limit()), self._T, self._omega, self._d,
+                              self._delta, self.vehicle.v, self.vehicle.gap, self.vehicle.leader.v)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -113,18 +112,27 @@ class CFModel_IDM(CFModel):
 
 
 @numba.njit()
-def calculate(s0, s1, v0, T, omega, d, delta, speed, xOffset, leaderV, leaderX, leaderL) -> dict:
+def cf_IDM_acc_jit(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
-    # 计算与前车的净间距
-    gap = leaderX - xOffset - leaderL + 1e-12
     # 计算车辆下一时间步加速度
-    finalAcc = omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
+    return omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
-    return finalAcc
+
+def cf_IDM_acc(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV, **kwargs) -> dict:
+    return cf_IDM_acc_jit(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV)
+
+
+@numba.njit()
+def cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, v):
+    return (s0 + v * T + s1 * np.sqrt(v / v0)) / np.sqrt(1 - np.power(v / v0, delta))
+
+
+def cf_IDM_equilibrium(s0, s1, v0, T, delta, v, **kwargs):
+    return cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, v)
 
 
 if __name__ == '__main__':
-    print(calculate(2, 0, 30, 1.6, 0.73, 1.67, 4, 0, 0, 3.2849107205123032, 7.5554292492096922, 7.5))
+    print(cf_IDM_acc(2, 0, 30, 1.6, 0.73, 1.67, 4, 0, 7.5, 3.2))
     cf = CFModel_IDM(None, {})
     print(cf.basic_diagram_k_to_q(10, 5))

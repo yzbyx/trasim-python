@@ -4,7 +4,7 @@
 # @File : __init__.py
 # @Software : PyCharm
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.kinematics.cfm.CFModel_IDM import CFModel_IDM as IDM
+from trasim_simplified.core.kinematics.cfm.CFModel_IDM import CFModel_IDM as IDM, cf_IDM_acc
 from trasim_simplified.core.kinematics.cfm.CFModel_Gipps import CFModel_Gipps as GIPPS
 from trasim_simplified.core.kinematics.cfm.CFModel_W99 import CFModel_W99 as W99
 from trasim_simplified.core.kinematics.cfm.CFModel_NonLinearGHR import CFModel_NonLinearGHR as GHR
@@ -55,6 +55,27 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
         return CTM(_driver, param)
     else:
         raise TrasimError(rem.NO_MODEL.format(name))
+
+
+def get_cf_func(cf_name):
+    if cf_name == CFM.IDM:
+        from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc
+        cf_func = cf_IDM_acc
+    elif cf_name == CFM.GIPPS:
+        from trasim_simplified.core.kinematics.cfm.CFModel_Gipps import cf_Gipps_acc_jit
+        cf_func = cf_Gipps_acc_jit
+    elif cf_name == CFM.NON_LINEAR_GHR:
+        from trasim_simplified.core.kinematics.cfm.CFModel_NonLinearGHR import cf_NonLinearGHR_acc
+        cf_func = cf_NonLinearGHR_acc
+    elif cf_name == CFM.WIEDEMANN_99:
+        from trasim_simplified.core.kinematics.cfm.CFModel_W99 import cf_Wiedemann99_acc
+        cf_func = cf_Wiedemann99_acc
+    elif cf_name == CFM.OPTIMAL_VELOCITY:
+        from trasim_simplified.core.kinematics.cfm.CFModel_OVM import cf_OVM_acc
+        cf_func = cf_OVM_acc
+    else:
+        raise TrasimError(f"{cf_name} is not be configured!")
+    return cf_func
 
 
 def get_cf_id(name) -> int:

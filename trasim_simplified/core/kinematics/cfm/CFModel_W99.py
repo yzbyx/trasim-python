@@ -11,6 +11,7 @@
 ############################
 from typing import Optional, TYPE_CHECKING
 
+import numba
 import numpy as np
 
 if TYPE_CHECKING:
@@ -88,14 +89,13 @@ class CFModel_W99(CFModel):
         if self.vehicle.leader is None:
             return self.get_expect_acc()
         self._update_dynamic()
-        result = calculate(
+        result = cf_W99_jit(
             self._CC0, self._CC1, self._CC2, self._CC3, self._CC4, self._CC5, self._CC6, self._CC7,
             self._CC8, self._CC9, self._vDesire, self._aggressive,
 
-            self.status, self.dt, self.vehicle.v, self.vehicle.a, self.vehicle.x,
+            self.status, self.dt, self.vehicle.v, self.vehicle.a, self.vehicle.gap,
             self.vehicle.length,
-            self.vehicle.leader.v, self.vehicle.leader.a, self.vehicle.x + self.vehicle.dhw,
-            self.vehicle.leader.length)
+            self.vehicle.leader.v, self.vehicle.leader.a)
 
         acc, self.status = result
         return acc
@@ -114,11 +114,12 @@ class CFModel_W99(CFModel):
         return min(self.get_speed_limit(), self._vDesire)
 
 
-def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive, status,
-              interval, speed, acc, xOffset, length, leaderV, leaderA, leaderX, leaderL):
+@numba.njit()
+def cf_W99_jit(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive, status,
+               interval, speed, acc, gap, length, leaderV, leaderA):
     cc6 /= 10000
 
-    dx = leaderX - xOffset - leaderL  # 车辆净间距
+    dx = gap  # 车辆净间距
     dv = leaderV - speed  # 速度差
 
     sdxc, sdxo, sdxv, sdvc, sdvo = \
@@ -181,6 +182,7 @@ def calculate(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggress
     return finalAcc, status
 
 
+@numba.njit()
 def getThresholdValues(cc0, cc1, cc2, cc3, cc4, cc5, cc6, aggressive, speed, gap, leaderV, leaderA):
     cc6 = cc6 / 10000
 
@@ -203,6 +205,22 @@ def getThresholdValues(cc0, cc1, cc2, cc3, cc4, cc5, cc6, aggressive, speed, gap
     return sdxc, sdxo, sdxv, sdvc, sdvo
 
 
+@numba.njit()
 def myRandom(seed):
     """根据一定规则，生成[0, 0.5]范围的随机数"""
     return seed
+
+
+def cf_Wiedemann99_acc(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive,
+                       speed, gap, leaderV, **kwargs):
+    return cf_W99_jit(cc0, cc1, cc2, cc3, cc4, cc5, cc6, cc7, cc8, cc9, vDesire, aggressive,
+                      kwargs.get("status"), kwargs.get("interval"), speed, kwargs.get("acc"), gap,
+                      kwargs.get("length"), leaderV, kwargs.get("leaderA"))
+# TODO
+
+
+if __name__ == '__main__':
+    acc = cf_W99_jit(1.5, 1.3, 4, -12, -0.25, 0.35, 0.0006, 0.25, 2, 1.5,
+                     22.2, 0, None, 1, 0, 0, 7.5, 0,
+                     0, 0)
+    print(acc)

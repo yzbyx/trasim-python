@@ -27,7 +27,7 @@ class CFModel_Gipps(CFModel):
         self._b = f_param.get("b", -3)       # 最大期望减速度
         self._v0 = f_param.get("v0", 20)      # 期望速度
         self._tau = f_param.get("tau", 0.7)     # 反应时间
-        self._s = f_param.get("s", 6.5)       # 静止时正常最小车头间距（前车有效车长）
+        self._s = f_param.get("s", 1.5)       # 静止时正常最小车头净间距
         self._b_hat = f_param.get("b_hat", -2.5)   # 预估前车最大期望减速度
 
     def _update_dynamic(self):
@@ -40,8 +40,7 @@ class CFModel_Gipps(CFModel):
             return self.get_expect_acc()
         self._update_dynamic()
         f_param = [self._a, self._b, self._v0, self._tau, self._s, self._b_hat]
-        return calculate(*f_param, self.vehicle.v, self.vehicle.x, self.vehicle.leader.v,
-                         self.vehicle.x + self.vehicle.dhw)
+        return cf_Gipps_acc_jit(*f_param, self.vehicle.v, self.vehicle.gap, self.vehicle.leader.v)
 
     def equilibrium_state(self, speed, dhw, v_length):
         """
@@ -70,15 +69,17 @@ class CFModel_Gipps(CFModel):
 
 
 @numba.njit()
-def calculate(a, b, v0, tau, s, b_hat, speed, xOffset, leaderV, leaderX) -> dict:
-    # 计算车头间距
-    deltaX = leaderX - xOffset
+def cf_Gipps_acc_jit(a, b, v0, tau, s, b_hat, speed, gap, leaderV) -> dict:
     # 包络线公式限制
     vMax1 = speed + 2.5 * a * tau * (1 - speed / v0) * np.power(0.025 + speed / v0, 0.5)
-    # 安全驾驶限制，注意此处的s为当前车与前车的期望车头间距
-    vMax2 = b * tau + np.sqrt((b ** 2) * (tau ** 2) - b * (2 * (deltaX - s) - speed * tau - (leaderV ** 2) / b_hat))
+    # 安全驾驶限制
+    vMax2 = b * tau + np.sqrt((b ** 2) * (tau ** 2) - b * (2 * (gap - s) - speed * tau - (leaderV ** 2) / b_hat))
     # 选取最小的速度限制作为下一时刻t+tau的速度
     vTau = np.min([vMax1, vMax2], axis=0)
     # 计算加速度和位置
     finalAcc = (vTau - speed) / tau
     return finalAcc
+
+
+def cf_Gipps_acc(a, b, v0, tau, s, b_hat, speed, gap, leaderV, **kwargs) -> dict:
+    return cf_Gipps_acc_jit(a, b, v0, tau, s, b_hat, speed, gap, leaderV)
