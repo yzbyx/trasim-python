@@ -78,6 +78,11 @@ def get_cf_func(cf_name):
     return cf_func
 
 
+def get_cf_default_param(cf_name):
+    cf_model = get_cf_model(None, cf_name)
+    return cf_model.get_param_map()
+
+
 def get_cf_id(name) -> int:
     if name == CFM.IDM:
         return 0

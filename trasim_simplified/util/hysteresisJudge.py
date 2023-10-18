@@ -4,7 +4,7 @@
 # @File : hysteresisJudge.py
 # @Software : PyCharm
 import numpy as np
-from util.area import getAreaByOrderedPoints
+from trasim_simplified.util.area import getAreaByOrderedPoints
 
 # def getHysteresisArea(v_data, other_data):
 #     print('不要使用该方法！')

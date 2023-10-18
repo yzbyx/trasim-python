@@ -54,5 +54,5 @@ class Model(metaclass=abc.ABCMeta):
         param_map = {}
         for name_ in self.__dict__:
             if name_[0] == "_" and name_[:2] != "__" and not callable(name_):
-                param_map[name_] = getattr(self, name_)
+                param_map[name_[1:]] = getattr(self, name_)
         return param_map
