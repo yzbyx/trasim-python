@@ -18,7 +18,7 @@ from matplotlib.colors import Colormap
 
 from trasim_simplified.core.data.data_processor import Info as P_Info, DataProcessor, DetectLoopInfo as DLI
 try:
-    from trasim_simplified import C_Info
+    from trasim_simplified.core.constant import TrackInfo as C_Info
 except ImportError:
     print("Tools not found, use trasim_simplified.core.data.data_container.Info")
     from trasim_simplified.core.data.data_container import Info as C_Info
@@ -31,10 +31,10 @@ def get_single_ax_fig() -> tuple[plt.Figure, plt.Axes]:
 class Plot:
     @staticmethod
     def basic_plot(
+        data_df: pd.DataFrame,
         id_: Union[int, list[int]] = 0,
         lane_id=-1,
         axes: np.ndarray[plt.Axes] = None,
-        data_df: pd.DataFrame = None,
         time_range=None,
     ):
         """绘制车辆index"""
@@ -154,10 +154,10 @@ class Plot:
 
     @staticmethod
     def spatial_time_plot(
+        data_df: pd.DataFrame,
         car_id=-1,
         lane_add_num=0,
         color_info_name=None,
-        data_df: pd.DataFrame = None,
         single_plot=False,
         color_lambda_: Optional[Callable] = None,
         color_value_remove_outliers=False,
@@ -167,7 +167,8 @@ class Plot:
         color_bar=True,
         frame_rate=10,
     ):
-        data_df = data_df[data_df[C_Info.lane_add_num] == lane_add_num]
+        if C_Info.lane_add_num in data_df.columns:
+            data_df = data_df[data_df[C_Info.lane_add_num] == lane_add_num]
 
         if C_Info.time not in data_df.columns:
             print(f"time not in data_df.columns, calculate it... (frame_rate={frame_rate})")
@@ -363,6 +364,20 @@ class Plot:
             ax.set_yticklabels([f"{start:.0f}m:{end:.0f}m" for start, end in space_sections_zip])
             fig.colorbar(im)
         return fig, axes
+
+    @staticmethod
+    def two_dim_plot(df: pd.DataFrame, x_index: str, y_index: str,
+                     fig: plt.Figure = None, ax: plt.Axes = None, **kwargs):
+        if ax is None or fig is None:
+            fig, ax = plt.subplots(1, 1, figsize=(7, 5), layout="constrained")
+        ax: plt.Axes = ax
+        ax.set_xlabel(x_index)
+        ax.set_ylabel(y_index)
+        for id_ in df[C_Info.v_ID].unique():
+            target = df[df[C_Info.v_ID] == id_]
+            ax.plot(target[x_index], target[y_index], label=id_, **kwargs)
+        fig.legend()
+        return fig, ax
 
 
 if __name__ == '__main__':

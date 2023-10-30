@@ -128,8 +128,23 @@ def cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, v):
     return (s0 + v * T + s1 * np.sqrt(v / v0)) / np.sqrt(1 - np.power(v / v0, delta))
 
 
-def cf_IDM_equilibrium(s0, s1, v0, T, delta, v, **kwargs):
-    return cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, v)
+def cf_IDM_equilibrium(s0, s1, v0, T, delta, speed, **kwargs):
+    return cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, speed)
+
+
+def cf_IDM_acc_module(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV, **kwargs):
+    k_speed = kwargs.get("k_speed", 1)
+    k_space = kwargs.get("k_space", 1)
+    k_zero = kwargs.get("k_zero", 1)
+    sStar = (k_space * (s0 + s1 * np.sqrt(speed / v0) + T * speed) +
+             k_zero * speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
+    return k_speed * omega * (1 - np.power(speed / v0, delta)) - omega * np.power(sStar / gap, 2)
+
+
+def cf_IDM_equilibrium_module(s0, s1, v0, T, delta, speed, **kwargs):
+    k_speed = kwargs.get("k_speed", 1)
+    k_space = kwargs.get("k_space", 1)
+    return k_space * (s0 + speed * T + s1 * np.sqrt(speed / v0)) / np.sqrt(k_speed * (1 - np.power(speed / v0, delta)))
 
 
 if __name__ == '__main__':

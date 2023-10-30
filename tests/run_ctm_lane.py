@@ -5,7 +5,7 @@
 # Software: PyCharm
 from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.frame.macro.ctm_lane import CTM_Lane
-from trasim_simplified.util.decorator.timer import timer_no_log
+from trasim_simplified.util.timer import timer_no_log
 
 
 @timer_no_log

@@ -11,6 +11,7 @@ import numpy as np
 from matplotlib.widgets import Button, Slider
 
 from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc, cf_IDM_equilibrium
+from trasim_simplified.util.hysteresis.intensity import cal_project_to_x_axis_area
 
 
 class QuiverInteract:
@@ -120,13 +121,28 @@ class QuiverInteract:
                        units='inches', angles='xy', alpha=1, width=0.01, cmap=None, scale_units='xy')
 
     def draw_hysteresis(self):
-        self.ax.plot(*self.get_gap_v_data(self.speed - 2))
-        self.ax.plot(*self.get_gap_v_data(self.speed + 2))
+        dec_speeds, dec_gaps = self.get_gap_v_data(self.speed + 2)
+        dec_area = cal_project_to_x_axis_area(dec_speeds, dec_gaps)
+        dec_e_speeds, dec_e_gaps = self.get_e_v_s(speedRange=[self.speed, self.speed + 2])
+        e_area = cal_project_to_x_axis_area(dec_e_speeds, dec_e_gaps)
+        dec_vs = (dec_area + e_area) / 2
+
+        acc_speeds, acc_gaps = self.get_gap_v_data(self.speed - 2)
+        acc_area = cal_project_to_x_axis_area(acc_speeds, acc_gaps)
+        acc_e_speeds, acc_e_gaps = self.get_e_v_s(speedRange=[self.speed - 2, self.speed])
+        e_area = cal_project_to_x_axis_area(acc_e_speeds, acc_e_gaps)
+        acc_vs = (acc_area - e_area) / 2
+
+        self.ax.text(acc_e_speeds[0], acc_e_gaps[0], f"acc_vs: {acc_vs:.2f}")
+        self.ax.text(dec_e_speeds[-1], dec_e_gaps[-1], f"dec_vs: {dec_vs:.2f}")
+
+        self.ax.plot(dec_speeds, dec_gaps)
+        self.ax.plot(acc_speeds, acc_gaps)
 
     def get_gap_v_data(self, initial_v) -> tuple[list, list]:
         speed = initial_v
         params = self.get_cf_params()
-        gap = self.cf_e_func(v=initial_v, **params)
+        gap = self.cf_e_func(speed=initial_v, **params)
         acc = 0
         gaps = [gap]
         speeds = [speed]
@@ -139,11 +155,17 @@ class QuiverInteract:
         return speeds, gaps
 
     def draw_equilibrium(self):
-        numX = round((self.speedRange[1] - self.speedRange[0]) / 0.1)
-        vRange = np.linspace(self.speedRange[0], self.speedRange[1], num=numX)
-        gaps = self.cf_e_func(v=vRange, **self.get_cf_params())
+        vRange, gaps = self.get_e_v_s()
         self.ax.plot(vRange, gaps)
         self.current_limit = (self.speedRange, (np.min(gaps), np.max(gaps)))
+
+    def get_e_v_s(self, speedRange=None):
+        if speedRange is None:
+            speedRange = self.speedRange
+        numX = round((speedRange[1] - speedRange[0]) / 0.1)
+        vRange = np.linspace(speedRange[0], speedRange[1], num=numX)
+        gaps = self.cf_e_func(speed=vRange, **self.get_cf_params())
+        return vRange, gaps
 
     def set_button(self):
         # Create a `matplotlib.widgets.Button` to reset the sliders to initial values.

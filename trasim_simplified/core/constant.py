@@ -107,6 +107,7 @@ class TrackInfo:
     v = Local_xVelocity
     x = Local_X
     a = Local_xAcc
+    cf_acc = "cf_acc"
     cf_id = "cf model ID"
     """跟驰模型类别ID"""
     lc_id = "lc model ID"

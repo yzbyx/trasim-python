@@ -3,14 +3,11 @@
 # @Author : yzbyx
 # @File : run_open.py
 # @Software : PyCharm
-import numpy as np
 
 from trasim_simplified.core.constant import CFM, V_TYPE, COLOR
-from trasim_simplified.core.data.data_plot import Plot
 from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
 from trasim_simplified.core.frame.micro.open_lane import LaneOpen
-from trasim_simplified.util.decorator.timer import timer_no_log
-from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.util.timer import timer_no_log
 
 
 @timer_no_log

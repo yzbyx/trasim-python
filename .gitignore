@@ -6,3 +6,4 @@
 /tests/.pytest_cache/
 .idea
 /tests/thesis_experiment/
+/tests/data/

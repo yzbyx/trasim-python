@@ -6,6 +6,11 @@
 import pickle
 
 
-def open_pickle(file: str):
-    with open(file, 'rb') as f:
+def save_to_pickle(data, path):
+    with open(path, "wb") as f:
+        pickle.dump(data, f)
+
+
+def load_from_pickle(path):
+    with open(path, "rb") as f:
         return pickle.load(f)

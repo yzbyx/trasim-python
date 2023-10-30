@@ -73,9 +73,20 @@ def get_cf_func(cf_name):
     elif cf_name == CFM.OPTIMAL_VELOCITY:
         from trasim_simplified.core.kinematics.cfm.CFModel_OVM import cf_OVM_acc
         cf_func = cf_OVM_acc
+    elif cf_name == CFM.ACC:
+        from trasim_simplified.core.kinematics.cfm.CFModel_ACC import cf_ACC_acc
+        cf_func = cf_ACC_acc
     else:
         raise TrasimError(f"{cf_name} is not be configured!")
     return cf_func
+
+
+def get_cf_equilibrium(cf_name):
+    if cf_name == CFM.IDM:
+        from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_equilibrium
+        return cf_IDM_equilibrium
+    else:
+        raise TrasimError(f"{cf_name} is not be configured!")
 
 
 def get_cf_default_param(cf_name):

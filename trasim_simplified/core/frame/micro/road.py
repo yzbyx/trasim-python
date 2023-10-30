@@ -17,7 +17,7 @@ from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimWarning import TrasimWarning
-from trasim_simplified.util.decorator.timer import _get_current_time
+from trasim_simplified.util.timer import _get_current_time
 
 
 class Road:

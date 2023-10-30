@@ -88,3 +88,7 @@ def calculate(k1_, k2_, thw_, acc_, dec_, original_acc_, v_safe_dispersed_,
         v_safe = min(v_safe, (gap / tau) + l_v_a)
     v_next = max(0, min(v_free, v_c, v_safe))
     return (v_next - v) / tau
+
+
+def cf_ACC_acc(k1, k2, thw, speed, gap, leaderV, **kwargs):
+    return k1 * (gap - thw * speed) + k2 * (leaderV - speed)
