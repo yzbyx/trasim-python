@@ -23,7 +23,7 @@ if __name__ == '__main__':
     # x_lists, v_lists, a_lists, cf_a_lists = get_test_sim_traj(cf_name, cf_func, dt)
 
     # 读取轨迹
-    traj_s_full: dict[str, dict] = load_from_pickle(r"/tests/data/dec_acc_traj_s.pkl")
+    traj_s_full: dict[str, dict] = load_from_pickle(r"/tests/data/ori_dec_acc_traj_s.pkl")
     traj_s_full = {**traj_s_full["dec"]}
     obs_x_s = [traj_s_full[k][TI.x] for k in traj_s_full.keys()]
     obs_v_s = [traj_s_full[k][TI.v] for k in traj_s_full.keys()]

@@ -36,7 +36,10 @@ if __name__ == '__main__':
     cf_name = CFM.ACC
     tau = 0.1
     speed = 0  # 初始速度为负代表真实的初始速度为跟驰模型期望速度
-    cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True, "tau": tau, "k2": 0.3}
-    car_length = 7.5
+    # cf_param = {"lambda": 0.8, "original_acc": True, "v_safe_dispersed": True, "tau": tau}
+    # cf_param = {"original_acc": True, "tau": 0.1, "v0": 30}
+    cf_param = {"k1": 0.23, "k2": 0.5, "s0": 2, "original_acc": True, "thw": 1.6, "tau": tau, "v0": 30}
+    # cf_param = {"omega": 0.8, "v0": 30}
+    car_length = 5
     run_basic_diagram(cf_name, tau, False, cf_param, car_length_=car_length, initial_v=speed, resume=False,
                       parallel=True)

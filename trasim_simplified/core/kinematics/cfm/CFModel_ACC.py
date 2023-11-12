@@ -36,6 +36,10 @@ class CFModel_ACC(CFModel):
         """期望减速度，用于安全速度计算"""
         self._tau = f_param.get("tau", 1)
 
+        self._s0 = f_param.get("s0", 2)
+
+        self._v0 = f_param.get("v0", 30)
+
         self.index = None
 
     @property
@@ -62,25 +66,33 @@ class CFModel_ACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self.get_speed_limit()
+        return self._v0
 
     def step(self, index, *args):
         self.index = index
         if self.vehicle.leader is None:
             return 3
         self._update_dynamic()
-        f_params = [self._k1, self._k2, self._thw, self._a, self._b, self._original_acc, self._v_safe_dispersed]
+        f_params = [self._k1, self._k2, self._thw, self._a, self._b, self._original_acc, self._v_safe_dispersed,
+                    self._s0]
         leader_is_dummy = True if self.vehicle.leader.type == V_TYPE.OBSTACLE else False
         return calculate(*f_params,
-                         self._tau, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
+                         self._tau, self.gap, self.vehicle.v, self.vehicle.leader.v, self._v0,
                          leader_is_dummy, self.l_v_a)
 
 
-def calculate(k1_, k2_, thw_, acc_, dec_, original_acc_, v_safe_dispersed_,
+def calculate(k1_, k2_, thw_, acc_, dec_, original_acc_, v_safe_dispersed_, s0_,
               tau, gap, v, l_v, v_free, leader_is_dummy, l_v_a):
     acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
     if original_acc_:
-        return acc
+        acc = k1_ * (gap - s0_ - thw_ * v) + k2_ * (l_v - v)
+        v_next = v + tau * acc
+        if v_next > v_free:
+            return (v_free - v) / tau
+        elif v_next < 0:
+            return - v / tau
+        else:
+            return acc
 
     v_c = v + tau * max(- dec_, min(acc, acc_))
     v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)

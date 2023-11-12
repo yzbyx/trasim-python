@@ -59,8 +59,10 @@ def customize_sim(leader_schedule: list[tuple[float, int]], initial_states: list
     """
     自定义头车加速度的后车轨迹仿真
 
+    生成的轨迹数据长度为schedule中step的总和再加1(初始状态)
+
     :param leader_schedule: 头车加速度的时间序列 [(a, step), ...] a:加速度，step:持续时间步
-    :param initial_states: 后车初始状态 [(gap, v, a), ...] gap:净间距，v:速度，a:加速度
+    :param initial_states: 车队初始状态 [(gap, v, a), ...] gap:净间距，v:速度，a:加速度
     :param length_s: 车辆长度
     :param cf_funcs: 跟驰模型
     :param cf_params: 跟驰模型参数
@@ -90,6 +92,9 @@ def customize_sim(leader_schedule: list[tuple[float, int]], initial_states: list
 
 
 def generate_traj(schedule: list[tuple[float, float]], initial_state: tuple[float, float, float], dt=0.1):
+    """
+    生成的轨迹数据长度为schedule中step的总和再加1(初始状态)
+    """
     x, v, a = initial_state
     x_list = [x]
     v_list = [v]

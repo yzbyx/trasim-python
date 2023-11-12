@@ -24,6 +24,7 @@ from trasim_simplified.core.kinematics.cfm import get_cf_model
 class BasicDiagram:
     def __init__(self, lane_length: int, car_length: float, car_initial_speed: float, speed_with_random: bool,
                  cf_mode: str, cf_param: dict[str, float], speed_limit=30):
+        self.car_nums = None
         self.car_length = car_length
         self.lane_length = lane_length
         self.speed_limit = speed_limit
@@ -48,16 +49,15 @@ class BasicDiagram:
             occ_seq = np.array([occ_start])
         else:
             occ_seq = np.round(np.arange(occ_start, occ_end, d_occ), 6)
-        car_nums = list(map(int, np.round(np.ceil(occ_seq * self.lane_length / self.car_length))))
-        real_occ_seq = np.round(np.array(car_nums) * self.car_length / self.lane_length, 6)
+        self.car_nums = list(map(int, np.round(np.ceil(occ_seq * self.lane_length / self.car_length))))
+        self.occ_seq = np.round(np.array(self.car_nums) * self.car_length / self.lane_length, 6)
 
         self.file_name = file_name if file_name is not None else "result_IDM.pkl"
         self.result = self.load_result(self.resume, self.file_name)
 
-        self.occ_seq = real_occ_seq
         dt = kwargs.get("dt", 0.1)
-        warm_up_step = int(3600 / dt)
-        sim_step = warm_up_step + int(1800 / dt)
+        warm_up_step = int(300 / dt)
+        sim_step = warm_up_step + int(300 / dt)
         jam = kwargs.get("jam", False)
         update_method = kwargs.get("state_update_method", "Euler")
 
@@ -84,7 +84,7 @@ class BasicDiagram:
             lane.data_container.config(save_info={C_Info.v})
 
             for _ in lane.run(data_save=True, has_ui=False, warm_up_step=warm_up_step, sim_step=sim_step, dt=dt,
-                              state_update_method=update_method):
+                              state_update_method=update_method, force_speed_limit=False):
                 pass
 
             df = lane.data_container.data_to_df()
@@ -102,8 +102,8 @@ class BasicDiagram:
             time_epoch = time_epoch_end - time_epoch_begin
             cal_speed = car_num * sim_step / time_epoch
             print(
-                f"Thread: {threading.current_thread()} "
-                f"[{str(i + 1).zfill(3)}/{str(len(car_nums)).zfill(3)}]"
+                f"Thread: {threading.current_thread().native_id} "
+                f"[{str(i + 1).zfill(3)}/{str(len(self.car_nums)).zfill(3)}]"
                 f" occ: {self.occ_seq[i]:.2f}, car_nums: {car_num},"
                 f" density[veh/km]: {car_num / (self.lane_length / 1000)}",
                 f"\t\t\t"
@@ -116,11 +116,11 @@ class BasicDiagram:
                           np.mean(result[P_Info.avg_k_by_car_num_lane_length])
 
         if not kwargs.get("parallel", False):
-            for i_, car_num_ in enumerate(car_nums):
+            for i_, car_num_ in enumerate(self.car_nums):
                 cal(i_, car_num_)
         else:
             self.result["occ"], self.result["V"], self.result["Q"], self.result["K"] \
-                = zip(*Parallel(n_jobs=-1)(delayed(cal)(i, car_num) for i, car_num in enumerate(car_nums)))
+                = zip(*(Parallel(n_jobs=-1)(delayed(cal)(i, car_num) for i, car_num in enumerate(self.car_nums))))
             self.save_result(self.file_name, self.result)
 
     def get_by_equilibrium_state_func(self):
@@ -141,11 +141,13 @@ class BasicDiagram:
         axes: list[list[plt.Axes]] = axes
 
         ax = axes[0][0]
-        Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.result["Q"]], data_label="Q-Occ",
+        Plot.custom_plot(ax, "K(veh/km)", "Q(veh/h)",
+                         [self.result["K"]],
+                         [self.result["Q"]], data_label="Q-Occ",
                          color='blue', marker='s', linestyle='solid',
                          linewidth=1, markersize=2)
         if len(self.equilibrium_state_result["V"]) != 0:
-            Plot.custom_plot(ax, "Occ", "Q(veh/h)", [self.occ_seq], [self.equilibrium_state_result["Q"]],
+            Plot.custom_plot(ax, "K(veh/km)", "Q(veh/h)", [self.result["K"]], [self.equilibrium_state_result["Q"]],
                              data_label="Q-Occ-E", color='green', marker='s', linestyle='dashed',
                              linewidth=1, markersize=2)
 

@@ -24,25 +24,27 @@ def run_circle():
     maintain_step = int(100 / dt) + dec_step
     acc_step = int(50 / dt) + maintain_step
 
-    is_circle = False
-    lane_length = 10000
+    is_circle = True
+    lane_length = 1000
 
     car_id_list = None
 
     if is_circle:
         sim = LaneCircle(lane_length)
-        sim.car_config(
-            0.1,
-            7.5,
-            V_TYPE.PASSENGER,
-            0,
-            False,
-            CFM.IDM,
-            _cf_param,
-            {"color": COLOR.yellow},
-        )
-        # sim.car_config(50, 7.5, V_TYPE.PASSENGER, 20, False, CFM.NON_LINEAR_GHR, _cf_param, {"color": COLOR.blue})
-        sim.car_load(5)
+        # sim.car_config(
+        #     0.1,
+        #     5,
+        #     V_TYPE.PASSENGER,
+        #     0,
+        #     False,
+        #     CFM.IDM,
+        #     _cf_param,
+        #     {"color": COLOR.yellow},
+        # )
+        _cf_param = {"k1": 0.23, "k2": 0.07, "s0": 2, "original_acc": True, "thw": 1.6}
+        sim.car_config(50, 5, V_TYPE.PASSENGER, 0, False,
+                       CFM.ACC, _cf_param, {"color": COLOR.blue})
+        sim.car_load()
     else:
         sim = LaneOpen(lane_length)
         sim.car_config(
@@ -54,10 +56,11 @@ def run_circle():
     for step in sim.run(
         data_save=True,
         has_ui=False,
-        frame_rate=-1,
+        frame_rate=120,
         warm_up_step=warm_up_step,
         sim_step=sim_step,
         dt=dt,
+        state_update_method="Euler"
     ):
         # 头车控制车队扰动
         # if step < 30 / dt:
@@ -68,20 +71,20 @@ def run_circle():
         #     sim.take_over(car_id_list[-1], 0)
 
         # 车辆减速扰动
-        if step == offset_step:
-            take_over_index = sim.get_appropriate_car()
-            follower_index = [
-                sim.get_relative_id(take_over_index, -i - 1) for i in range(5)
-            ]
-            print(take_over_index, follower_index)
-        if offset_step < step <= dec_step:
-            sim.take_over(take_over_index, -1)
-        if dec_step < step <= maintain_step:
-            sim.take_over(take_over_index, 0)
-        if maintain_step < step <= acc_step:
-            sim.take_over(take_over_index, 1)
-        if step > acc_step:
-            sim.take_over(take_over_index, 0)
+        # if step == offset_step:
+        #     take_over_index = sim.get_appropriate_car()
+        #     follower_index = [
+        #         sim.get_relative_id(take_over_index, -i - 1) for i in range(5)
+        #     ]
+        #     print(take_over_index, follower_index)
+        # if offset_step < step <= dec_step:
+        #     sim.take_over(take_over_index, -1)
+        # if dec_step < step <= maintain_step:
+        #     sim.take_over(take_over_index, 0)
+        # if maintain_step < step <= acc_step:
+        #     sim.take_over(take_over_index, 1)
+        # if step > acc_step:
+        #     sim.take_over(take_over_index, 0)
 
         # 居中插入车辆
         # if offset_step == step:
@@ -96,7 +99,7 @@ def run_circle():
         pass
 
     df = sim.data_container.data_to_df()
-    df.to_csv(r"D:\\test.csv", index=False)
+    # df.to_csv(r"D:\\test.csv", index=False)
     # sim.data_container.save(
     #     df, r"E:\PyProject\car-following-model-test\tests\thesis_experiment\data\TPACC_OCC0.25"
     # )

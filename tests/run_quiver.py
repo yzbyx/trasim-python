@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2023/10/15 11:41
 # @Author : yzbyx
-# @File : run_quiver.py
+# @File : run_quiver_module.py
 # Software: PyCharm
 from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc, cf_IDM_equilibrium
 from trasim_simplified.util.interaction.quiver import QuiverInteract, cf_Zhang_acc, cf_Zhang_equilibrium

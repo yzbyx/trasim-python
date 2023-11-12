@@ -17,7 +17,6 @@ from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
 from trasim_simplified.core.ui.sim_ui import UI
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimWarning import TrasimWarning
-from trasim_simplified.util.timer import _get_current_time
 
 
 class Road:
@@ -87,7 +86,9 @@ class Road:
         lanes_iter = [lane.run(data_save=data_save, has_ui=False, **kwargs) for lane in self.lane_list]
 
         timeIn = time.time()
-        timeStart = _get_current_time()
+        data_head = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        time_stamp = "%s.%s" % (data_head, str(timeIn).split('.')[-1][:5])
+        timeStart = time_stamp
 
         while self.sim_step != self.step_:
             for i, lane_iter in enumerate(lanes_iter):

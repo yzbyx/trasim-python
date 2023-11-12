@@ -110,7 +110,7 @@ class QuiverInteract:
         resultDeltaV = [[resultAcc[j][i] * self.interval for i in range(numX)] for j in range(numY)]
 
         resultDeltaGap = [
-            [self.speed * self.interval - (dataX[j][i] * self.interval + 0.5 * resultAcc[j][i] * (self.interval ** 2))
+            [self.speed * self.interval - (dataX[j][i] * self.interval)
              for i in range(numX)] for j in range(numY)]
 
         resultDeltaV = np.array(resultDeltaV)
@@ -148,8 +148,8 @@ class QuiverInteract:
         speeds = [speed]
         while len(speeds) < 20 or np.abs(acc) > 1e-5:
             acc = self.cf_func(speed=speed, leaderV=self.speed, gap=gap, **params)
-            gap += self.speed * self.interval - (speed * self.interval + 0.5 * acc * self.interval ** 2)
             speed += acc * self.interval
+            gap += self.speed * self.interval - speed * self.interval
             speeds.append(speed)
             gaps.append(gap)
         return speeds, gaps
@@ -193,7 +193,7 @@ def cf_Zhang_equilibrium(alpha, beta, v0, s0, T, v, **kwargs):
 
 def cf_OVM_acc(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     bf += leaderL
-    bc += leaderL       # 期望最小车头间距
+    bc += leaderL  # 期望最小车头间距
 
     headway = leaderX - xOffset
     V = V0 * (np.tanh(m * (headway - bf)) - np.tanh(m * (bc - bf)))
@@ -201,6 +201,36 @@ def cf_OVM_acc(a, V0, m, bf, bc, speed, xOffset, leaderX, leaderL):
     finalAcc = a * (V - speed)
 
     return finalAcc
+
+
+def draw_quiver(ax: plt.Axes, speed_range, cf_func, cf_param, lv, dt, gap_range=None, cf_e=None, num_x=11, num_y=11):
+    assert len(speed_range) == 2, "speed_range must be a list with 2 elements"
+    if cf_e is None:
+        # 将gap_range调整为从大到小
+        if gap_range[-1] > gap_range[0]:
+            gap_range = gap_range[::-1]
+    else:
+        gap_range = cf_e(speed=speed_range[0], **cf_param), cf_e(speed=speed_range[-1], **cf_param)
+    gap_range = np.linspace(gap_range[0], gap_range[1], num=num_y)
+    speed_range = np.linspace(speed_range[0], speed_range[1], num=num_x)
+
+    dataX, dataY = np.meshgrid(speed_range, gap_range)
+
+    resultAcc = [[cf_func(speed=dataX[j][i], gap=dataY[j][i], leaderV=lv, interval=dt, **cf_param)
+                  for i in range(num_x)] for j in range(num_y)]  # 存储顺序与书写顺序相同, 储存v的结果
+
+    resultDeltaV = [[resultAcc[j][i] * dt for i in range(num_x)] for j in range(num_y)]
+
+    resultDeltaGap = [[lv * dt - (dataX[j][i] * dt) for i in range(num_x)] for j in range(num_y)]
+
+    resultDeltaV = np.array(resultDeltaV)
+    resultDeltaGap = np.array(resultDeltaGap)
+    resultAcc = np.array(resultAcc)
+
+    ax.quiver(dataX, dataY, resultDeltaV, resultDeltaGap, np.abs(resultAcc), pivot="tail", scale=1,
+              units='inches', angles='xy', alpha=1, width=0.01, cmap=None, scale_units='xy')
+
+    return resultDeltaV, resultDeltaGap, resultAcc
 
 
 if __name__ == '__main__':

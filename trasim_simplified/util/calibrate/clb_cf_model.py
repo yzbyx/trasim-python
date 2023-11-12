@@ -230,7 +230,7 @@ def clb_param_to_df(id_s, clb_run_res: list[dict[str, dict]], cf_name):
     vars_list = [[res["Vars"][name] for name in cf_param_ranges[cf_name].keys()] for res in clb_run_res]
     vars_array = np.array(vars_list)
     df = pd.DataFrame(vars_array, columns=list(cf_param_ranges[cf_name].keys()))
-    df[TI.v_ID] = np.array(id_s)
+    df[TI.Pair_ID] = np.array(id_s)
     df["ObjV"] = np.array([res["ObjV"] for res in clb_run_res])
     return df
 
@@ -242,9 +242,9 @@ def get_clb_traj(df_follow_pair: dict[str | int, pd.DataFrame], cut_pos: dict[st
     使用标定后的跟驰模型参数，将后车轨迹转换为follow_pair的形式
     """
     final_data = {"dec": {}, "acc": {}}
-    for v_ID in df_follow_pair.keys():
-        target = df_follow_pair[v_ID].copy()
-        clb_target = clb_param_df[clb_param_df[TI.v_ID] == v_ID]
+    for pair_ID in df_follow_pair.keys():
+        target = df_follow_pair[pair_ID].copy()
+        clb_target = clb_param_df[clb_param_df[TI.Pair_ID] == pair_ID]
         clb_param = {name: clb_target[name].iloc[0] for name in cf_param_ranges[cf_name].keys()}
         sim_pos, sim_speed, sim_acc, sim_cf_acc = simulation(cf_func,
                                                              init_v=target[TI.v].iloc[0], init_x=target[TI.x].iloc[0],
@@ -255,12 +255,12 @@ def get_clb_traj(df_follow_pair: dict[str | int, pd.DataFrame], cut_pos: dict[st
         target[TI.x] = sim_pos
         target[TI.v] = sim_speed
         target[TI.a] = sim_acc
-        final_data["dec"].update({v_ID: target.iloc[:cut_pos[v_ID]]})
-        final_data["acc"].update({v_ID: target.iloc[cut_pos[v_ID]:]})
+        final_data["dec"].update({pair_ID: target.iloc[:cut_pos[pair_ID]]})
+        final_data["acc"].update({pair_ID: target.iloc[cut_pos[pair_ID]:]})
     return final_data
 
 
-def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_lx, obs_lv, leaderL, traj_step=None, v_ID=None):
+def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_lx, obs_lv, leaderL, traj_step=None, pair_ID=None):
     cf_func = get_cf_func(cf_name)
     cf_param = {k: v for k, v in zip(cf_param_ranges[cf_name].keys(), cf_param)}
     # 标定后跟驰模型轨迹仿真
@@ -274,7 +274,7 @@ def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_lx, obs_lv, leaderL, traj
     if traj_step is None:
         traj_step = range(len(obs_x))
     plt.plot(traj_step, obs_lx, label="obs_lx")
-    plt.plot(traj_step, obs_x, label=f"obs_x: {v_ID}")
-    plt.plot(traj_step, sim_pos, label=f"sim_x: {v_ID}")
+    plt.plot(traj_step, obs_x, label=f"obs_x: {pair_ID}")
+    plt.plot(traj_step, sim_pos, label=f"sim_x: {pair_ID}")
     plt.legend()
     plt.show()

@@ -113,8 +113,9 @@ class CFModel_IDM(CFModel):
 
 @numba.njit()
 def cf_IDM_acc_jit(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV) -> dict:
-    sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
-    # sStar = s0 + max(0, s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
+    # sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
+    sStar = s0 + np.max(np.array([0, s1 * np.sqrt(speed / v0) +
+                                  T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))]))
     # 计算车辆下一时间步加速度
     return omega * (1 - np.power(speed / v0, delta) - np.power(sStar / gap, 2))
 
@@ -136,8 +137,8 @@ def cf_IDM_acc_module(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV, **kwa
     k_speed = kwargs.get("k_speed", 1)
     k_space = kwargs.get("k_space", 1)
     k_zero = kwargs.get("k_zero", 1)
-    sStar = (k_space * (s0 + s1 * np.sqrt(speed / v0) + T * speed) +
-             k_zero * speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))
+    sStar = (np.max([k_space * s0, k_space * (s0 + (s1 * np.sqrt(speed / v0) + T * speed) +
+             k_zero * speed * (speed - leaderV) / (2 * np.sqrt(omega * d)))]))
     return k_speed * omega * (1 - np.power(speed / v0, delta)) - omega * np.power(sStar / gap, 2)
 
 
