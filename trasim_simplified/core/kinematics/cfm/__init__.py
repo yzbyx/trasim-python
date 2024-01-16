@@ -76,6 +76,9 @@ def get_cf_func(cf_name):
     elif cf_name == CFM.ACC:
         from trasim_simplified.core.kinematics.cfm.CFModel_ACC import cf_ACC_acc
         cf_func = cf_ACC_acc
+    elif cf_name == CFM.TPACC:
+        from trasim_simplified.core.kinematics.cfm.CFModel_TPACC import cf_TPACC_acc
+        return cf_TPACC_acc
     else:
         raise TrasimError(f"{cf_name} is not be configured!")
     return cf_func
@@ -85,6 +88,9 @@ def get_cf_equilibrium(cf_name):
     if cf_name == CFM.IDM:
         from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_equilibrium
         return cf_IDM_equilibrium
+    elif cf_name == CFM.ACC:
+        from trasim_simplified.core.kinematics.cfm.CFModel_ACC import cf_ACC_equilibrium
+        return cf_ACC_equilibrium
     else:
         raise TrasimError(f"{cf_name} is not be configured!")
 

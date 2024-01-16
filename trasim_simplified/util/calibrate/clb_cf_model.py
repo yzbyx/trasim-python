@@ -32,7 +32,7 @@ except ImportError as e:
 
 cf_param_ranges = {
     CFM.IDM: {
-        "s0": [0, 10], "s1": [0, 1], "v0": [0.1, 50], "T": [0, 10], "omega": [0.1, 10], "d": [0.1, 10],
+        "s0": [0, 10], "v0": [10, 50], "T": [0, 10], "omega": [0.1, 10], "d": [0.1, 10],
         "delta": [1, 10]
     },
     CFM.GIPPS: {
@@ -47,19 +47,23 @@ cf_param_ranges = {
     },
     CFM.OPTIMAL_VELOCITY: {
         "a": [0, 10], "V0": [0, 40], "m": [0, 1], "bf": [0, 50], "bc": [0, 10]
+    },
+    CFM.ACC: {
+        "k1": [0, 1], "k2": [0, 1], "thw": [0, 10], "s0": [0, 10]
     }
 }
 cf_param_types = {
-    CFM.IDM: {"s0": 0, "s1": 1, "v0": 0, "T": 0, "omega": 0, "d": 0, "delta": 1},
+    CFM.IDM: {"s0": 0, "v0": 0, "T": 0, "omega": 0, "d": 0, "delta": 1},
     CFM.GIPPS: {"a": 0, "b": 0, "v0": 0, "tau": 0, "s": 0, "b_hat": 0},
     CFM.NON_LINEAR_GHR: {"m": 0, "l": 0, "a": 0, "tau": 0},
     CFM.WIEDEMANN_99: {"CC0": 0, "CC1": 0, "CC2": 0, "CC3": 0, "CC4": 0, "CC5": 0, "CC6": 0, "CC7": 0, "CC8": 0,
                        "CC9": 0, "vDesire": 0},
-    CFM.OPTIMAL_VELOCITY: {"a": 0, "V0": 0, "m": 0, "bf": 0, "bc": 0}
+    CFM.OPTIMAL_VELOCITY: {"a": 0, "V0": 0, "m": 0, "bf": 0, "bc": 0},
+    CFM.ACC: {"k1": 0, "k2": 0, "thw": 0, "s0": 0}
 }
 cf_param_ins = {
     CFM.IDM: {
-        "s0": [1, 1], "s1": [1, 0], "v0": [1, 1], "T": [1, 1], "omega": [1, 1], "d": [1, 1],
+        "s0": [1, 1], "v0": [1, 1], "T": [1, 1], "omega": [1, 1], "d": [1, 1],
         "delta": [1, 1]
     },
     CFM.GIPPS: {
@@ -74,6 +78,9 @@ cf_param_ins = {
     },
     CFM.OPTIMAL_VELOCITY: {
         "a": [1, 1], "V0": [1, 1], "m": [1, 1], "bf": [1, 1], "bc": [1, 1]
+    },
+    CFM.ACC: {
+        "k1": [1, 1], "k2": [1, 1], "thw": [1, 1], "s0": [1, 1]
     }
 }
 

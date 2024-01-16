@@ -21,22 +21,26 @@ class QuiverInteract:
         """
         self.cf_func = cf_func
         self.cf_e_func = cf_e_func
-        fig, ax = plt.subplots(1, 1, figsize=fig_size)
-        self.fig: plt.Figure = fig
-        self.ax: plt.Axes = ax
+
         self.slider_map = {}
         self.button = None
         self.defaults: dict = kwargs["default"]
         self.ranges: dict = kwargs["range"]
         self.steps: dict = kwargs["step"]
-        self.info_ax: plt.Axes = self.fig.add_axes([0.7, 0.1, 0.2, 0.04])
-        self.info_ax.set_axis_off()
 
         self.speed = 10
         self.interval = 0.1
-        self.speedRange = [self.speed - 4, self.speed + 4]
+        self.speedRange = [self.speed - 7, self.speed + 7]
+        self.dv = 5
         self.current_limit = None
 
+        fig, ax = plt.subplots(1, 1, figsize=fig_size)
+        self.fig: plt.Figure = fig
+        self.ax: plt.Axes = ax
+        self.info_ax: plt.Axes = self.fig.add_axes([0.7, 0.1, 0.2, 0.04])
+
+    def run(self):
+        self.info_ax.set_axis_off()
         self.set_slider()
         self.set_button()
         self.update(0)
@@ -121,15 +125,15 @@ class QuiverInteract:
                        units='inches', angles='xy', alpha=1, width=0.01, cmap=None, scale_units='xy')
 
     def draw_hysteresis(self):
-        dec_speeds, dec_gaps = self.get_gap_v_data(self.speed + 2)
+        dec_speeds, dec_gaps = self.get_gap_v_data(self.speed + self.dv)
         dec_area = cal_project_to_x_axis_area(dec_speeds, dec_gaps)
-        dec_e_speeds, dec_e_gaps = self.get_e_v_s(speedRange=[self.speed, self.speed + 2])
+        dec_e_speeds, dec_e_gaps = self.get_e_v_s(speedRange=[self.speed, self.speed + self.dv])
         e_area = cal_project_to_x_axis_area(dec_e_speeds, dec_e_gaps)
         dec_vs = (dec_area + e_area) / 2
 
-        acc_speeds, acc_gaps = self.get_gap_v_data(self.speed - 2)
+        acc_speeds, acc_gaps = self.get_gap_v_data(self.speed - self.dv)
         acc_area = cal_project_to_x_axis_area(acc_speeds, acc_gaps)
-        acc_e_speeds, acc_e_gaps = self.get_e_v_s(speedRange=[self.speed - 2, self.speed])
+        acc_e_speeds, acc_e_gaps = self.get_e_v_s(speedRange=[self.speed - self.dv, self.speed])
         e_area = cal_project_to_x_axis_area(acc_e_speeds, acc_e_gaps)
         acc_vs = (acc_area - e_area) / 2
 

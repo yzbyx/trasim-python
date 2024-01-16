@@ -10,7 +10,7 @@ from trasim_simplified.util.calibrate.follow_sim import customize_sim, data_to_d
 
 if __name__ == '__main__':
     dt = 0.1
-    cf_name = CFM.IDM
+    cf_name = CFM.TPACC
     cf_func = get_cf_func(cf_name)
     follow_num = 5
 

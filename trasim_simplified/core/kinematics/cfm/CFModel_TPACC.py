@@ -35,12 +35,12 @@ class CFModel_TPACC(CFModel):
         """期望减速度，用于安全速度计算"""
         self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
         """v_safe计算是否离散化时间"""
-        self._tau = f_param.get("tau", 1)
+        self.tau = f_param.get("tau", 1)
         """仿真步长即反应时间 [s]"""
 
-        self._record_cf_info = f_param.get("record_cf_info", False)
+        self.record_cf_info = f_param.get("record_cf_info", False)
         self.cf_info: Optional[TPACCInfo] = None
-        if self._record_cf_info:
+        if self.record_cf_info:
             self.cf_info = TPACCInfo()
 
         self.index = None
@@ -61,7 +61,7 @@ class CFModel_TPACC(CFModel):
     def _update_dynamic(self):
         self.gap = self.vehicle.gap
         self.dt = self.vehicle.lane.dt
-        assert self.dt == self._tau
+        assert self.dt == self.tau
         self._update_v_safe()
 
     def _update_v_safe(self):
@@ -77,7 +77,7 @@ class CFModel_TPACC(CFModel):
         result = calculate(*f_params,
                            self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
                            leader_is_dummy, self.l_v_a)
-        if self._record_cf_info:
+        if self.record_cf_info:
             self.cf_info.step.append(self.vehicle.lane.step_)
             self.cf_info.time.append(self.vehicle.lane.time_)
             self.cf_info.is_speed_adaptive.append(result[1])
@@ -114,6 +114,13 @@ def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
 
     return (v_next - v) / dt, \
         is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
+
+
+def cf_TPACC_acc(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,
+                 interval, gap, speed, leaderV, v_free=30, leader_is_dummy=False, l_v_a=0):
+    pass
+    # return calculate(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,
+    #                  interval, gap, speed, leaderV, v_free, leader_is_dummy, l_v_a)[0]
 
 
 class TPACCInfo:
