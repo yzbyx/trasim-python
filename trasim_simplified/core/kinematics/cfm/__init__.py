@@ -17,6 +17,9 @@ from trasim_simplified.core.kinematics.cfm.CFModel_TPACC import CFModel_TPACC as
 from trasim_simplified.core.kinematics.cfm.CFModel_LCM import CFModel_LCM as LCM
 from trasim_simplified.core.kinematics.cfm.CFModel_CTM import CFModel_CTM as CTM
 from trasim_simplified.core.kinematics.cfm.CFModel_Dummy import CFModel_Dummy as Dummy
+from trasim_simplified.core.kinematics.cfm.CFM_IDM_SZ import CFModel_IDM_SZ as IDM_SZ
+from trasim_simplified.core.kinematics.cfm.CFM_IDM_VS import CFModel_IDM_VS as IDM_VS
+from trasim_simplified.core.kinematics.cfm.CFM_IDM_VZ import CFModel_IDM_VZ as IDM_VZ
 from trasim_simplified.core.constant import CFM
 
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
@@ -29,6 +32,12 @@ def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
         param = {}
     if name == CFM.IDM:
         return IDM(_driver, param)
+    elif name == CFM.IDM_SZ:
+        return IDM_SZ(_driver, param)
+    elif name == CFM.IDM_VS:
+        return IDM_VS(_driver, param)
+    elif name == CFM.IDM_VZ:
+        return IDM_VZ(_driver, param)
     elif name == CFM.GIPPS:
         return GIPPS(_driver, param)
     elif name == CFM.LINEAR:
@@ -61,6 +70,15 @@ def get_cf_func(cf_name):
     if cf_name == CFM.IDM:
         from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc
         cf_func = cf_IDM_acc
+    elif cf_name == CFM.IDM_SZ:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_SZ import cf_IDM_SZ_acc_jit
+        cf_func = cf_IDM_SZ_acc_jit
+    elif cf_name == CFM.IDM_VS:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_VS import cf_IDM_VS_acc_jit
+        cf_func = cf_IDM_VS_acc_jit
+    elif cf_name == CFM.IDM_VZ:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_VZ import cf_IDM_VZ_acc_jit
+        cf_func = cf_IDM_VZ_acc_jit
     elif cf_name == CFM.GIPPS:
         from trasim_simplified.core.kinematics.cfm.CFModel_Gipps import cf_Gipps_acc_jit
         cf_func = cf_Gipps_acc_jit
@@ -88,6 +106,15 @@ def get_cf_equilibrium(cf_name):
     if cf_name == CFM.IDM:
         from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_equilibrium
         return cf_IDM_equilibrium
+    elif cf_name == CFM.IDM_SZ:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_SZ import cf_IDM_SZ_equilibrium
+        return cf_IDM_SZ_equilibrium
+    elif cf_name == CFM.IDM_VS:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_VS import cf_IDM_VS_equilibrium
+        return cf_IDM_VS_equilibrium
+    elif cf_name == CFM.IDM_VZ:
+        from trasim_simplified.core.kinematics.cfm.CFM_IDM_VZ import cf_IDM_VZ_equilibrium
+        return cf_IDM_VZ_equilibrium
     elif cf_name == CFM.ACC:
         from trasim_simplified.core.kinematics.cfm.CFModel_ACC import cf_ACC_equilibrium
         return cf_ACC_equilibrium

@@ -143,6 +143,9 @@ class COLOR:
 # 跟驰模型
 # ******************************
 class CFM:
+    IDM_VZ = "IDM_VZ"
+    IDM_VS = "IDM_VS"
+    IDM_SZ = "IDM_SZ"
     CTM = "CTM"
     """CTM系列"""
     LCM = "Longitude_control_model"

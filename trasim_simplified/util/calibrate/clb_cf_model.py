@@ -277,7 +277,6 @@ def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_lx, obs_lv, leaderL, traj
                                                          cf_param=cf_param,
                                                          leaderL=leaderL)
 
-    # 任选一条轨迹进行对比
     if traj_step is None:
         traj_step = range(len(obs_x))
     plt.plot(traj_step, obs_lx, label="obs_lx")
