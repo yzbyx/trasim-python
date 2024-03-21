@@ -25,7 +25,7 @@ class SlowToGo_Interact(QuiverInteract):
         self.fig.canvas.draw_idle()
 
     def draw_hysteresis(self):
-        dec_s, dec_v, acc_s, acc_v, dec_a, acc_a, _, _ \
+        dec_s, dec_v, acc_s, acc_v, dec_a, acc_a, dec_lv, acc_lv, dec_lx, acc_lx \
             = slow_to_go_sim(self.cf_func, self.get_cf_params(), cf_e=self.cf_e_func,
                              warmup_time=100, dec_time=10, slow_time=100,
                              acc_time=10, hold_time=100,
@@ -38,7 +38,8 @@ class SlowToGo_Interact(QuiverInteract):
         self.ax.plot(dec_v, dec_s, "-o", markersize=1)
         self.ax.plot(acc_v, acc_s, "-o", markersize=1)
 
-        self.ax.scatter([dec_v[100], acc_v[100]], [dec_s[100], acc_s[100]], marker="x", c="r")
+        self.ax.scatter([dec_v[100]], [dec_s[100]], marker="<", c="r")
+        self.ax.scatter([acc_v[100]], [acc_s[100]], marker=">", c="r")
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ import time
 import joblib
 import numpy as np
 import pandas as pd
+import tqdm
 from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import CFM, TrackInfo as TI, Prefix
@@ -32,7 +33,7 @@ except ImportError as e:
 
 cf_param_ranges = {
     CFM.IDM: {
-        "s0": [0, 10], "v0": [10, 50], "T": [0, 10], "omega": [0.1, 10], "d": [0.1, 10],
+        "s0": [0.1, 10], "v0": [10, 40], "T": [0.1, 10], "omega": [0.1, 10], "d": [0.1, 10],
         "delta": [1, 10]
     },
     CFM.GIPPS: {
@@ -146,8 +147,8 @@ def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins
                                          ea.Population(Encoding='RI', NIND=min(max(10 * len(ranges), 40), 100)),
                                          MAXGEN=100 * len(ranges),  # 最大进化代数。
                                          logTras=0,  # 表示每隔多少代记录一次日志信息，0表示不记录。
-                                         trappedValue=1e-6,  # 单目标优化陷入停滞的判断阈值。
-                                         maxTrappedCount=50)  # 进化停滞计数器最大上限值。
+                                         trappedValue=1e-10,  # 单目标优化陷入停滞的判断阈值。
+                                         maxTrappedCount=100)  # 进化停滞计数器最大上限值。
         algorithm.mutOper.Pm = 0.5  # 变异概率
         algorithm.recOper.XOVR = 0.7  # 重组概率
 
@@ -164,7 +165,7 @@ def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins
 
 
 def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s, dt, seed,
-            drawing=0, n_jobs=-1, parallel=True) -> list[dict]:
+            drawing=0, n_jobs=-1, parallel=True, cf_param_ranges_=None) -> list[dict]:
     """
     :param cf_func 跟驰模型加速度函数
     :param cf_name 跟驰模型名称
@@ -178,7 +179,11 @@ def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s, d
     :param drawing GA计算过程中是否绘图
     :param n_jobs 并行计算的进程数，-1为全部进程
     :param parallel 是否不使用并行计算
+    :param cf_param_ranges_ 参数范围
     """
+    global cf_param_ranges
+    if cf_param_ranges_ is not None:
+        cf_param_ranges = cf_param_ranges_
     if parallel:
         result = joblib.Parallel(n_jobs=n_jobs)(
             joblib.delayed(ga_cal)(cf_func=cf_func,
@@ -188,7 +193,8 @@ def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s, d
                                    types=cf_param_types[cf_name],
                                    ins=cf_param_ins[cf_name],
                                    seed=seed, drawing=drawing)
-            for obs_x, obs_v, obs_lx, obs_lv, leaderL in zip(obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s))
+            for obs_x, obs_v, obs_lx, obs_lv, leaderL in
+            tqdm.tqdm(list(zip(obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s))))
     else:
         result = []
         for obs_x, obs_v, obs_lx, obs_lv, leaderL in zip(obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s):

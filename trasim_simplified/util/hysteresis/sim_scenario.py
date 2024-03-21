@@ -11,7 +11,7 @@ from trasim_simplified.util.calibrate.follow_sim import customize_sim
 def slow_to_go_sim(cf_func, cf_param, cf_e=None, init_v=15, dv=10,
                    warmup_time=10, dec_time=None, slow_time=10, acc_time=None, hold_time=10, v_length=5, dt=0.1):
     # print(cf_param, init_v)
-    gap = cf_e(**cf_param, speed=init_v) if cf_e is not None else init_v
+    gap = cf_e(**cf_param, speed=init_v) if cf_e is not None else init_v * 10
 
     warmup_step = round(warmup_time / dt)
     dec_step = round(dec_time / dt) if dec_time is not None else 1

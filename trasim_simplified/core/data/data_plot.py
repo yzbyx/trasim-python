@@ -165,6 +165,7 @@ class Plot:
         fig: plt.Figure = None,
         ax: plt.Axes = None,
         color_bar=True,
+        cmap_name="rainbow",
         frame_rate=10,
     ):
         if C_Info.lane_add_num in data_df.columns:
@@ -201,7 +202,7 @@ class Plot:
             else Plot.remove_outliers(color_data.to_numpy())
         )
         value_range = (np.min(c_data), np.max(c_data))
-        cmap: Colormap = plt.get_cmap("rainbow")
+        cmap: Colormap = plt.get_cmap(cmap_name)
         cmap.set_over("w")
         cmap.set_under("k")
         for id_ in data_df[C_Info.id].unique():

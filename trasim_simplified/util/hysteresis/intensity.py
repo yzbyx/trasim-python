@@ -48,13 +48,13 @@ def cal_sv_intensity(dec_s, dec_v, acc_s, acc_v, cf_e, cf_param: dict):
     acc_v = acc_v[: index]  # 找到加速轨迹中第一个小于等于共同最大速度的点
     acc_s = acc_s[: index]
 
-    min_speed = np.max([np.min(dec_v), np.min(acc_v)])
-    index = np.where(dec_v <= min_speed)[0][0]
-    dec_v = dec_v[: index]  # 找到减速轨迹中第一个小于等于共同最小速度的点
-    dec_s = dec_s[: index]
-    index = np.where(acc_v <= min_speed)[0][-1]
-    acc_v = acc_v[index:]  # 找到加速轨迹中最后一个小于等于共同最小速度的点
-    acc_s = acc_s[index:]
+    # min_speed = np.max([np.min(dec_v), np.min(acc_v)])
+    # index = np.where(dec_v <= min_speed)[0][0]
+    # dec_v = dec_v[: index]  # 找到减速轨迹中第一个小于等于共同最小速度的点
+    # dec_s = dec_s[: index]
+    # index = np.where(acc_v <= min_speed)[0][-1]
+    # acc_v = acc_v[index:]  # 找到加速轨迹中最后一个小于等于共同最小速度的点
+    # acc_s = acc_s[index:]
 
     # print((np.max(dec_v) - np.min(dec_v)) - (np.max(acc_v) - np.min(acc_v)))
     # assert (np.max(dec_v) - np.min(dec_v)) - (np.max(acc_v) - np.min(acc_v)) < 1, "速度范围不一致"
@@ -81,16 +81,21 @@ def cal_sv_intensity(dec_s, dec_v, acc_s, acc_v, cf_e, cf_param: dict):
     # dec_delta_s = np.sum(dec_s - e_space_array_dec)
     # a_space_array_acc = np.array([cf_e(**cf_param, speed=speed) for speed in acc_v])
     # acc_delta_s = np.sum(acc_s - a_space_array_acc)
-    #
-    # speed_range = max_speed - min_speed
-    # time_step_range = len(dec_v) + len(acc_v)
+
+    min_speed = dec_v[-1]
 
     # "dec_vs", "acc_vs", "total_vs", "dec_ts", "acc_ts", "total_ts", "min_speed", "max_speed", "dec_step", "acc_step"
-    return {"dec_vs": dec_vs, "acc_vs": acc_vs, "total_vs": dec_vs + acc_vs}
-    # "dec_ts": dec_delta_s / len(dec_s), "acc_ts": acc_delta_s / len(acc_s),
-    # "total_ts": (acc_delta_s - dec_delta_s) / time_step_range,
-    # "dec_avg_acc": (max_speed - min_speed) / (len(dec_v) * 0.1),
-    # "acc_avg_acc": (max_speed - min_speed) / (len(acc_v) * 0.1),
-    # "dec_avg_speed": np.mean(dec_v), "acc_avg_speed": np.mean(acc_v),
-    # "min_speed": min_speed, "max_speed": max_speed, "dv": max_speed - min_speed,
-    # "dec_step": len(dec_v), "acc_step": len(acc_v)}
+    return {
+        "dec_vs": dec_vs, "acc_vs": acc_vs, "total_vs": dec_vs + acc_vs,
+        "dec_t": len(dec_v) * 0.1,
+        "acc_t": len(acc_v) * 0.1,
+        "dec_avg_acc": (max_speed - min_speed) / (len(dec_v) * 0.1),  # 车辆的平均减速度
+        "acc_avg_acc": (max_speed - min_speed) / (len(acc_v) * 0.1),  # 车辆的平均加速度
+        "dec_avg_speed": np.mean(dec_v),  # 车辆减速过程的平均速度
+        "acc_avg_speed": np.mean(acc_v),  # 车辆加速过程的平均速度
+        "min_speed": min_speed,  # 共同最小速度
+        "max_speed": max_speed,  # 共同最大速度
+        "dv": max_speed - min_speed,  # 速度差
+        "dec_init_gap": dec_s[0],  # 减速初始净间距
+        "acc_init_gap": acc_s[0],  # 加速初始净间距
+    }
