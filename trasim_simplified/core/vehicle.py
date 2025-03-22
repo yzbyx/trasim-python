@@ -150,7 +150,7 @@ class Vehicle(Obstacle):
             if C_Info.lane_add_num == info:
                 self.lane_id_list.append(self.lane.add_num)
             if C_Info.Preceding_ID == info:
-                self.preceding_id_list.append(self.leader.ID if self.leader is not None else np.NaN)
+                self.preceding_id_list.append(self.leader.ID if self.leader is not None else np.nan)
             if C_Info.a == info:
                 self.acc_list.append(self.a)
             elif C_Info.v == info:
@@ -190,7 +190,7 @@ class Vehicle(Obstacle):
             gap = dhw - self.leader.length
             return gap
         else:
-            return np.NaN
+            return np.nan
 
     @property
     def dv(self):
@@ -198,7 +198,7 @@ class Vehicle(Obstacle):
         if self.leader is not None:
             return self.leader.v - self.v
         else:
-            return np.NaN
+            return np.nan
 
     @property
     def dhw(self):
@@ -212,21 +212,21 @@ class Vehicle(Obstacle):
                     pass
             return dhw
         else:
-            return np.NaN
+            return np.nan
 
     @property
     def thw(self):
         if self.leader is not None:
             if self.dv != 0:
                 return self.dhw / (- self.dv)
-        return np.NaN
+        return np.nan
 
     @property
     def ttc(self):
         if self.leader is not None:
             if self.dv != 0:
                 return self.gap / (- self.dv)
-        return np.NaN
+        return np.nan
 
     @property
     def tit(self):
@@ -255,7 +255,7 @@ class Vehicle(Obstacle):
             xd = (self.v ** 2) / (2 * dec)
             return (l_x + xd_l) - (self.x + self.v * self.lane.dt + xd) - l_length
         else:
-            return np.NaN
+            return np.nan
 
     @property
     def picud_KK(self):
@@ -276,7 +276,7 @@ class Vehicle(Obstacle):
 
             return (l_x + xd_l) - (self.x + self.v * tau + xd) - l_length
         else:
-            return np.NaN
+            return np.nan
 
     def has_data(self):
         return len(self.pos_list) != 0

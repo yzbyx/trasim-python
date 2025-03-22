@@ -109,12 +109,12 @@ def run_road():
 
             if i == lane_num - 2:
                 # 设置车道指定范围的类型，用于跟驰和换道模型内部的处理
-                lanes[i].set_section_type(SECTION_TYPE.BASE)
-                lanes[i].set_section_type(SECTION_TYPE.NO_RIGHT)
+                lanes[i].add_section_type(SECTION_TYPE.BASE)
+                lanes[i].add_section_type(SECTION_TYPE.NO_RIGHT)
             if i == lane_num - 1:
-                lanes[i].set_section_type(SECTION_TYPE.ON_RAMP, 10000, -1)
-                lanes[i].set_section_type(SECTION_TYPE.NO_LEFT, 0, 10000)
-                lanes[i].set_section_type(SECTION_TYPE.BASE, 0, 10000)
+                lanes[i].add_section_type(SECTION_TYPE.ON_RAMP, 10000, -1)
+                lanes[i].add_section_type(SECTION_TYPE.NO_LEFT, 0, 10000)
+                lanes[i].add_section_type(SECTION_TYPE.BASE, 0, 10000)
                 # 在指定位置设置路障
                 lanes[i].set_block(10300)
             else:

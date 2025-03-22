@@ -28,16 +28,19 @@ class QuiverInteract:
         self.ranges: dict = kwargs["range"]
         self.steps: dict = kwargs["step"]
 
-        self.speed = 10
         self.interval = 0.1
-        self.speedRange = [self.speed - 7, self.speed + 7]
-        self.dv = 5
         self.current_limit = None
 
-        fig, ax = plt.subplots(1, 1, figsize=fig_size)
+        fig, axes = plt.subplots(2, 3, figsize=fig_size)
+        axes = axes.flatten()
         self.fig: plt.Figure = fig
-        self.ax: plt.Axes = ax
+        self.axes: list[plt.Axes] = axes
         self.info_ax: plt.Axes = self.fig.add_axes([0.7, 0.1, 0.2, 0.04])
+
+    def _set_speed_range(self, speed, dv):
+        self.speed = speed
+        self.dv = dv
+        self.speedRange = [self.speed - dv - 2, self.speed + dv + 2]
 
     def run(self):
         self.info_ax.set_axis_off()
@@ -67,7 +70,8 @@ class QuiverInteract:
             self.slider_map.update({k: param_slider})
 
     def update(self, val):
-        self.ax.cla()
+        self.axes.cla()
+        self._set_speed_range(self.get_params().get("speed", 10), self.get_params().get("dv", 3))
         self.draw_equilibrium()  # 得到图幅的边界
         t1 = threading.Thread(name="draw_quiver", target=self.draw_quiver)
         t2 = threading.Thread(name="draw_traj", target=self.draw_hysteresis)
@@ -79,7 +83,7 @@ class QuiverInteract:
         t2.join()
         self.show_ok()
         # self.ax.set_ylim(self.gapRange.min(), self.gapRange.max())
-        self.ax.set_title(self.cf_func.__name__)
+        self.axes.set_title(self.cf_func.__name__)
         self.fig.canvas.draw_idle()
 
     def show_wait(self):
@@ -93,10 +97,14 @@ class QuiverInteract:
         self.info_ax.set_axis_off()
 
     def get_cf_params(self):
-        params = {}
-        for k, slider in self.slider_map.items():
-            params.update({k: slider.val})
-        return params
+        params_dict = self.get_params()
+        for k in ["speed", "dv"]:
+            if k in params_dict:
+                del params_dict[k]
+        return params_dict
+
+    def get_params(self):
+        return {k: slider.val for k, slider in self.slider_map.items()}
 
     def draw_quiver(self):
         numX = round((self.speedRange[1] - self.speedRange[0]) / 0.3)
@@ -121,8 +129,8 @@ class QuiverInteract:
         resultDeltaGap = np.array(resultDeltaGap)
         resultAcc = np.array(resultAcc)
 
-        self.ax.quiver(dataX, dataY, resultDeltaV, resultDeltaGap, np.abs(resultAcc), pivot="tail", scale=1,
-                       units='inches', angles='xy', alpha=1, width=0.01, cmap=None, scale_units='xy')
+        self.axes.quiver(dataX, dataY, resultDeltaV, resultDeltaGap, np.abs(resultAcc), pivot="tail", scale=1,
+                         units='inches', angles='xy', alpha=1, width=0.01, cmap=None, scale_units='xy')
 
     def draw_hysteresis(self):
         dec_speeds, dec_gaps = self.get_gap_v_data(self.speed + self.dv)
@@ -137,11 +145,11 @@ class QuiverInteract:
         e_area = cal_project_to_x_axis_area(acc_e_speeds, acc_e_gaps)
         acc_vs = (acc_area - e_area) / 2
 
-        self.ax.text(acc_e_speeds[0], acc_e_gaps[0], f"acc_vs: {acc_vs:.2f}")
-        self.ax.text(dec_e_speeds[-1], dec_e_gaps[-1], f"dec_vs: {dec_vs:.2f}")
+        self.axes.text(acc_e_speeds[0], acc_e_gaps[0], f"acc_vs: {acc_vs:.2f}")
+        self.axes.text(dec_e_speeds[-1], dec_e_gaps[-1], f"dec_vs: {dec_vs:.2f}")
 
-        self.ax.plot(dec_speeds, dec_gaps)
-        self.ax.plot(acc_speeds, acc_gaps)
+        self.axes.plot(dec_speeds, dec_gaps)
+        self.axes.plot(acc_speeds, acc_gaps)
 
     def get_gap_v_data(self, initial_v) -> tuple[list, list]:
         speed = initial_v
@@ -160,7 +168,7 @@ class QuiverInteract:
 
     def draw_equilibrium(self):
         vRange, gaps = self.get_e_v_s()
-        self.ax.plot(vRange, gaps)
+        self.axes[0].plot(vRange, gaps)
         self.current_limit = (self.speedRange, (np.min(gaps), np.max(gaps)))
 
     def get_e_v_s(self, speedRange=None):

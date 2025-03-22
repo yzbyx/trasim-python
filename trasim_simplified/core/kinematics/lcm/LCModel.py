@@ -27,7 +27,7 @@ class LCModel(Model, ABC):
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = LCModel._RANDOM
-        self.last_lc_time_ = - np.Inf
+        self.last_lc_time_ = - np.inf
 
     @abc.abstractmethod
     def base_cal(self):

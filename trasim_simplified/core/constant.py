@@ -7,6 +7,10 @@
 # ******************************
 # 随机种子
 # ******************************
+from dataclasses import dataclass
+from enum import Enum
+
+
 class RANDOM_SEED:
     CFM_SEED = 0  # 用于跟驰模型
     LCM_SEED = 0  # 用于换道模型
@@ -179,6 +183,10 @@ class LCM:
     """"""
     ACC = "ACC/TPACC"
     """Kerner对自动驾驶类车辆的换道规则"""
+    MOBIL = "MOBIL"
+    """MOBIL换道模型"""
+    APF = "APF"
+    """基于势场的换道模型"""
 
 
 class SECTION_TYPE:
@@ -234,6 +242,60 @@ class V_STATIC:
     TYPE = 'vType'
 
 
+class LaneMarkingType(Enum):
+    """
+    与carla.LaneMarkingType对应
+    """
+    NONE = 0
+    BottsDots = 1
+    Broken = 2  # 虚线
+    BrokenBroken = 3
+    BrokenSolid = 4
+    Curb = 5
+    Grass = 6
+    Solid = 7  # 实线
+    SolidBroken = 8
+    SolidSolid = 9
+    Other = 10
+
+
+class LaneType(Enum):
+    """
+    与carla.LaneType对应
+    """
+    NONE = 0
+    Driving = 1
+    Sidewalk = 2
+    Shoulder = 3
+    Parking = 4
+    Curb = 5
+    Grass = 6
+    Other = 7
+
+
+class LaneMarkingColor(Enum):
+    """
+    与carla.LaneMarkingColor对应
+    """
+    NONE = 0
+    Yellow = 1
+    White = 2
+    Blue = 3
+    Red = 4
+    Green = 5
+    Other = 6
+
+
+class LaneChange(Enum):
+    """
+    与carla.LaneChange对应
+    """
+    NONE = 0
+    Left = 1
+    Right = 2
+    Both = 3
+    Other = 4
+
 # ******************************
 # 车辆动态属性
 # ******************************
@@ -254,6 +316,13 @@ class RUNMODE:
     NORMAL = 'normal'
     # 无警告输出的安静模式
     SILENT = 'silent'
+
+@dataclass
+class PyGameConfig:
+    verbose = False
+    """是否输出详细信息"""
+    res = '1280x720'
+    """窗口分辨率"""
 
 
 if __name__ == '__main__':

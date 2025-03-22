@@ -46,7 +46,7 @@ class CFModel(Model, ABC):
 
     def get_speed_limit(self):
         if self.vehicle.lane.force_speed_limit is False:
-            return np.Inf
+            return np.inf
         return self.vehicle.lane.get_speed_limit(self.vehicle.x, self.vehicle.type)
 
     def equilibrium_state(self, *args):

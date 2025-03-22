@@ -8,14 +8,16 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from pygame.time import Clock
 
+from trasim_simplified.core.ui.sim2d_ui import UI
+
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
     from trasim_simplified.core.frame.micro.road import Road
 
 
-class UI:
+class UI2D(UI):
     def __init__(self, frame_abstract: Union['LaneAbstract', 'Road']):
-        self.frame = frame_abstract
+        super().__init__(frame_abstract)
         self.frame_rate = -1
         self.width_base = 1000
         self.width_scale = 1.5
@@ -73,4 +75,3 @@ class UI:
         pg.display.update()
         if self.frame_rate > 0:
             self.clock.tick(self.frame_rate)
-

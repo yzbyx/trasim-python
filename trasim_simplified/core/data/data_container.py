@@ -25,8 +25,12 @@ class DataContainer:
     def config(self, save_info=None, basic_info=True):
         """默认包含车辆ID"""
         if basic_info:
-            save_info = [Info.lane_add_num, Info.step, Info.Time,
-                         Info.id, Info.Preceding_ID, Info.x, Info.v, Info.a, Info.v_Length]
+            basic_info = [Info.lane_add_num, Info.step, Info.Time,
+                          Info.id, Info.Preceding_ID, Info.x, Info.v, Info.a, Info.v_Length]
+            if save_info is None:
+                save_info = basic_info
+            else:
+                save_info = basic_info + save_info
         if save_info is None:
             save_info = {}
         self.save_info.update(save_info)

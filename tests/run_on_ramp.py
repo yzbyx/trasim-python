@@ -44,12 +44,12 @@ def run_road():
             lanes[i].car_load()
             lanes[i].data_container.config()
             if i == lane_num - 2:
-                lanes[i].set_section_type(SECTION_TYPE.BASE)
-                lanes[i].set_section_type(SECTION_TYPE.NO_RIGHT)
+                lanes[i].add_section_type(SECTION_TYPE.BASE)
+                lanes[i].add_section_type(SECTION_TYPE.NO_RIGHT)
             if i == lane_num - 1:
-                lanes[i].set_section_type(SECTION_TYPE.ON_RAMP, 5000, -1)
-                lanes[i].set_section_type(SECTION_TYPE.NO_LEFT, 0, 5000)
-                lanes[i].set_section_type(SECTION_TYPE.BASE, 0, 5000)
+                lanes[i].add_section_type(SECTION_TYPE.ON_RAMP, 5000, -1)
+                lanes[i].add_section_type(SECTION_TYPE.NO_LEFT, 0, 5000)
+                lanes[i].add_section_type(SECTION_TYPE.BASE, 0, 5000)
                 lanes[i].set_block(5300)
     else:
         sim = Road(road_length)
@@ -61,13 +61,13 @@ def run_road():
                 lanes[i].set_speed_limit(22.2)
 
             if i == lane_num - 2:
-                lanes[i].set_section_type(SECTION_TYPE.BASE)
-                lanes[i].set_section_type(SECTION_TYPE.NO_RIGHT)
+                lanes[i].add_section_type(SECTION_TYPE.BASE)
+                lanes[i].add_section_type(SECTION_TYPE.NO_RIGHT)
             if i == lane_num - 1:
 
-                lanes[i].set_section_type(SECTION_TYPE.ON_RAMP, 10000, -1)
-                lanes[i].set_section_type(SECTION_TYPE.NO_LEFT, 0, 10000)
-                lanes[i].set_section_type(SECTION_TYPE.BASE, 0, 10000)
+                lanes[i].add_section_type(SECTION_TYPE.ON_RAMP, 10000, -1)
+                lanes[i].add_section_type(SECTION_TYPE.NO_LEFT, 0, 10000)
+                lanes[i].add_section_type(SECTION_TYPE.BASE, 0, 10000)
                 lanes[i].set_block(10300)
             else:
                 # lanes[i].car_load()

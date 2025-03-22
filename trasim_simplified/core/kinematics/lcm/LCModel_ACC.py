@@ -36,7 +36,7 @@ class LCModel_ACC(LCModel):
         # -----on ramp----- #
         self._lambda_b = l_param.get("lambda_b", 0.75)
         self._delta_vr_1 = l_param.get("delta_vr_1", 10.)
-        self.xm = np.NAN
+        self.xm = np.nan
 
         self.left_lane: Optional['LaneAbstract'] = None
         self.right_lane: Optional['LaneAbstract'] = None
@@ -64,7 +64,7 @@ class LCModel_ACC(LCModel):
         left_ = False
         right_ = False
 
-        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
+        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.inf
         if self.left_lane is not None:
             _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l = self._safe_check(_f, _l)

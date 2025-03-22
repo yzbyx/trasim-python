@@ -7,6 +7,7 @@ import time
 from typing import Optional
 
 import pandas as pd
+import tqdm
 
 from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE
 from trasim_simplified.core.data.data_processor import DataProcessor
@@ -14,7 +15,7 @@ from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.frame.micro.open_lane import LaneOpen
 from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
 from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
-from trasim_simplified.core.ui.sim_ui import UI
+from trasim_simplified.core.ui.sim_ui import UI2D
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimWarning import TrasimWarning
 
@@ -31,7 +32,7 @@ class Road:
         if pyqtgraph:
             self.ui: PyqtUI = PyqtUI(self)
         else:
-            self.ui: UI = UI(self)
+            self.ui: UI2D = UI2D(self)
         self.step_ = 0
         self.sim_step = None
         self.dt = None
@@ -42,7 +43,7 @@ class Road:
 
         self.data_processor: DataProcessor = DataProcessor()
 
-    def add_lanes(self, lane_num: int, is_circle=True, real_index: Optional[list[int]] = None):
+    def add_lanes(self, lane_num: int, is_circle=True):
         """
 
         :param lane_num:
@@ -50,7 +51,7 @@ class Road:
         :param real_index: 道路从内到外对应的真实车道编号
         :return:
         """
-        real_index = real_index if real_index is not None else list(range(lane_num))
+        real_index = list(range(lane_num))
         for i in range(lane_num):
             if is_circle:
                 lane = LaneCircle(self.lane_length)
@@ -90,7 +91,7 @@ class Road:
         time_stamp = "%s.%s" % (data_head, str(timeIn).split('.')[-1][:5])
         timeStart = time_stamp
 
-        while self.sim_step != self.step_:
+        for _ in tqdm.tqdm(range(self.sim_step)):
             for i, lane_iter in enumerate(lanes_iter):
                 self.step_ = lane_iter.__next__()
             if self.yield_: yield self.step_, 0  # 跟驰
@@ -134,6 +135,17 @@ class Road:
                             target_lane.car_insert_by_instance(car)
                             car_lc_last = car
                         car.lc_result = {"lc": 0}
+
+    def get_lane_index(self, y):
+        """
+        获取车道编号
+        :param y:
+        :return:
+        """
+        for i, lane in enumerate(self.lane_list):
+            if lane.y_right <= y < lane.y_left:
+                return i
+        return None
 
     @staticmethod
     def _check_and_correct_lc_pos(target_lane, car_lc_last, car):

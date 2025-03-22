@@ -12,7 +12,7 @@ import numpy as np
 from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE, CFM
 from trasim_simplified.core.data.data_container import DataContainer
 from trasim_simplified.core.data.data_processor import DataProcessor
-from trasim_simplified.core.ui.sim_ui import UI
+from trasim_simplified.core.ui.sim_ui import UI2D
 from trasim_simplified.core.vehicle import Vehicle
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimError import TrasimError
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class LaneAbstract(ABC):
-    def __init__(self, lane_length: float, speed_limit: float = 30):
+    def __init__(self, lane_length: float, speed_limit: float = 30, width: float = 3.5):
         self.ID = 0
         self.index = 0
         self.add_num = 0
@@ -35,6 +35,7 @@ class LaneAbstract(ABC):
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
+        self.width = width
         self.section_type: dict[int, dict[str, list[float, float]]] = {}
         self.speed_limit: dict[int, dict[float, list[float, float]]] = {}
 
@@ -49,6 +50,7 @@ class LaneAbstract(ABC):
         self.car_param_list: list[dict] = []
         self.lc_name_list: list[str] = []
         self.lc_param_list: list[dict] = []
+        self.destination_lanes_list: list = []
 
         self.car_list: list[Vehicle] = []
         self._dummy_car_list: list[Vehicle] = []
@@ -95,7 +97,11 @@ class LaneAbstract(ABC):
         self.data_processor: DataProcessor = DataProcessor()
 
         self.has_ui = False
-        self.ui: UI = UI(self)
+        self.ui: UI2D = UI2D(self)
+
+        self.y_center = - self.index * width - width / 2
+        self.y_left = self.y_center + width / 2
+        self.y_right = self.y_center - width / 2
 
     def _get_new_car_id(self):
         if not self.road_control:
@@ -104,7 +110,7 @@ class LaneAbstract(ABC):
         else:
             return self.road.get_new_car_id()
 
-    def set_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1,
+    def add_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1,
                          car_types: Optional[Union[list[int], int]] = None):
         if start_pos < 0:
             start_pos = 0
@@ -118,9 +124,12 @@ class LaneAbstract(ABC):
 
         for car_type in car_types:
             if car_type in self.section_type.keys():
-                self.section_type[car_type].update({type_: [start_pos, end_pos]})
+                if type_ in self.section_type[car_type].keys():
+                    self.section_type[car_type][type_].append((start_pos, end_pos))
+                else:
+                    self.section_type[car_type].update({type_: [(start_pos, end_pos)]})
             else:
-                self.section_type.update({car_type: {type_: [start_pos, end_pos]}})
+                self.section_type.update({car_type: {type_: [(start_pos, end_pos)]}})
 
     def get_section_type(self, pos, car_type: int) -> set[str]:
         type_ = set()
@@ -130,14 +139,15 @@ class LaneAbstract(ABC):
         section_type_for_type = self.section_type.get(car_type, None)
         if section_type_for_type is not None:
             for key in section_type_for_type.keys():
-                pos_ = section_type_for_type[key]
-                if pos_[0] <= pos < pos_[1]:
-                    type_.add(key)
-                if pos == self.lane_length and pos == pos_[1]:
-                    type_.add(key)
+                pos_list = section_type_for_type[key]
+                for pos_ in pos_list:
+                    if pos_[0] < pos < pos_[1]:
+                        type_.add(key)
+                    if pos == self.lane_length and pos == pos_[1]:
+                        type_.add(key)
         return type_
 
-    def set_speed_limit(self, speed_limit=30, start_pos=-1, end_pos=-1,
+    def set_speed_limit(self, speed_limit=30., start_pos=-1, end_pos=-1,
                         car_types: Optional[Union[list[int], int]] = None):
         assert speed_limit >= 0
         if start_pos < 0:
@@ -158,7 +168,7 @@ class LaneAbstract(ABC):
 
     def get_speed_limit(self, pos, car_type: int) -> float:
         if self.force_speed_limit is False:
-            return np.Inf
+            return np.inf
         if len(self.speed_limit) == 0:
             return self._default_speed_limit
 
@@ -176,7 +186,8 @@ class LaneAbstract(ABC):
 
     def car_config(self, car_num: Union[int, float], car_length: float, car_type: int, car_initial_speed: float,
                    speed_with_random: bool, cf_name: str, cf_param: dict[str, float], car_param: dict,
-                   lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None):
+                   lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None,
+                   destination_lanes=tuple[int]):
         """如果是开边界，则car_num与car_loader配合可以代表车型比例，如果car_loader中的flow为复数，则car_num为真实生成车辆数"""
         if 0 < car_num < 1:
             car_num = int(np.floor(self.lane_length * car_num / car_length))
@@ -190,6 +201,7 @@ class LaneAbstract(ABC):
         self.car_param_list.append(car_param)
         self.lc_name_list.append(lc_name)
         self.lc_param_list.append(lc_param)
+        self.destination_lanes_list.append(destination_lanes)
 
     def car_load(self, car_gap=-1, jam_num=-1):
         car_num_total = sum(self.car_num_list)

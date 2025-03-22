@@ -6,7 +6,6 @@
 from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_acc, cf_IDM_equilibrium
 from trasim_simplified.core.kinematics.cfm.CFM_IDM_SZ import cf_IDM_SZ_acc, cf_IDM_SZ_equilibrium
 from trasim_simplified.core.kinematics.cfm.CFM_IDM_VS import cf_IDM_VS_acc, cf_IDM_VS_equilibrium
-from trasim_simplified.core.kinematics.cfm.CFM_IDM_Z import cf_IDM_Z_acc, cf_IDM_VZ_equilibrium
 from trasim_simplified.util.interaction.quiver import QuiverInteract, cf_Zhang_acc, cf_Zhang_equilibrium
 
 if __name__ == '__main__':

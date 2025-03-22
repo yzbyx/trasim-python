@@ -170,7 +170,7 @@ class CFModel_KK(CFModel):
                 left_leader, left.get_speed_limit(pos, self.vehicle.type), self._delta_vr_2
             )
             self.G = cal_G(self._k, self._tau, self._a, self.v, v_hat_leader)
-            gap = np.Inf if left_leader is None else (- left_leader.get_dist(self.vehicle.x) - left_leader.length)
+            gap = np.inf if left_leader is None else (- left_leader.get_dist(self.vehicle.x) - left_leader.length)
 
             # ----v_c计算---- #
             v_c = self._cal_v_c_on_ramp(self.G, a_n, b_n, v_hat_leader, left_leader, gap)
@@ -272,12 +272,20 @@ class CFModel_KK(CFModel):
 
     @staticmethod
     def _sig_func(x):
+        """
+        信号函数，小于0返回-1，大于等于0返回1
+        """
         return 0 if x < 0 else 1
 
     def p_0_v(self, v):
         return 0.575 + 0.125 * min(1, v / self._v_01)
 
     def p_2_v(self, v):
+        """
+
+        :param v:
+        :return:
+        """
         return 0.48 + 0.32 * self._sig_func(v - self._v_21)
 
 

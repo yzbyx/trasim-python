@@ -5,10 +5,13 @@
 # Software: PyCharm
 from typing import Union, Optional
 
-import pyqtgraph as pg
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import QApplication
-from pyqtgraph import GraphicsLayoutWidget
+try:
+    import pyqtgraph as pg
+    from PyQt5 import QtCore
+    from PyQt5.QtWidgets import QApplication
+    from pyqtgraph import GraphicsLayoutWidget
+except ImportError:
+    pass
 
 from trasim_simplified.core.vehicle import Vehicle
 

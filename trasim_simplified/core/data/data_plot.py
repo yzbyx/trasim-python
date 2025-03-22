@@ -235,7 +235,8 @@ class Plot:
             cb: Colorbar = fig.colorbar(
                 ScalarMappable(
                     mc.Normalize(vmin=value_range[0], vmax=value_range[1]), cmap
-                )
+                ),
+                ax=ax
             )
             cb.set_label(color_bar_name)
         return fig, ax
