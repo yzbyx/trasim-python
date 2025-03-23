@@ -14,7 +14,7 @@ from trasim_simplified.core.constant import RUNMODE, RANDOM_SEED
 from trasim_simplified.core.kinematics.model import Model
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel(Model, ABC):

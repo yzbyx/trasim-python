@@ -189,21 +189,18 @@ class LCM:
     """基于势场的换道模型"""
 
 
-class SECTION_TYPE:
-    BASE = "base"
+class SECTION_TYPE(Enum):
+    BASE = 0
     """基本路段"""
-    ON_RAMP = "on_ramp"
+    ON_RAMP = 1
     """入口匝道区域"""
-    OFF_RAMP = "off_ramp"
+    OFF_RAMP = 2
     """出口匝道区域"""
-    NO_LEFT = "no_lc_to_left"
-    """禁止向左换道"""
-    NO_RIGHT = "no_lc_to_right"
-    """禁止向右换道"""
-    NO_LEFT_CAR = "no_left_car"
-    """禁止左侧车辆换入"""
-    NO_RIGHT_CAR = "no_right_car"
-    """禁止右侧车辆换入"""
+
+
+class MARKING_TYPE(Enum):
+    SOLID = 1
+    DASHED = 2
 
 
 # ******************************

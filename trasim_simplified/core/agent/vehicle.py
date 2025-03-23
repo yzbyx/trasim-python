@@ -10,7 +10,7 @@ import numpy as np
 from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
-from trasim_simplified.core.obstacle import Obstacle
+from trasim_simplified.core.agent.obstacle import Obstacle
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:

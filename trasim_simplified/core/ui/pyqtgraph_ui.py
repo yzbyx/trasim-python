@@ -13,7 +13,7 @@ try:
 except ImportError:
     pass
 
-from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class PyqtUI:

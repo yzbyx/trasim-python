@@ -12,7 +12,7 @@ from trasim_simplified.core.constant import CFM, SECTION_TYPE
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel_KK(CFModel):

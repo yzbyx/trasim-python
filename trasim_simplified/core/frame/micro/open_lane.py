@@ -8,7 +8,7 @@ from typing import Optional
 import numpy as np
 
 from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
-from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class THW_DISTRI:
@@ -74,6 +74,7 @@ class LaneOpen(LaneAbstract):
                 i = pos[0]
             vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
             vehicle.x = self.offset_pos
+            vehicle.y = self.y_center
             vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
             vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
             if self.car_initial_speed_list[i] >= 0:

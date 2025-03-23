@@ -55,7 +55,16 @@ class Obstacle:
         self.wb_prop = 0.6
         self.wheelbase = self.length * self.wb_prop
         self._update_prop()
+        self.l_rear_axle_2_head = self.wheelbase * ((1 - self.wb_prop) / 2 + self.wb_prop)
         self._define_shape()
+
+    @property
+    def position(self):
+        return np.array([self.x, self.y])
+
+    @property
+    def velocity(self):
+        return np.array([self.v, self.v_lat])
 
     @property
     def x_c(self):
@@ -181,6 +190,13 @@ class Obstacle:
         ])
 
         return A, B
+
+    def get_bbox(self):
+        yaw = self.yaw
+        outline = np.copy(self.outline_poses)
+        yaw_rot = np.array([[np.cos(yaw), -np.sin(yaw)], [np.sin(yaw), np.cos(yaw)]])
+        outline = np.dot(yaw_rot, outline.T).T
+        return outline
 
     def plot_car(self, ax: plt.Axes):
         x, y, yaw = self.x, self.y, self.yaw

@@ -3,13 +3,14 @@
 # @Author : yzbyx
 # @File : road.py
 # Software: PyCharm
+import random
 import time
 from typing import Optional
 
 import pandas as pd
 import tqdm
 
-from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE
+from trasim_simplified.core.constant import V_TYPE, MARKING_TYPE
 from trasim_simplified.core.data.data_processor import DataProcessor
 from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.frame.micro.open_lane import LaneOpen
@@ -17,6 +18,7 @@ from trasim_simplified.core.frame.micro.circle_lane import LaneCircle
 from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
 from trasim_simplified.core.ui.sim_ui import UI2D
 from trasim_simplified.core.data.data_container import Info as C_Info
+from trasim_simplified.core.agent.vehicle import Vehicle
 from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 
@@ -62,15 +64,15 @@ class Road:
             lane.ID = f"{lane.index}-{lane.add_num}"
             lane.road_control = True
             lane.road = self
-            lane.left_neighbour_lanes = []
-            lane.right_neighbour_lanes = []
+            lane.left_neighbour_lane = None
+            lane.right_neighbour_lane = None
             self.lane_list.append(lane)
         for i, lane in enumerate(self.lane_list):
             for lane_ in self.lane_list:
                 if lane.index - 1 == lane_.index:
-                    lane.left_neighbour_lanes.append(lane_)
+                    lane.left_neighbour_lane = lane_
                 elif lane.index + 1 == lane_.index:
-                    lane.right_neighbour_lanes.append(lane_)
+                    lane.right_neighbour_lane = lane_
         return self.lane_list
 
     def run(self, data_save=True, has_ui=True, **kwargs):
@@ -114,7 +116,7 @@ class Road:
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
                     if car.lc_model is not None:
-                        left, right = self.get_available_adjacent_lane(lane, car.x, car.type)
+                        left, right = self.get_available_adjacent_lane(lane, car.x)
                         car.step_lane_change(j, left, right)
 
     def update_lc_state(self):
@@ -146,6 +148,49 @@ class Road:
             if lane.y_right <= y < lane.y_left:
                 return i
         return None
+
+    def choose_vehicle(self, lane_add_num: int = 0, car_type: int = None, **kwargs):
+        """
+        随机选取一辆车辆
+        :param lane_add_num:
+        :param car_type:
+        :param kwargs:
+        :return:
+        """
+        all_vehicles = []
+        for lane in self.lane_list:
+            if lane.add_num == lane_add_num:
+                all_vehicles.extend(lane.car_list)
+        if len(all_vehicles) == 0:
+            TrasimWarning("没有车辆！")
+            return None
+        return random.choice(all_vehicles)
+
+    @staticmethod
+    def get_neighbour_vehicles(car: Vehicle, type_="all"):
+        """
+        获取指定车道的相邻车辆
+        :param car:
+        :param type_: 车辆类型, all: 所有车辆, left: 左侧车辆, right: 右侧车辆
+        :return:
+        """
+        left_front = left_rear = None
+        right_front = right_rear = None
+        if type_ == "left" or type_ == "all":
+            lane = car.lane.left_neighbour_lane
+            if lane is not None:
+                left_front = lane.get_relative_car(car)
+                left_rear = lane.get_relative_car(car)
+            if type_ == "left":
+                return left_front, left_rear
+        if type_ == "right" or type_ == "all":
+            lane = car.lane.right_neighbour_lane
+            if lane is not None:
+                right_front = lane.get_relative_car(car)
+                right_rear = lane.get_relative_car(car)
+            if type_ == "right":
+                return right_front, right_rear
+        return left_rear, left_front, right_rear, right_front
 
     @staticmethod
     def _check_and_correct_lc_pos(target_lane, car_lc_last, car):
@@ -190,30 +235,18 @@ class Road:
         return self.lane_list[lane_add_num].car_insert_middle(*args, **kwargs)
 
     @staticmethod
-    def get_available_adjacent_lane(lane: LaneAbstract, pos, car_type) -> \
+    def get_available_adjacent_lane(lane: LaneAbstract, pos) -> \
             tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
-        lefts, rights = lane.left_neighbour_lanes, lane.right_neighbour_lanes
-        section_type = lane.get_section_type(pos, car_type)
+        left, right = lane.left_neighbour_lane, lane.right_neighbour_lane
+        left_type, right_type = lane.get_marking_type(pos)
 
-        if SECTION_TYPE.NO_LEFT in section_type:
-            lefts = [None]
-        else:
-            for left in lefts:
-                if SECTION_TYPE.NO_RIGHT_CAR in left.get_section_type(pos, car_type):
-                    lefts.pop(left)
-            if len(lefts) == 0: lefts = [None]
+        if MARKING_TYPE.SOLID == left_type:
+            left = None
 
-        if SECTION_TYPE.NO_RIGHT in section_type:
-            rights = [None]
-        else:
-            for right in rights:
-                if SECTION_TYPE.NO_LEFT_CAR in right.get_section_type(pos, car_type):
-                    rights.pop(right)
-            if len(rights) == 0: rights = [None]
+        if MARKING_TYPE.SOLID == right_type:
+            right = None
 
-        assert (len(lefts) == 1) and (len(rights) == 1), "有重叠车道！"
-
-        return lefts[0], rights[0]
+        return left, right
 
     def data_to_df(self):
         if self.total_data is None:

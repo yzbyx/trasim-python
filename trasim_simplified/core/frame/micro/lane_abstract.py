@@ -9,11 +9,11 @@ from typing import Optional, TYPE_CHECKING, Union
 
 import numpy as np
 
-from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE, CFM
+from trasim_simplified.core.constant import SECTION_TYPE, V_TYPE, CFM, MARKING_TYPE
 from trasim_simplified.core.data.data_container import DataContainer
 from trasim_simplified.core.data.data_processor import DataProcessor
 from trasim_simplified.core.ui.sim_ui import UI2D
-from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.agent.vehicle import Vehicle
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.msg.trasimError import TrasimError
 from trasim_simplified.msg.trasimWarning import TrasimWarning
@@ -28,16 +28,21 @@ class LaneAbstract(ABC):
         self.index = 0
         self.add_num = 0
         self.road: Optional[Road] = None
-        self.left_neighbour_lanes: Optional[list[LaneAbstract]] = None
-        self.right_neighbour_lanes: Optional[list[LaneAbstract]] = None
+        self.left_neighbour_lane: Optional[LaneAbstract] = None
+        self.right_neighbour_lane: Optional[LaneAbstract] = None
 
         self._default_speed_limit = speed_limit
         self.car_num_total = 0
         self.is_circle = None
         self.lane_length = float(lane_length)
         self.width = width
-        self.section_type: dict[int, dict[str, list[float, float]]] = {}
-        self.speed_limit: dict[int, dict[float, list[float, float]]] = {}
+        self.heading = 0
+        self.section_types: Optional[list[list[float], list[SECTION_TYPE]]] = None
+        """车道分段类型，n+1个纵向坐标点，n个分段类型"""
+        self.marking_type: Optional[list[list[float], list[tuple[MARKING_TYPE, MARKING_TYPE]]]] = None
+        """车道标线类型，n+1个纵向坐标点，n个标线类型"""
+        self.speed_limit: Optional[list[list[float], list[float]]] = None
+        """车道限速，n+1个纵向坐标点，n个限速值"""
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
@@ -110,74 +115,49 @@ class LaneAbstract(ABC):
         else:
             return self.road.get_new_car_id()
 
-    def add_section_type(self, type_: str, start_pos: float = -1, end_pos: float = -1,
-                         car_types: Optional[Union[list[int], int]] = None):
-        if start_pos < 0:
-            start_pos = 0
-        if end_pos < 0:
-            end_pos = self.lane_length
+    def set_section_type(self, x_lon: list[float], section_type: list[SECTION_TYPE]):
+        assert len(x_lon) - 1 == len(section_type)
+        self.section_types = [x_lon, section_type]
 
-        if isinstance(car_types, int):
-            car_types = [car_types]
-        if car_types is None or len(car_types) == 0:
-            car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
+    def get_section_type(self, x_lon) -> SECTION_TYPE:
+        if self.section_types is None:
+            return SECTION_TYPE.BASE
 
-        for car_type in car_types:
-            if car_type in self.section_type.keys():
-                if type_ in self.section_type[car_type].keys():
-                    self.section_type[car_type][type_].append((start_pos, end_pos))
-                else:
-                    self.section_type[car_type].update({type_: [(start_pos, end_pos)]})
-            else:
-                self.section_type.update({car_type: {type_: [(start_pos, end_pos)]}})
+        for i in range(len(self.section_types[0]) - 1):
+            if self.section_types[0][i] <= x_lon < self.section_types[0][i + 1]:
+                return self.section_types[1][i]
 
-    def get_section_type(self, pos, car_type: int) -> set[str]:
-        type_ = set()
-        if len(self.section_type) == 0:
-            type_.add(SECTION_TYPE.BASE)
+        return SECTION_TYPE.BASE
 
-        section_type_for_type = self.section_type.get(car_type, None)
-        if section_type_for_type is not None:
-            for key in section_type_for_type.keys():
-                pos_list = section_type_for_type[key]
-                for pos_ in pos_list:
-                    if pos_[0] < pos < pos_[1]:
-                        type_.add(key)
-                    if pos == self.lane_length and pos == pos_[1]:
-                        type_.add(key)
-        return type_
+    def set_marking_type(self, x_lon: list[float], marking_type: list[tuple[MARKING_TYPE, MARKING_TYPE]]):
+        assert len(x_lon) - 1 == len(marking_type)
+        self.marking_type = [x_lon, marking_type]
 
-    def set_speed_limit(self, speed_limit=30., start_pos=-1, end_pos=-1,
-                        car_types: Optional[Union[list[int], int]] = None):
-        assert speed_limit >= 0
-        if start_pos < 0:
-            start_pos = 0
-        if end_pos < 0:
-            end_pos = self.lane_length
+    def get_marking_type(self, pos) -> tuple[MARKING_TYPE, MARKING_TYPE]:
+        """获取车道标线类型（左标线、右标线）"""
+        if self.marking_type is None:
+            return MARKING_TYPE.SOLID, MARKING_TYPE.SOLID
 
-        if isinstance(car_types, int):
-            car_types = [car_types]
-        if car_types is None or len(car_types) == 0:
-            car_types = list(V_TYPE.get_all_v_type_no_obstacle().values())
+        for i in range(len(self.marking_type[0]) - 1):
+            if self.marking_type[0][i] <= pos < self.marking_type[0][i + 1]:
+                return self.marking_type[1][i]
 
-        for car_type in car_types:
-            if car_type in self.speed_limit.keys():
-                self.speed_limit[car_type].update({speed_limit: [start_pos, end_pos]})
-            else:
-                self.speed_limit.update({car_type: {speed_limit: [start_pos, end_pos]}})
+        return MARKING_TYPE.SOLID, MARKING_TYPE.SOLID
 
-    def get_speed_limit(self, pos, car_type: int) -> float:
-        if self.force_speed_limit is False:
-            return np.inf
-        if len(self.speed_limit) == 0:
+    def set_speed_limit(self, x_lon, speed_limit):
+        """设置车道限速"""
+        assert len(x_lon) - 1 == len(speed_limit)
+        self.speed_limit = [x_lon, speed_limit]
+
+    def get_speed_limit(self, pos) -> float:
+        """获取车道限速"""
+        if self.speed_limit is None:
             return self._default_speed_limit
 
-        speed_limit_for_type = self.speed_limit.get(car_type, None)
-        if speed_limit_for_type is not None:
-            for key in speed_limit_for_type.keys():
-                pos_ = speed_limit_for_type[key]
-                if pos_[0] <= pos <= pos_[1]:
-                    return key
+        for i in range(len(self.speed_limit[0]) - 1):
+            if self.speed_limit[0][i] <= pos < self.speed_limit[0][i + 1]:
+                return self.speed_limit[1][i]
+
         return self._default_speed_limit
 
     @property
@@ -511,75 +491,27 @@ class LaneAbstract(ABC):
                         offset += 1
                 return car
 
-    def get_relative_car(self, car: Vehicle = None)\
+    def get_relative_car(self, car: Vehicle)\
             -> tuple[Optional[Vehicle], Optional[Vehicle]]:
         """获取指定位置的前后车(用于换道)"""
-        follower_ = leader_ = None
+        leader_ = None
         pos = car.x
 
-        if self in car.lane.left_neighbour_lanes:
-            relative_pos = -1
-            pre_leader_follower = car.pre_left_leader_follower
-        elif self in car.lane.right_neighbour_lanes:
-            relative_pos = 1
-            pre_leader_follower = car.pre_right_leader_follower
-        else:
-            relative_pos = 0
-            pre_leader_follower = None
+        if car in self.car_list:
+            return car.follower, car.leader
 
-        if pre_leader_follower is None:
-            follower_, leader_ = self._common_get_relative_car(pos)
-        else:
-            leader, follower = pre_leader_follower
-            leader_on_lane = \
-                True if (leader is not None and leader.lane == self and not leader.is_run_out) else False
-            follower_on_lane = \
-                True if (follower is not None and follower.lane == self and not follower.is_run_out) else False
-            if leader_on_lane or follower_on_lane:
-                base_car = follower if follower_on_lane else leader
-                if base_car.get_dist(pos) >= 0:  # pos在目标车前方
-                    temp = base_car.leader
-                    if temp is None:
-                        follower_ = base_car
-                    else:
-                        while temp != base_car:
-                            if temp.x > pos:
-                                follower_ = temp.follower
-                                leader_ = temp
-                                break
-                            if temp.leader is not None:
-                                temp = temp.leader
-                            else:
-                                break
-                            if temp.leader is None and follower_ is None and leader_ is None:
-                                follower_ = temp
-                else:
-                    temp = base_car.follower
-                    if temp is None:
-                        leader_ = base_car
-                    else:
-                        while temp != base_car:
-                            if temp.x < pos:
-                                follower_ = temp
-                                leader_ = temp.leader
-                                break
-                            if temp.follower is not None:
-                                temp = temp.follower
-                            else:
-                                break
-                        if temp.follower is None and follower_ is None and leader_ is None:
-                            leader_ = temp
-        # if follower_ is not None:
-        #     assert follower_.x <= car.x
-        # if leader_ is not None:
-        #     assert leader_.x >= car.x
+        for i in range(len(self.car_list)):
+            temp_car = self.car_list[i]
+            if temp_car.x >= pos:
+                leader_ = temp_car
+                break
 
-        # FIXME: 此段代码结果有误
-        # if relative_pos == -1:
-        #     car.pre_left_leader_follower = [follower_, leader_]
-        # elif relative_pos == 1:
-        #     car.pre_right_leader_follower = [follower_, leader_]
-        return follower_, leader_
+        if leader_ is not None:
+            return leader_.follower, leader_
+        elif len(self.car_list) != 0:
+            return self.car_list[-1], None
+        else:
+            return None, None
 
     def _common_get_relative_car(self, pos: float):
         for car in self.car_list:
