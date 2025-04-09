@@ -6,16 +6,18 @@
 import abc
 from typing import TYPE_CHECKING, Optional
 
+from trasim_simplified.core.constant import VehSurr
+
 if TYPE_CHECKING:
     from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class Model(metaclass=abc.ABCMeta):
-    def __init__(self, vehicle: Optional['Vehicle']):
-        self.vehicle: Optional['Vehicle'] = vehicle if vehicle else None
+    def __init__(self):
         self.name = None
         self.thesis = None
         self.dt = None
+        self.veh_surr: Optional['VehSurr'] = None
 
     @abc.abstractmethod
     def _update_dynamic(self):
@@ -27,11 +29,10 @@ class Model(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def step(self, index, *args):
+    def step(self, veh_surr: 'VehSurr'):
         """
         计算下一时间步的加速度
 
-        :param index: 车辆在车道上从上游到下游的顺序编号，从0开始
         :return: 下一时间步的加速度
         """
         pass

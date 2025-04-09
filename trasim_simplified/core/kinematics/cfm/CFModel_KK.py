@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM, SECTION_TYPE
+from trasim_simplified.core.constant import CFM, SECTION_TYPE, VehSurr
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
@@ -39,8 +39,8 @@ class CFModel_KK(CFModel):
 
     'v_21': 15
     """
-    def __init__(self, car: Optional['Vehicle'], f_param: dict[str, float]):
-        super().__init__(car)
+    def __init__(self, f_param: dict[str, float]):
+        super().__init__()
         # -----模型属性------ #
         self.name = CFM.KK
         self.thesis = 'Physics of automated driving in framework of three-phase traffic theory (2018)'
@@ -64,7 +64,7 @@ class CFModel_KK(CFModel):
         self._v_01 = f_param.get("v_01", 10)
         self._v_21 = f_param.get("v_21", 15)
 
-        self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
+        self._v_safe_dispersed = f_param.get("v_safe_dispersed", False)
         """v_safe计算是否离散化时间"""
 
         self._delta_vr_2 = f_param.get("delta_vr_2", 5.)
@@ -73,17 +73,23 @@ class CFModel_KK(CFModel):
         self.index = None
 
     def _update_dynamic(self):
-        self.dt = self.vehicle.lane.dt
-        assert self.dt == self._tau
-        if self.vehicle.lane.state_update_method != "Euler" and self._v_safe_dispersed:
-            TrasimError("状态更新方式需要为Euler！")
+        self.dt = self.veh_surr.ev.lane.dt
         self._vf = self.get_expect_speed()
-        self.update_v_safe(self)
 
-        self.v = self.vehicle.v
-        self.gap = self.vehicle.gap
-        self.l_v = self.vehicle.leader.v
-        self.l_length = self.vehicle.leader.length
+        self.v = self.veh_surr.ev.v
+        self.l_length = self.veh_surr.cp.length
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length
+        self.l_v = self.veh_surr.cp.v
+        self.l_v_a = self.veh_surr.cp.a
+
+        self.v_safe = cal_v_safe(
+            self.v_safe_dispersed,
+            self._tau,
+            self.veh_surr.cp.v,
+            self.gap,
+            self.get_expect_dec(),
+            self.get_expect_dec()  # 前车期望减速度取当前车的期望减速度，下同
+        )
 
     @property
     def v_safe_dispersed(self):
@@ -148,10 +154,11 @@ class CFModel_KK(CFModel):
                 if (cf_model.index < len(cf_model.v_a_list) - 1) else None
         return cf_model.l_v_a
 
-    def step(self, index, *args):
-        self.index = index
-        if self.vehicle.leader is None:
-            return 0.
+    def step(self, veh_surr: VehSurr):
+        self.veh_surr = veh_surr
+        if self.veh_surr.cp is None:
+            speed = max(0, min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
+            return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
         acc, self.status = self._calculate()
         return acc
@@ -161,24 +168,10 @@ class CFModel_KK(CFModel):
         a_n, b_n = self.cal_an_bn()
 
         # ----G计算---- #
-        if SECTION_TYPE.ON_RAMP in self.vehicle.lane.get_section_type(self.vehicle.x, self.vehicle.type):
-            # 只计算向左换道
-            pos = self.vehicle.x
-            left, _ = self.vehicle.lane.road.get_available_adjacent_lane(self.vehicle.lane, pos, self.vehicle.type)
-            _, left_leader = left.get_relative_car(self.vehicle)
-            v_hat_leader = self.v_hat_leader_on_ramp(
-                left_leader, left.get_speed_limit(pos, self.vehicle.type), self._delta_vr_2
-            )
-            self.G = cal_G(self._k, self._tau, self._a, self.v, v_hat_leader)
-            gap = np.inf if left_leader is None else (- left_leader.get_dist(self.vehicle.x) - left_leader.length)
+        self.G = cal_G(self._k, self._tau, self._a, self.v, self.l_v)
 
-            # ----v_c计算---- #
-            v_c = self._cal_v_c_on_ramp(self.G, a_n, b_n, v_hat_leader, left_leader, gap)
-        else:
-            self.G = cal_G(self._k, self._tau, self._a, self.v, self.l_v)
-
-            # ----v_c计算---- #
-            v_c = self._cal_v_c(self.G, a_n, b_n)
+        # ----v_c计算---- #
+        v_c = self._cal_v_c(self.G, a_n, b_n)
 
         # ----v_s计算---- #
         v_s = self._cal_v_s()
@@ -197,7 +190,7 @@ class CFModel_KK(CFModel):
         return final_acc, status
 
     def _cal_v_s(self):
-        v_s = min(self.v_safe, self.gap / self.dt + self.l_v_a)
+        v_s = min(self.v_safe, self.gap / self._tau + self.l_v_a)
         return v_s
 
     @staticmethod
@@ -231,6 +224,8 @@ class CFModel_KK(CFModel):
         return a_n, b_n
 
     def _cal_v_c(self, G, a_n, b_n):
+        if self.veh_surr.ev.lane_changing or self.veh_surr.ev.is_gaming:
+            return self.v + (0.3 * (self.gap - 2 - 0.3 * self.v) + 0.3 * (self.l_v - self.v)) * self.dt
         if self.gap <= G:
             delta = max(-b_n * self._tau, min(a_n * self._tau, self.l_v - self.v))
             v_c = self.v + delta

@@ -3,6 +3,8 @@
 # @Author : yzbyx
 # @File : __init__.py
 # @Software : PyCharm
+from typing import Type
+
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.kinematics.cfm.CFModel_IDM import CFModel_IDM as IDM, cf_IDM_acc
 from trasim_simplified.core.kinematics.cfm.CFModel_Gipps import CFModel_Gipps as GIPPS
@@ -27,41 +29,39 @@ from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 __All__ = ['get_cf_model', 'CFModel', 'get_cf_id']
 
 
-def get_cf_model(_driver, name=CFM.IDM, param=None) -> CFModel:
-    if param is None:
-        param = {}
+def get_cf_model(name=CFM.IDM) -> [CFModel]:
     if name == CFM.IDM:
-        return IDM(_driver, param)
+        return IDM
     elif name == CFM.IDM_SZ:
-        return IDM_SZ(_driver, param)
+        return IDM_SZ
     elif name == CFM.IDM_VS:
-        return IDM_VS(_driver, param)
+        return IDM_VS
     elif name == CFM.IDM_VZ:
-        return IDM_VZ(_driver, param)
+        return IDM_VZ
     elif name == CFM.GIPPS:
-        return GIPPS(_driver, param)
+        return GIPPS
     elif name == CFM.LINEAR:
-        return Linear(_driver, param)
+        return Linear
     elif name == CFM.WIEDEMANN_99:
-        return W99(_driver, param)
+        return W99
     elif name == CFM.NON_LINEAR_GHR:
-        return GHR(_driver, param)
+        return GHR
     elif name == CFM.OPTIMAL_VELOCITY:
-        return OVM(_driver, param)
+        return OVM
     elif name == CFM.KK:
-        return KK(_driver, param)
+        return KK
     elif name == CFM.ACC:
-        return ACC(_driver, param)
+        return ACC
     elif name == CFM.TPACC:
-        return TPACC(_driver, param)
+        return TPACC
     elif name == CFM.DUMMY:
-        return Dummy(_driver, param)
+        return Dummy
     elif name == CFM.CACC:
-        return CACC(_driver, param)
+        return CACC
     elif name == CFM.LCM:
-        return LCM(_driver, param)
+        return LCM
     elif name == CFM.CTM:
-        return CTM(_driver, param)
+        return CTM
     else:
         raise TrasimError(rem.NO_MODEL.format(name))
 

@@ -14,8 +14,8 @@ from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_v_safe, CFModel
 
 
 class CFModel_TPACC(CFModel):
-    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
-        super().__init__(vehicle)
+    def __init__(self, f_param: dict[str, float]):
+        super().__init__()
         self.name = CFM.TPACC
         self.thesis = "Physics of automated driving in framework of three-phase traffic theory (2018)"
 
@@ -43,8 +43,6 @@ class CFModel_TPACC(CFModel):
         if self.record_cf_info:
             self.cf_info = TPACCInfo()
 
-        self.index = None
-
     @property
     def v_safe_dispersed(self):
         return self._v_safe_dispersed
@@ -59,27 +57,29 @@ class CFModel_TPACC(CFModel):
         return self.get_speed_limit()
 
     def _update_dynamic(self):
-        self.gap = self.vehicle.gap
-        self.dt = self.vehicle.lane.dt
-        assert self.dt == self.tau
+        self.gap = self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
+        self.dt = self.veh_surr.ev.lane.dt
         self._update_v_safe()
 
     def _update_v_safe(self):
-        self.l_v_a = CFModel_KK.update_v_safe(self)
+        # self.l_v_a = CFModel_KK.update_v_safe(self)
+        self.l_v_a = self.veh_surr.cp.a
 
     def step(self, index, *args):
-        self.index = index
-        if self.vehicle.leader is None:
-            return 3
+        self.clear()
+        if self.veh_surr.ev.leader is None:
+            speed = max(0, min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
+            return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
-        leader_is_dummy = True if self.vehicle.leader.type == V_TYPE.OBSTACLE else False
-        result = calculate(*f_params,
-                           self.dt, self.gap, self.vehicle.v, self.vehicle.leader.v, self.get_expect_speed(),
-                           leader_is_dummy, self.l_v_a)
+        leader_is_dummy = True if self.veh_surr.cp.type == V_TYPE.OBSTACLE else False
+        result = calculate(
+            *f_params, self.dt, self.gap, self.veh_surr.ev.v, self.veh_surr.cp.v, self.get_expect_speed(),
+            leader_is_dummy, self.l_v_a
+        )
         if self.record_cf_info:
-            self.cf_info.step.append(self.vehicle.lane.step_)
-            self.cf_info.time.append(self.vehicle.lane.time_)
+            self.cf_info.step.append(self.veh_surr.ev.lane.step_)
+            self.cf_info.time.append(self.veh_surr.ev.lane.time_)
             self.cf_info.is_speed_adaptive.append(result[1])
             self.cf_info.is_acc_constraint.append(result[2])
             self.cf_info.is_thw_constraint.append(result[3])
@@ -119,8 +119,6 @@ def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
 def cf_TPACC_acc(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,
                  interval, gap, speed, leaderV, v_free=30, leader_is_dummy=False, l_v_a=0):
     pass
-    # return calculate(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,
-    #                  interval, gap, speed, leaderV, v_free, leader_is_dummy, l_v_a)[0]
 
 
 class TPACCInfo:

@@ -7,6 +7,7 @@ from typing import Optional
 
 import numpy as np
 
+from trasim_simplified.core.agent import get_veh_class
 from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.agent.vehicle import Vehicle
 
@@ -48,10 +49,6 @@ class LaneOpen(LaneAbstract):
         self.offset_pos = offset_pos
         self.car_num_percent = np.array(self.car_num_list) / sum(self.car_num_list)
 
-    def step(self):
-        for i, car in enumerate(self.car_list):
-            car.step(i)
-
     def car_summon(self):
         if 0 < self.time_ < self.next_car_time:
             return
@@ -72,33 +69,38 @@ class LaneOpen(LaneAbstract):
                 i = np.random.choice(pos)
             else:
                 i = pos[0]
-            vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
+            VehClass = get_veh_class(self.car_class_list[i])
+            vehicle = VehClass(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
             vehicle.x = self.offset_pos
             vehicle.y = self.y_center
             vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
             vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
+            vehicle.set_car_param(self.car_param_list[i])
+            vehicle.destination_lane_indexes = self.destination_lanes_list[i]
+            vehicle.route_type = self.route_type_list[i]
+
             if self.car_initial_speed_list[i] >= 0:
-                vehicle.v = np.random.uniform(
+                vehicle.speed = np.random.uniform(
                     max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
                 ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
             else:
                 if self.car_initial_speed_list[i] == -1:
                     if len(self.car_list) == 0:
-                        vehicle.v = vehicle.cf_model.get_expect_speed()
+                        vehicle.speed = vehicle.cf_model.get_expect_speed()
                     else:
-                        vehicle.v = self.car_list[0].v
+                        vehicle.speed = self.car_list[0].v
                 else:
                     # 新的车辆汇入方式（效果不行，堵塞带依旧影响发车）
                     if len(self.car_list) != 0:
                         leader = self.car_list[0]
-                        vehicle.v = leader.v
+                        vehicle.speed = leader.v
                         l_d = leader.dhw
                         if not np.isnan(l_d):
                             x = leader.x - l_d - leader.length
                             vehicle.x = x if x >= vehicle.x else vehicle.x
                     else:
-                        vehicle.v = vehicle.cf_model.get_expect_speed()
-            vehicle.a = 0
+                        vehicle.speed = vehicle.cf_model.get_expect_speed()
+            vehicle.acc = 0
             vehicle.set_car_param(self.car_param_list[i])
 
             if len(self.car_list) != 0:
@@ -131,7 +133,7 @@ class LaneOpen(LaneAbstract):
 
     def update_state(self):
         for car in self.car_list:
-            self.car_state_update_common(car)
+            car.update_state(car.next_acc, car.next_delta)
 
             if car.x > self.lane_length:
                 car.is_run_out = True

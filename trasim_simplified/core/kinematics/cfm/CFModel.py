@@ -22,8 +22,8 @@ class CFModel(Model, ABC):
 
     _RANDOM = random.Random(RANDOM_SEED.CFM_SEED)
 
-    def __init__(self, vehicle: Optional['Vehicle']):
-        super().__init__(vehicle)
+    def __init__(self):
+        super().__init__()
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = CFModel._RANDOM
@@ -45,9 +45,9 @@ class CFModel(Model, ABC):
         pass
 
     def get_speed_limit(self):
-        if self.vehicle.lane.force_speed_limit is False:
-            return np.inf
-        return self.vehicle.lane.get_speed_limit(self.vehicle.x, self.vehicle.type)
+        # if self.veh_surr.ev.lane.force_speed_limit is False:
+        #     return np.inf
+        return self.veh_surr.ev.lane.get_speed_limit(self.veh_surr.ev.x)
 
     def equilibrium_state(self, *args):
         pass

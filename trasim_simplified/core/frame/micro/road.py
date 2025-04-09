@@ -19,6 +19,7 @@ from trasim_simplified.core.ui.pyqtgraph_ui import PyqtUI
 from trasim_simplified.core.ui.sim_ui import UI2D
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.core.agent.vehicle import Vehicle
+from trasim_simplified.core.ui.sim_ui_matplotlib import UI2DMatplotlib
 from trasim_simplified.msg.trasimWarning import TrasimWarning
 
 
@@ -32,9 +33,9 @@ class Road:
         self.id_accumulate = 0
 
         if pyqtgraph:
-            self.ui: PyqtUI = PyqtUI(self)
+            self.ui: PyqtUI | UI2DMatplotlib = PyqtUI(self)
         else:
-            self.ui: UI2D = UI2D(self)
+            self.ui: PyqtUI | UI2DMatplotlib = UI2DMatplotlib(self)
         self.step_ = 0
         self.sim_step = None
         self.dt = None
@@ -45,12 +46,29 @@ class Road:
 
         self.data_processor: DataProcessor = DataProcessor()
 
-    def add_lanes(self, lane_num: int, is_circle=True):
-        """
+        self._end_weaving_pos = None
+        self._start_weaving_pos = None
+        self.end_weaving_block_veh = Vehicle(None, -1, -1, 0)
 
+    @property
+    def end_weaving_pos(self):
+        return self._end_weaving_pos
+
+    @property
+    def start_weaving_pos(self):
+        return self._start_weaving_pos
+
+    def set_end_weaving_pos(self, value):
+        self.end_weaving_block_veh.x = value
+        self._end_weaving_pos = value
+
+    def set_start_weaving_pos(self, value):
+        self._start_weaving_pos = value
+
+    def add_lanes(self, lane_num: int, is_circle=False):
+        """
         :param lane_num:
         :param is_circle:
-        :param real_index: 道路从内到外对应的真实车道编号
         :return:
         """
         real_index = list(range(lane_num))
@@ -66,6 +84,7 @@ class Road:
             lane.road = self
             lane.left_neighbour_lane = None
             lane.right_neighbour_lane = None
+            lane.update_y_info()
             self.lane_list.append(lane)
         for i, lane in enumerate(self.lane_list):
             for lane_ in self.lane_list:
@@ -93,15 +112,23 @@ class Road:
         time_stamp = "%s.%s" % (data_head, str(timeIn).split('.')[-1][:5])
         timeStart = time_stamp
 
+        # for i, lane_iter in enumerate(lanes_iter):
+        #     self.step_ = lane_iter.__next__()  # 车辆生成，上一步的数据记录
+
         for _ in tqdm.tqdm(range(self.sim_step)):
-            for i, lane_iter in enumerate(lanes_iter):
-                self.step_ = lane_iter.__next__()
+            self.step_vehicle_surr()  # 更新车辆周围车辆信息
             if self.yield_: yield self.step_, 0  # 跟驰
+            self.step_lc_intention_judge()
+            if self.yield_: yield self.step_, 1  # 换道意图
+            self.step_lc_decision_making()
+            if self.yield_: yield self.step_, 2  # 换道决策
+            self.step_vehicle_control()  # 控制量计算
+            if self.yield_: yield self.step_, 3  # 控制量计算
             for i, lane_iter in enumerate(lanes_iter):
-                self.step_ = lane_iter.__next__()  # 跟驰状态更新
-            self.step_lane_change()
-            if self.yield_: yield self.step_, 1  # 换道
-            self.update_lc_state()  # 换道状态更新
+                self.step_ = lane_iter.__next__()  # 车辆控制量和坐标姿态更新
+            self.step_vehicle_lane_update()  # 车辆车道更新和前后车辆更新
+            for i, lane_iter in enumerate(lanes_iter):
+                self.step_ = lane_iter.__next__()  # 车辆输入与数据记录
             self.step_ += 1
             self.time_ += self.dt
             if self.has_ui: self.ui.ui_update()
@@ -111,32 +138,46 @@ class Road:
                      str((timeOut - timeIn) * 1000 // 1 / 1000) + ' s'
         print(log_string)
 
-    def step_lane_change(self):
+    def step_lc_intention_judge(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
-                    if car.lc_model is not None:
-                        left, right = self.get_available_adjacent_lane(lane, car.x)
-                        car.step_lane_change(j, left, right)
+                    car.lc_intention_judge()
+                    assert car.target_lane is not None
 
-    def update_lc_state(self):
+    def step_lc_decision_making(self):
         for i, lane in enumerate(self.lane_list):
-            car_lc_last = None
-            car_list = lane.car_list.copy()
-            car_list.reverse()
-            for j, car in enumerate(car_list):
+            for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
-                    lc = car.lc_result.get("lc", 0)
-                    if lc != 0:
-                        target_lane = self.lane_list[car.lane.index + lc]
-                        if self._check_and_correct_lc_pos(target_lane, car_lc_last, car):
-                            lane.car_remove(car)
-                            car.x = car.lc_result.get("x", car.x)
-                            car.v = car.lc_result.get("v", car.v)
-                            car.a = car.lc_result.get("a", car.a)
-                            target_lane.car_insert_by_instance(car)
-                            car_lc_last = car
-                        car.lc_result = {"lc": 0}
+                    car.lc_decision_making()
+                    assert car.target_lane is not None
+
+    def step_vehicle_control(self):
+        for i, lane in enumerate(self.lane_list):
+            for j, car in enumerate(lane.car_list):
+                if car.type != V_TYPE.OBSTACLE:
+                    car.cal_vehicle_control()
+                    assert car.target_lane is not None
+
+    def step_vehicle_lane_update(self):
+        for i, lane in enumerate(self.lane_list):
+            for j, car in enumerate(lane.car_list):
+                if car.type != V_TYPE.OBSTACLE:
+                    if car.y_c > lane.y_left:
+                        target_lane = car.left_lane
+                        target_lane.car_insert_by_instance(car)
+                        car.lane.car_remove(car)
+                    elif car.y_c < lane.y_right:
+                        target_lane = car.right_lane
+                        target_lane.car_insert_by_instance(car)
+                        car.lane.car_remove(car)
+                    assert car.target_lane is not None
+
+    def step_vehicle_surr(self):
+        for i, lane in enumerate(self.lane_list):
+            for j, car in enumerate(lane.car_list):
+                if car.type != V_TYPE.OBSTACLE:
+                    car.update_surrounding_vehicle_and_lane()
 
     def get_lane_index(self, y):
         """
@@ -149,12 +190,10 @@ class Road:
                 return i
         return None
 
-    def choose_vehicle(self, lane_add_num: int = 0, car_type: int = None, **kwargs):
+    def choose_vehicle(self, lane_add_num: int = 0):
         """
         随机选取一辆车辆
         :param lane_add_num:
-        :param car_type:
-        :param kwargs:
         :return:
         """
         all_vehicles = []
@@ -176,18 +215,17 @@ class Road:
         """
         left_front = left_rear = None
         right_front = right_rear = None
+        left_lane, right_lane = Road.get_available_adjacent_lane(car.lane, car.x)
         if type_ == "left" or type_ == "all":
-            lane = car.lane.left_neighbour_lane
+            lane = left_lane
             if lane is not None:
-                left_front = lane.get_relative_car(car)
-                left_rear = lane.get_relative_car(car)
+                left_rear, left_front = lane.get_relative_car(car)
             if type_ == "left":
                 return left_front, left_rear
         if type_ == "right" or type_ == "all":
-            lane = car.lane.right_neighbour_lane
+            lane = right_lane
             if lane is not None:
-                right_front = lane.get_relative_car(car)
-                right_rear = lane.get_relative_car(car)
+                right_rear, right_front = lane.get_relative_car(car)
             if type_ == "right":
                 return right_front, right_rear
         return left_rear, left_front, right_rear, right_front
@@ -235,10 +273,10 @@ class Road:
         return self.lane_list[lane_add_num].car_insert_middle(*args, **kwargs)
 
     @staticmethod
-    def get_available_adjacent_lane(lane: LaneAbstract, pos) -> \
+    def get_available_adjacent_lane(lane: LaneAbstract, x_lon) -> \
             tuple[Optional[LaneAbstract], Optional[LaneAbstract]]:
         left, right = lane.left_neighbour_lane, lane.right_neighbour_lane
-        left_type, right_type = lane.get_marking_type(pos)
+        left_type, right_type = lane.get_marking_type(x_lon)
 
         if MARKING_TYPE.SOLID == left_type:
             left = None

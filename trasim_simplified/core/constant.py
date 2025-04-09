@@ -9,6 +9,12 @@
 # ******************************
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from trasim_simplified.core.agent import Vehicle
 
 
 class RANDOM_SEED:
@@ -196,12 +202,22 @@ class SECTION_TYPE(Enum):
     """入口匝道区域"""
     OFF_RAMP = 2
     """出口匝道区域"""
+    AUXILIARY = 3
+    """辅助车道区域"""
 
 
 class MARKING_TYPE(Enum):
     SOLID = 1
     DASHED = 2
 
+
+class V_CLASS(Enum):
+    BASE = 0
+    """基本车辆"""
+    GAME_HV = 1
+    """博弈人类车辆"""
+    GAME_AV = 2
+    """博弈自动驾驶车辆"""
 
 # ******************************
 # 车辆类别
@@ -314,12 +330,57 @@ class RUNMODE:
     # 无警告输出的安静模式
     SILENT = 'silent'
 
+
+class RouteType(Enum):
+    diverge = 0
+    merge = 1
+    mainline = 2
+    auxiliary = 3
+
+
 @dataclass
 class PyGameConfig:
     verbose = False
     """是否输出详细信息"""
     res = '1280x720'
     """窗口分辨率"""
+
+
+@dataclass
+class VehSurr:
+    ev: 'Vehicle' = None
+    cp: 'Vehicle' = None
+    cr: 'Vehicle' = None
+    lp: 'Vehicle' = None
+    lr: 'Vehicle' = None
+    rp: 'Vehicle' = None
+    rr: 'Vehicle' = None
+
+
+@dataclass
+class TrajPoint:
+    x: float = None
+    y: float = None
+    yaw: float = None
+    speed: float = None
+    acc: float = None
+    delta: float = None
+
+    @property
+    def vx(self):
+        return self.speed * np.cos(self.yaw)
+
+    @property
+    def vy(self):
+        return self.speed * np.sin(self.yaw)
+
+    @property
+    def ax(self):
+        return self.acc * np.cos(self.yaw)
+
+    @property
+    def ay(self):
+        return self.acc * np.sin(self.yaw)
 
 
 if __name__ == '__main__':

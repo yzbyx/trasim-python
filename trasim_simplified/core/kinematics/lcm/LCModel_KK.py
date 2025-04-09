@@ -19,13 +19,11 @@ from trasim_simplified.core.constant import LCM
 
 
 class LCModel_KK(LCModel):
-    def __init__(self, vehicle: 'Vehicle', l_param: dict[str, float]):
-        super().__init__(vehicle)
+    def __init__(self, l_param: dict[str, float]):
+        super().__init__()
         self.name = LCM.KK
         self.thesis = 'Physics of Automated-Driving Vehicular Traﬃc'
 
-        self._a_0 = vehicle.cf_model.get_expect_acc()
-        self._delta_1 = l_param.get("delta_1", 2 * self._a_0 * self.vehicle.lane.dt)
         self._delta_2 = l_param.get("delta_2", 5)
         self._gamma_ahead = l_param.get("gamma_ahead", 1)
         self._gamma_behind = l_param.get("gamma_behind", 0.5)
@@ -50,12 +48,16 @@ class LCModel_KK(LCModel):
         assert self.vehicle.lane.is_circle is False, "此换道模型在边界处由于xm"
         self.lane = self.vehicle.lane
         self.dt = self.lane.dt
+        self._a_0 = vehicle.cf_model.get_expect_acc()
+        self._delta_1 = l_param.get("delta_1", 2 * self._a_0 * self.vehicle.lane.dt)
 
-    def step(self, index, *args):
+    def step(self):
         self._update_dynamic()
-        self.left_lane, self.right_lane = args
+        self.left_lane, self.right_lane = self.lane.road.get_available_adjacent_lane(self.lane, self.vehicle.x)
         # type_ = self.lane.get_section_type(self.vehicle.x, self.vehicle.type)
-        return self.base_cal()
+        res = self.base_cal()
+        if res["lc"] != 0:
+            self.vehicle.target_lane = self.left_lane if res["lc"] == -1 else self.right_lane
         # if SECTION_TYPE.BASE in type_:
         #     return self.base_cal()
         # if SECTION_TYPE.ON_RAMP in type_:

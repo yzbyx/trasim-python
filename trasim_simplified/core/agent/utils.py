@@ -7,9 +7,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from highway_env.vehicle.kinematics import Vehicle
-
 
 def get_x_guess(T, state):
     """根据猜测的终点x方向状态确定纵向五次多项式fxt参数"""
@@ -76,6 +73,15 @@ def wrap_to_pi(x: float) -> float:
     return ((x + np.pi) % (2 * np.pi)) - np.pi
 
 
+def not_zero(x: float, eps: float = 1e-2) -> float:
+    if abs(x) > eps:
+        return x
+    elif x >= 0:
+        return eps
+    else:
+        return -eps
+
+
 def correct_steering(angle):
     """转为[-np.pi / 2, np.pi / 2]"""
     angle[angle > np.pi / 2] -= np.pi
@@ -134,37 +140,3 @@ def get_state_space(dt, ref_yaw, ref_delta, ref_v, L):
         [dt * np.sin(ref_beta) / L, ref_v * dt * np.cos(ref_beta) * c / L]
     ])
     return A, B
-
-
-def get_g_safe(ego: 'Vehicle', front: 'Vehicle', T_safe=0.5, return_local_state=False, relax=False):
-    """车辆中心的x、y"""
-    _, ev, ea = get_local_state(ego)
-    ed = ego.dec_max
-    el = ego.length
-
-    _, fv, fa = get_local_state(front)
-    fd = front.dec_max
-    fl = front.length
-
-    g_safe = get_g_safe_by_data(ed, el, ev, fd, fl, fv, T_safe, relax)
-
-    if return_local_state:
-        return g_safe, ev, ea, fv, fa
-    else:
-        return g_safe
-
-
-def get_g_safe_by_data(ed, el, ev, fd, fl, fv, T_safe=0.5, relax=False):
-    if relax:
-        g_safe = ev * T_safe + (el + fl) / 2
-    else:
-        g_safe = ev * T_safe + np.power(ev, 2) / (2 * ed) - np.power(fv, 2) / (2 * fd) + (el + fl) / 2
-    return g_safe
-
-
-def get_local_state(ego: 'Vehicle'):
-    ex = ego.lane.local_coordinates(ego.position)[0]
-    lane_heading = ego.lane.heading_at(ex)
-    ev = ego.speed * np.cos(lane_heading)
-    ea = ego.action["acceleration"] * np.cos(lane_heading)
-    return ex, ev, ea

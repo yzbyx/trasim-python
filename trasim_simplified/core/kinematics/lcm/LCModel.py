@@ -22,8 +22,8 @@ class LCModel(Model, ABC):
 
     _RANDOM = random.Random(RANDOM_SEED.LCM_SEED)
 
-    def __init__(self, vehicle: Optional['Vehicle']):
-        super().__init__(vehicle)
+    def __init__(self):
+        super().__init__()
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = LCModel._RANDOM

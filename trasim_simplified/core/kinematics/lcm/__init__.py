@@ -9,20 +9,19 @@ from trasim_simplified.core.constant import LCM
 from trasim_simplified.core.kinematics.lcm.LCModel import LCModel
 from trasim_simplified.core.kinematics.lcm.LCModel_ACC import LCModel_ACC
 from trasim_simplified.core.kinematics.lcm.LCModel_KK import LCModel_KK
+from trasim_simplified.core.kinematics.lcm.LCModel_Mobil import LCModel_Mobil
 from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 
 __All__ = ['get_lc_model', 'LCModel', 'get_lc_id']
 
 
-def get_lc_model(_driver, name=LCM.KK, param=None) -> Optional[LCModel]:
-    if param is None:
-        param = {}
+def get_lc_model(name=LCM.KK) -> [LCModel]:
     if name == LCM.KK:
-        return LCModel_KK(_driver, param)
+        return LCModel_KK
     if name == LCM.ACC:
-        return LCModel_ACC(_driver, param)
-    if name is None:
-        return None
+        return LCModel_ACC
+    if name == LCM.MOBIL:
+        return LCModel_Mobil
     else:
         raise TrasimError(rem.NO_MODEL.format(name))
 

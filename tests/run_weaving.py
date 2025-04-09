@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 # @Time : 2025/3/22 14:58
 # @Author : yzbyx
-# @File : run_waeaving.py
+# @File : run_weaving.py
 # Software: PyCharm
 
-from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, SECTION_TYPE
+from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, SECTION_TYPE, MARKING_TYPE, V_CLASS, RouteType
 from trasim_simplified.core.data.data_plot import Plot
-from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 from trasim_simplified.core.frame.micro.open_lane import THW_DISTRI, LaneOpen
 from trasim_simplified.core.frame.micro.road import Road
 from trasim_simplified.util.timer import timer_no_log
@@ -41,42 +40,65 @@ def run_road():
             lanes[i].set_speed_limit(22.2)
 
         if i == lane_num - 2:
-            lanes[i].add_section_type(SECTION_TYPE.BASE, 0, road_length)
-            lanes[i].add_section_type(SECTION_TYPE.NO_RIGHT, 0, upstream_end)
-            lanes[i].add_section_type(SECTION_TYPE.NO_RIGHT, upstream_end, downstream_start)
+            lanes[i].set_marking_type(
+                [
+                    (MARKING_TYPE.DASHED, MARKING_TYPE.SOLID),
+                    (MARKING_TYPE.DASHED, MARKING_TYPE.DASHED),
+                    (MARKING_TYPE.DASHED, MARKING_TYPE.SOLID),
+                ],
+                [0, upstream_end, downstream_start, road_length],
+            )
         if i == lane_num - 1:
-            lanes[i].add_section_type(SECTION_TYPE.ON_RAMP, 0, upstream_end)
-            lanes[i].add_section_type(SECTION_TYPE.NO_LEFT, 0, upstream_end)
-            lanes[i].add_section_type(SECTION_TYPE.BASE, upstream_end, downstream_start)
-            lanes[i].add_section_type(SECTION_TYPE.OFF_RAMP, downstream_start, road_length)
-            lanes[i].add_section_type(SECTION_TYPE.NO_LEFT, downstream_start, road_length)
+            lanes[i].set_section_type(
+                [
+                    SECTION_TYPE.ON_RAMP, SECTION_TYPE.AUXILIARY, SECTION_TYPE.OFF_RAMP,
+                ],
+                [0, upstream_end, downstream_start, road_length],
+            )
+            lanes[i].set_marking_type(
+                [
+                    (MARKING_TYPE.SOLID, MARKING_TYPE.SOLID),
+                    (MARKING_TYPE.DASHED, MARKING_TYPE.SOLID),
+                    (MARKING_TYPE.SOLID, MARKING_TYPE.SOLID),
+                ],
+                [0, upstream_end, downstream_start, road_length],
+            )
+        sim.set_start_weaving_pos(upstream_end)
+        sim.set_end_weaving_pos(downstream_start)
 
         if i == lane_num - 1:
             lanes[i].car_config(
-                80, v_length, V_TYPE.PASSENGER,
-                30, False,
+                80, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+                0, False,
                 CFM.KK, _cf_param, {"color": COLOR.yellow},
-                lc_name=LCM.KK, lc_param={}, destination_lanes=tuple(range(lane_num - 1))
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple(range(lane_num - 1)),
+                route_type=RouteType.merge
             )
             lanes[i].car_config(
-                20, v_length, V_TYPE.PASSENGER,
-                30, False,
+                20, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+                0, False,
                 CFM.KK, _cf_param, {"color": COLOR.blue},
-                lc_name=LCM.KK, lc_param={}, destination_lanes=tuple([i])
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([i]),
+                route_type=RouteType.auxiliary
             )
         else:
             lanes[i].car_config(
-                80, v_length, V_TYPE.PASSENGER,
-                30, False,
+                80, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+                0, False,
                 CFM.KK, _cf_param, {"color": COLOR.yellow},
-                lc_name=LCM.KK, lc_param={}, destination_lanes=tuple(range(lane_num - 1))
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple(range(lane_num - 1)),
+                route_type=RouteType.mainline
             )
             lanes[i].car_config(
-                20, v_length, V_TYPE.PASSENGER,
-                30, False,
+                20, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+                0, False,
                 CFM.KK, _cf_param, {"color": COLOR.blue},
-                lc_name=LCM.KK, lc_param={}, destination_lanes=tuple([i])
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([i]),
+                route_type=RouteType.diverge
             )
+
+        # lanes[0].speed_limit = 20
+        # lanes[1].speed_limit = 20
 
         lanes[i].data_container.config()
 
@@ -85,7 +107,7 @@ def run_road():
         else:
             lanes[i].car_loader(100, THW_DISTRI.Uniform, 30, 0)
 
-    for step, stage in sim.run(data_save=True, has_ui=False, frame_rate=10,
+    for step, stage in sim.run(data_save=True, has_ui=False, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         if warm_up_step + offset_step == step and stage == 0:
             take_over_index = sim.get_appropriate_car(lane_add_num=0)

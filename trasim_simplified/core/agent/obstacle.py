@@ -3,10 +3,12 @@
 # @Author : yzbyx
 # @File : obstacle.py
 # @Software : PyCharm
+from typing import Optional
+
 import numpy as np
 from matplotlib import pyplot as plt
 
-from trasim_simplified.core.constant import COLOR
+from trasim_simplified.core.constant import COLOR, TrajPoint
 
 
 class Obstacle:
@@ -15,21 +17,10 @@ class Obstacle:
         """车头中点的x坐标 [m]"""
         self.y = 0
         """车头中点的y坐标 [m]"""
-
-        self.v = 0
-        """车辆纵向速度 [m/s]"""
-        self.v_lat = 0
-        """车辆横向速度 [m/s]"""
         self.speed = 0
         """车辆速度 [m/s]"""
-
-        self.a = 0
-        """车辆纵向加速度 [m/s^2]"""
-        self.a_lat = 0
-        """车辆横向加速度 [m/s^2]"""
         self.acc = 0
         """车辆加速度 [m/s^2]"""
-
         self.yaw = 0
         self.delta = 0
 
@@ -51,12 +42,30 @@ class Obstacle:
         self.D_DELTA_MAX = 0.4
         self.DD_DELTA_MAX = 20
 
-        self.length = 5
         self.wb_prop = 0.6
         self.wheelbase = self.length * self.wb_prop
         self._update_prop()
         self.l_rear_axle_2_head = self.wheelbase * ((1 - self.wb_prop) / 2 + self.wb_prop)
         self._define_shape()
+
+        # 时间步+车辆角点
+        self.predict_bbox: Optional[dict[int, list[np.ndarray[float]]]] = {}
+
+    @property
+    def v(self):
+        return self.speed * np.cos(self.yaw)
+
+    @property
+    def v_lat(self):
+        return self.speed * np.sin(self.yaw)
+
+    @property
+    def a(self):
+        return self.acc * np.cos(self.yaw)
+
+    @property
+    def a_lat(self):
+        return self.acc * np.sin(self.yaw)
 
     @property
     def position(self):
@@ -87,6 +96,12 @@ class Obstacle:
     def set_ctrl(self, a, delta):
         self.acc = a
         self.delta = delta
+
+    def get_ctrl(self):
+        return self.acc, self.delta
+
+    def get_state(self):
+        return self.x, self.y, self.yaw, self.speed
 
     def _define_shape(self):
         """
@@ -121,6 +136,16 @@ class Obstacle:
         # front left wheel
         self.fl_wheel_poses = self.fr_wheel_poses + np.array([0, 2 * TREAD])
 
+    def get_traj_point(self):
+        return TrajPoint(
+            x=self.x,
+            y=self.y,
+            yaw=self.yaw,
+            speed=self.speed,
+            acc=self.acc,
+            delta=self.delta
+        )
+
     def update_state(self, a, delta):
         """
         Update ego_local_state
@@ -137,6 +162,9 @@ class Obstacle:
         self.x = self.x + self.dt * self.speed * np.cos(self.yaw + beta)
         self.y = self.y + self.dt * self.speed * np.sin(self.yaw + beta)
         self.yaw = self.yaw + self.dt * self.speed * np.sin(beta) / (self.wheelbase * self.prop_)
+
+        if np.isnan(self.x):
+            print(self.speed, self.yaw, self.yaw + beta)
 
     def predict_motion(self, x0, u_ctrl):
         """
@@ -191,11 +219,27 @@ class Obstacle:
 
         return A, B
 
-    def get_bbox(self):
+    def get_bbox(self, five_points=False):
         yaw = self.yaw
-        outline = np.copy(self.outline_poses)
+        # 以车头中心为原点
+        if five_points:
+            outline = np.array(
+                [(- self.length, - self.width / 2),
+                    (- self.length, self.width / 2),
+                    (0, self.width / 2),
+                    (0, - self.width / 2),
+                    (- self.length / 2, - self.width / 2)]
+            )
+        else:
+            outline = np.array(
+                [(- self.length, - self.width / 2),
+                 (- self.length, self.width / 2),
+                 (0, self.width / 2),
+                 (0, - self.width / 2)]
+            )
         yaw_rot = np.array([[np.cos(yaw), -np.sin(yaw)], [np.sin(yaw), np.cos(yaw)]])
         outline = np.dot(yaw_rot, outline.T).T
+        outline += np.array([self.x, self.y])
         return outline
 
     def plot_car(self, ax: plt.Axes):

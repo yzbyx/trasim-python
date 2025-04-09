@@ -15,8 +15,8 @@ from trasim_simplified.core.constant import CFM, V_TYPE
 
 
 class CFModel_ACC(CFModel):
-    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
-        super().__init__(vehicle)
+    def __init__(self, f_param: dict[str, float]):
+        super().__init__()
         self.name = CFM.ACC
         self.thesis = "Modeling cooperative and autonomous adaptive" \
                       " cruise control dynamic responses using experimental data (2014)"

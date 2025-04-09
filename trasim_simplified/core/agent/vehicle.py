@@ -3,11 +3,13 @@
 # @Author : yzbyx
 # @File : vehicle.py
 # @Software : PyCharm
+import queue
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info
+from trasim_simplified.core.agent import utils
+from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.agent.obstacle import Obstacle
@@ -18,11 +20,14 @@ if TYPE_CHECKING:
 
 
 class Vehicle(Obstacle):
-    def __init__(self, lane: 'LaneAbstract', type_: int, id_: int, length: float):
+    def __init__(self, lane: Optional['LaneAbstract'], type_: int, id_: int, length: float):
         super().__init__(type_)
         self.ID = id_
         self.length = length
         self.lane = lane
+        # self.left_lane, self.right_lane = (
+        #     self.lane.road.get_available_adjacent_lane(self.lane, self.x)
+        # )
 
         self.leader: Optional[Vehicle] = None
         self.follower: Optional[Vehicle] = None
@@ -60,23 +65,158 @@ class Vehicle(Obstacle):
         self.pre_left_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
         self.pre_right_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
 
+        self.next_acc = 0
+        self.next_delta = 0
+        self.target_lane = lane
+
+        self.lf: Optional['Vehicle'] = None
+        self.lr: Optional['Vehicle'] = None
+        self.f: Optional['Vehicle'] = None
+        self.r: Optional['Vehicle'] = None
+        self.rf: Optional['Vehicle'] = None
+        self.rr: Optional['Vehicle'] = None
+        self.left_lane: Optional['LaneAbstract'] = None
+        self.right_lane: Optional['LaneAbstract'] = None
+
+        self.destination_lane_indexes = None
+        self.route_type = None
+
+        self.lc_direction = 0  # 换道方向，-1为左，1为右
+        self.lane_changing = True  # 是否处于换道状态
+        self.is_gaming = False  # 是否处于博弈状态
+        self.game_time_wanted = None  # 博弈策略（期望时距）
+
+        self.hist_traj: list[TrajPoint] = []
+        self.pred_traj: Optional[list[TrajPoint]] = None
+
+        self.PREVIEW_TIME = 1
+        self.MIN_PREVIEW_S = 2
+        self.TAU_HEADING = 0.2  # [s]
+        self.TAU_LATERAL = 0.6  # [s]
+        self.TAU_PURSUIT = 0.5 * self.TAU_HEADING  # [s]
+        self.KP_HEADING = 1 / self.TAU_HEADING
+        self.KP_LATERAL = 1 / self.TAU_LATERAL  # [1/s]
+
+    def update_surrounding_vehicle_and_lane(self):
+        self.f = self.leader
+        self.r = self.follower
+        self.lr, self.lf, self.rr, self.rf = self.lane.road.get_neighbour_vehicles(self, "all")
+        self.left_lane, self.right_lane = (
+            self.lane.road.get_available_adjacent_lane(self.lane, self.x)
+        )
+        self.pred_traj = None
+
+    def pack_veh_surr(self):
+        """打包车辆周围车辆信息"""
+        return VehSurr(
+            ev=self,
+            cp=self.f,
+            cr=self.r,
+            lp=self.lf,
+            lr=self.lr,
+            rp=self.rf,
+            rr=self.rr,
+        )
+
     @property
     def last_step_lc_statu(self):
         """0为保持车道，-1为向左换道，1为向右换道"""
         return self.lc_res_pre.get("lc", 0)
 
     def set_cf_model(self, cf_name: str, cf_param: dict):
-        self.cf_model = get_cf_model(self, cf_name, cf_param)
+        self.cf_model = get_cf_model(cf_name)(cf_param)
 
     def set_lc_model(self, lc_name: str, lc_param: dict):
-        self.lc_model = get_lc_model(self, lc_name, lc_param)
+        self.lc_model = get_lc_model(lc_name)(lc_param)
 
-    def step(self, index):
-        self.cf_acc = self.cf_model.step(index)
+    def cal_vehicle_control(self):
+        """3、车辆运动控制"""
+        self.next_acc = self.cf_model.step(self.pack_veh_surr())
+        self.next_delta = 0
 
-    def step_lane_change(self, index: int, left_lane: 'LaneAbstract', right_lane: 'LaneAbstract'):
-        self.lc_result = self.lc_model.step(index, left_lane, right_lane)
-        self.lc_res_pre = self.lc_result
+    def lc_intention_judge(self):
+        """1、判断是否换道并计算换道轨迹"""
+        self.target_lane, _ = self.lc_model.step(self.pack_veh_surr())
+
+    def lc_decision_making(self):
+        """2、换道决策"""
+        pass
+
+    def clone(self):
+        """克隆车辆"""
+        new_vehicle = Vehicle(lane=self.lane, type_=self.type, id_=self.ID, length=self.length)
+        new_vehicle.x = self.x
+        new_vehicle.y = self.y
+        new_vehicle.speed = self.speed
+        new_vehicle.acc = self.acc
+        new_vehicle.yaw = self.yaw
+        new_vehicle.delta = self.delta
+        new_vehicle.cf_model = self.cf_model
+        new_vehicle.lc_model = self.lc_model
+
+        return new_vehicle
+
+    def cf_lateral_control(self):
+        """自动驾驶跟驰过程/人类驾驶全过程的预瞄横向控制"""
+        # preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME)
+        # l_lat = self.target_lane.y_center - self.y
+        # dist = np.sqrt(preview_s ** 2 + l_lat ** 2)  # 车头到预瞄点的距离
+        # theta = np.arctan2(l_lat, preview_s)
+        #
+        # R_h = (2 * self.l_rear_axle_2_head + dist) / (2 * (theta + self.lane.heading - self.yaw))
+        # R_r = np.sqrt(R_h ** 2 - self.l_rear_axle_2_head ** 2)
+        #
+        # delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
+        #
+        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        # delta = self.delta + d_delta
+        # delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+
+        lane_future_heading = 0
+
+        # Lateral position control
+        lateral_speed_command = -self.KP_LATERAL * (self.y - self.target_lane.y_center)
+        # Lateral speed to heading
+        heading_command = np.arcsin(
+            np.clip(lateral_speed_command / utils.not_zero(self.speed), -1, 1)
+        )
+        heading_ref = lane_future_heading + np.clip(
+            heading_command, -np.pi / 4, np.pi / 4
+        )
+        # Heading control
+        heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(
+            heading_ref - self.yaw
+        )
+        # Heading rate to steering angle
+        slip_angle = np.arcsin(
+            np.clip(
+                self.length / 2 / utils.not_zero(self.speed) * heading_rate_command,
+                -1,
+                1,
+                )
+        )
+        delta = np.arctan(2 * np.tan(slip_angle))
+
+        d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        delta = self.delta + d_delta
+        delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+
+        return delta
+
+    def get_history_trajectory(self, hist_time: float, positive_sequence=True):
+        """获取历史轨迹"""
+        if len(self.hist_traj) == 0:
+            return [None] * int(hist_time / self.lane.dt)
+        else:
+            hist_time_step = int(hist_time / self.lane.dt)
+            traj = []
+            for step in range(1, hist_time_step + 1):
+                if step > len(self.hist_traj):
+                    traj.append(None)
+                traj.append(self.hist_traj[-step])
+            if positive_sequence:
+                traj = traj[::-1]
+            return traj
 
     def get_dist(self, pos: float):
         """获取pos与车头的距离，如果为环形边界，选取距离最近的表述，如果为开边界，pos-self.x"""
@@ -209,7 +349,6 @@ class Vehicle(Obstacle):
                     dhw += self.lane.lane_length
                 else:
                     raise TrasimError(f"车头间距小于0！\n" + self.get_basic_info())
-                    pass
             return dhw
         else:
             return np.nan
