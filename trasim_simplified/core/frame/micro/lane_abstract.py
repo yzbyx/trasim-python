@@ -92,7 +92,6 @@ class LaneAbstract(ABC):
         ...
         """
 
-        self.dt = 0.1
         """仿真步长 [s]"""
         self.warm_up_step = int(5 * 60 / self.dt)
         """预热时间 [s]"""
@@ -109,6 +108,10 @@ class LaneAbstract(ABC):
         self.y_center = 0
         self.y_left = self.width / 2
         self.y_right = - self.width / 2
+
+    @property
+    def dt(self):
+        return 0.1
 
     def update_y_info(self):
         """更新车道信息"""
@@ -281,7 +284,7 @@ class LaneAbstract(ABC):
         """是否记录数据"""
         self.warm_up_step = kwargs.get("warm_up_step", int(5 * 60 / self.dt))
         """预热步数 [s]"""
-        self.dt = kwargs.get("dt", 0.1)
+        # self.dt = kwargs.get("dt", 0.1)
         """仿真步长 [s]"""
         self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt))
         """总仿真步 [次]"""
@@ -305,7 +308,7 @@ class LaneAbstract(ABC):
                 self.car_summon()
             for car in self.car_list:
                 car.hist_traj.append(car.get_traj_point())
-                if len(car.hist_traj) > 50:
+                if len(car.hist_traj) > 20:
                     car.hist_traj.pop(0)
             # 能够记录warm_up_step仿真步时的车辆数据
             if self.data_save and self.step_ >= self.warm_up_step:

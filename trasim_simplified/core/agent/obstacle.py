@@ -3,7 +3,7 @@
 # @Author : yzbyx
 # @File : obstacle.py
 # @Software : PyCharm
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -136,14 +136,27 @@ class Obstacle:
         # front left wheel
         self.fl_wheel_poses = self.fr_wheel_poses + np.array([0, 2 * TREAD])
 
-    def get_traj_point(self):
+    def get_traj_point(self, is_center=False):
+        if is_center:
+            return TrajPoint(
+                x=self.x_c,
+                y=self.y_c,
+                yaw=self.yaw,
+                speed=self.speed,
+                acc=self.acc,
+                delta=self.delta,
+                length=self.length,
+                width=self.width
+            )
         return TrajPoint(
             x=self.x,
             y=self.y,
             yaw=self.yaw,
             speed=self.speed,
             acc=self.acc,
-            delta=self.delta
+            delta=self.delta,
+            length=self.length,
+            width=self.width
         )
 
     def update_state(self, a, delta):
@@ -269,5 +282,12 @@ class Obstacle:
         patches = [
             ax.plot(item[:, 0], item[:, 1], "k-")[0] for item in total
         ]
+        # 填充颜色
+        ax.fill(total[0][:, 0], total[0][:, 1], color=normalize_color(self.color), alpha=0.5)
 
         return patches
+
+
+def normalize_color(color: Tuple[int, int, int]) -> tuple[float, ...]:
+    """将0-255范围的RGB颜色值转换为0-1范围"""
+    return tuple(c / 255.0 for c in color)

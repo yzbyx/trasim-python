@@ -99,7 +99,7 @@ class MPC_Solver:
         x_bar = self.ugv.predict_motion(x0, u_ref[:, 1:])
         if x_bar_first is None:
             x_bar_first = x_bar
-        x_val, u_ref, j = self.mpc_control(x_ref, x_bar, u_ref)
+        x_val, u_ref, j = self.mpc_control(x_ref, x_ref, u_ref)
 
         if return_j:
             return u_ref, x_val, x_bar_first, x_ref, is_end, j

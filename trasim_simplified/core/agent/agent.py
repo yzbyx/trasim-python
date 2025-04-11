@@ -31,8 +31,6 @@ class AgentBase(Vehicle, abc.ABC):
 
         self.target_speed = 30
 
-        self.pred_net: Optional[TrajPred] = get_pred_net()
-
     def get_state_for_traj(self):
         """返回车辆状态量[x, dx, ddx, y, dy, ddy]"""
         return np.array([self.x, self.v, self.a, self.y, self.v_lat, self.a_lat])
@@ -40,9 +38,6 @@ class AgentBase(Vehicle, abc.ABC):
     def lc_intention_judge(self):
         """判断是否换道并计算换道轨迹"""
         self.target_lane, _ = self.lc_model.step(self.pack_veh_surr())
-
-    def lc_decision_making(self):
-        pass
 
     def cal_vehicle_control(self):
         next_acc_block = np.inf
@@ -53,6 +48,6 @@ class AgentBase(Vehicle, abc.ABC):
         self.next_delta = self.cf_lateral_control()
         return self.next_acc, self.next_delta
 
-    def pred_risk(self):
+    def pred_lc_risk(self):
         """预测周边车辆轨迹、判断碰撞概率"""
 

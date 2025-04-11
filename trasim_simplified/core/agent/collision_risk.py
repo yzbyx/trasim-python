@@ -1,7 +1,11 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 from scipy.stats import multivariate_normal
+
+from trasim_simplified.core.agent.TwoDimTTC import TTC
+from trasim_simplified.core.constant import TrajPoint
 
 if TYPE_CHECKING:
     from trasim_simplified.core.agent import Vehicle
@@ -34,7 +38,7 @@ def compute_collision_probability(x_min, x_max, y_min, y_max, param):
 
 
 # 计算最大化的碰撞概率
-def calculate_max_collision_risk(
+def calculate_max_collision_risk_by_prob(
         target_traj, target_width, target_length,
         front_traj_prob, front_width, front_length,
         rear_traj_prob, rear_width, rear_length,
@@ -99,3 +103,64 @@ def calculate_max_collision_risk(
     # 计算所有时间步的最大碰撞概率
     max_collision_probability = max(collision_p_list)
     return max_collision_probability
+
+
+def calculate_collision_risk(traj_i: list[TrajPoint], traj_j: list[TrajPoint]):
+    # -----------------------------------------------------------------------------------
+    # x_i      :  x coordinate of the ego vehicle (usually assumed to be centroid)      |
+    # y_i      :  y coordinate of the ego vehicle (usually assumed to be centroid)      |
+    # vx_i     :  x coordinate of the velocity of the ego vehicle                       |
+    # vy_i     :  y coordinate of the velocity of the ego vehicle                       |
+    # hx_i     :  x coordinate of the heading direction of the ego vehicle              |
+    # hy_i     :  y coordinate of the heading direction of the ego vehicle              |
+    # length_i :  length of the ego vehicle                                             |
+    # width_i  :  width of the ego vehicle                                              |
+    # x_j      :  x coordinate of another vehicle (usually assumed to be centroid)      |
+    # y_j      :  y coordinate of another vehicle (usually assumed to be centroid)      |
+    # vx_j     :  x coordinate of the velocity of another vehicle                       |
+    # vy_j     :  y coordinate of the velocity of another vehicle                       |
+    # hx_j     :  x coordinate of the heading direction of another vehicle              |
+    # hy_j     :  y coordinate of the heading direction of another vehicle              |
+    # length_j :  length of another vehicle                                             |
+    # width_j  :  width of another vehicle                                              |
+    #------------------------------------------------------------------------------------
+    # 转化为标准数据Dataframe
+    traj_i = np.array([point.to_center() for point in traj_i])
+    x_i = traj_i[:, 0]
+    y_i = traj_i[:, 3]
+    vx_i = traj_i[:, 1]
+    vy_i = traj_i[:, 4]
+    hx_i = traj_i[:, 6]
+    hy_i = traj_i[:, 7]
+    length_i = traj_i[:, 8]
+    width_i = traj_i[:, 9]
+
+    traj_j = np.array([point.to_center() for point in traj_j])
+    x_j = traj_j[:, 0]
+    y_j = traj_j[:, 3]
+    vx_j = traj_j[:, 1]
+    vy_j = traj_j[:, 4]
+    hx_j = traj_j[:, 6]
+    hy_j = traj_j[:, 7]
+    length_j = traj_j[:, 8]
+    width_j = traj_j[:, 9]
+    df = pd.DataFrame({
+        'x_i': x_i,
+        'y_i': y_i,
+        'vx_i': vx_i,
+        'vy_i': vy_i,
+        'hx_i': hx_i,
+        'hy_i': hy_i,
+        'length_i': length_i,
+        'width_i': width_i,
+        'x_j': x_j,
+        'y_j': y_j,
+        'vx_j': vx_j,
+        'vy_j': vy_j,
+        'hx_j': hx_j,
+        'hy_j': hy_j,
+        'length_j': length_j,
+        'width_j': width_j
+    })
+    ttc_2d = TTC(df, toreturn='values')
+    return ttc_2d

@@ -9,12 +9,15 @@
 # ******************************
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+import pandas as pd
+
 
 if TYPE_CHECKING:
     from trasim_simplified.core.agent import Vehicle
+    from trasim_simplified.core.agent.game_agent import Game_Vehicle
 
 
 class RANDOM_SEED:
@@ -219,6 +222,7 @@ class V_CLASS(Enum):
     GAME_AV = 2
     """博弈自动驾驶车辆"""
 
+
 # ******************************
 # 车辆类别
 # ******************************
@@ -309,6 +313,7 @@ class LaneChange(Enum):
     Both = 3
     Other = 4
 
+
 # ******************************
 # 车辆动态属性
 # ******************************
@@ -365,6 +370,8 @@ class TrajPoint:
     speed: float = None
     acc: float = None
     delta: float = None
+    length: float = None
+    width: float = None
 
     @property
     def vx(self):
@@ -381,6 +388,50 @@ class TrajPoint:
     @property
     def ay(self):
         return self.acc * np.sin(self.yaw)
+
+    def to_ndarray(self):
+        """x, vx, ax, y, vy, ay"""
+        return np.array([self.x, self.vx, self.ax, self.y, self.vy, self.ay])
+
+    def copy(self):
+        return TrajPoint(self.x, self.y, self.yaw, self.speed, self.acc, self.delta, self.length, self.width)
+
+    def to_center(self):
+        """将坐标转换为车辆中心坐标系"""
+        return np.array([
+            self.x - self.length / 2 * np.cos(self.yaw),
+            self.vx, self.ax,
+            self.y - (self.width / 2) * np.sin(self.yaw),
+            self.vy, self.ay,
+            np.cos(self.yaw), np.sin(self.yaw), self.length, self.width
+        ])
+
+
+@dataclass
+class GameRes:
+    cost_df: Optional[pd.DataFrame]
+    """成本函数"""
+    TF: 'Game_Vehicle'
+    """目标间隙前车"""
+    TR: 'Game_Vehicle'
+    """目标间隙后车"""
+    PC: 'Game_Vehicle'
+    """当前车道前车"""
+    EV_stra: Optional[float]
+    """换道车辆的最优换道时间"""
+    TF_stra: Optional[float]
+    """目标间隙前车的期望时距"""
+    TR_real_stra: Optional[float]
+    """目标间隙后车的期望时距"""
+    EV_cost: Optional[float]
+    """换道车辆的成本函数"""
+    TF_cost: Optional[float]
+    """目标间隙前车的成本函数"""
+    TR_real_cost: Optional[float]
+    """目标间隙后车的成本函数"""
+    EV_opti_series: Optional[pd.Series]
+    """换道车辆的最优时距下的成本函数序列"""
+    EV_opti_traj: Optional[np.ndarray] = None
 
 
 if __name__ == '__main__':

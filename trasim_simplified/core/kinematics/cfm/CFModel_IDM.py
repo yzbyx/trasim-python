@@ -53,8 +53,11 @@ class CFModel_IDM(CFModel):
         self._d = f_param.get("d", 1.67)
         """舒适减速度"""
 
+        self._time_safe = f_param.get("time_safe", 1)
+
     def _update_dynamic(self):
         self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
+        self.dt = self.veh_surr.ev.dt
 
     def step(self, veh_surr: VehSurr):
         """
@@ -63,6 +66,8 @@ class CFModel_IDM(CFModel):
         :return: 下一时间步的加速度
         """
         self.veh_surr = veh_surr
+        if self.veh_surr.ev is None:
+            return None
         if self.veh_surr.cp is None:
             expect_speed = self.get_expect_speed()
             expect_acc = self.get_expect_acc()
@@ -117,8 +122,23 @@ class CFModel_IDM(CFModel):
     def get_expect_speed(self):
         return self._v0
 
+    def get_max_speed(self):
+        return self._v0
 
-@numba.njit()
+    def get_max_dec(self):
+        return 8
+
+    def get_max_acc(self):
+        return 5
+
+    def get_time_safe(self):
+        return self._time_safe
+
+    def get_time_wanted(self):
+        return self._T
+
+
+# @numba.njit()
 def cf_IDM_acc_jit(s0, s1, v0, T, omega, d, delta, speed, gap, leaderV) -> dict:
     sStar = s0 + s1 * np.sqrt(speed / v0) + T * speed + speed * (speed - leaderV) / (2 * np.sqrt(omega * d))
     # sStar = s0 + np.max(np.array([0, s1 * np.sqrt(speed / v0) +

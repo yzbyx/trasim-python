@@ -13,11 +13,11 @@ np.seterr(divide='ignore', invalid='ignore')
 class ReferencePath:
     def __init__(self, ref_path, dt):
         self.ref_x = ref_path[:, 0]
-        self.ref_dx = ref_path[:, 1] / dt
-        self.ref_ddx = ref_path[:, 2] / (dt ** 2)
+        self.ref_dx = ref_path[:, 1]
+        self.ref_ddx = ref_path[:, 2]
         self.ref_y = ref_path[:, 3]
-        self.ref_dy = ref_path[:, 4] / dt
-        self.ref_ddy = ref_path[:, 5] / (dt ** 2)
+        self.ref_dy = ref_path[:, 4]
+        self.ref_ddy = ref_path[:, 5]
 
         self.dt = dt
 

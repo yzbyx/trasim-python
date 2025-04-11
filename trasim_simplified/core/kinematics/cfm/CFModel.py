@@ -41,7 +41,27 @@ class CFModel(Model, ABC):
         pass
 
     @abc.abstractmethod
+    def get_time_safe(self):
+        pass
+
+    @abc.abstractmethod
+    def get_time_wanted(self):
+        pass
+
+    @abc.abstractmethod
     def get_expect_speed(self):
+        pass
+
+    @abc.abstractmethod
+    def get_max_speed(self):
+        pass
+
+    @abc.abstractmethod
+    def get_max_dec(self):
+        pass
+
+    @abc.abstractmethod
+    def get_max_acc(self):
         pass
 
     def get_speed_limit(self):

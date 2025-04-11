@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.agent import utils
+from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
 from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
@@ -81,13 +82,14 @@ class Vehicle(Obstacle):
         self.destination_lane_indexes = None
         self.route_type = None
 
+        self.no_lc = False  # 是否禁止换道
         self.lc_direction = 0  # 换道方向，-1为左，1为右
-        self.lane_changing = True  # 是否处于换道状态
+        self.lane_changing = False  # 是否处于换道状态
         self.is_gaming = False  # 是否处于博弈状态
         self.game_time_wanted = None  # 博弈策略（期望时距）
 
         self.hist_traj: list[TrajPoint] = []
-        self.pred_traj: Optional[list[TrajPoint]] = None
+        """包含当前时间步的轨迹点"""
 
         self.PREVIEW_TIME = 1
         self.MIN_PREVIEW_S = 2
@@ -97,14 +99,68 @@ class Vehicle(Obstacle):
         self.KP_HEADING = 1 / self.TAU_HEADING
         self.KP_LATERAL = 1 / self.TAU_LATERAL  # [1/s]
 
-    def update_surrounding_vehicle_and_lane(self):
+        self.pred_net: Optional[TrajPred] = get_pred_net()
+        self.pred_traj: Optional[list[TrajPoint]] = None
+
+        self.lc_ttc_risk = None
+        self.lc_acc_benefit = None
+        self.lc_route_desire = None
+
+    @property
+    def time_wanted(self):
+        return self.cf_model.get_time_wanted()
+
+    @property
+    def time_safe(self):
+        return self.cf_model.get_time_safe()
+
+    @property
+    def acc_desire(self):
+        return self.cf_model.get_expect_acc()
+
+    @property
+    def vel_desire(self):
+        return self.cf_model.get_expect_speed()
+
+    @property
+    def dec_desire(self):
+        return self.cf_model.get_expect_dec()
+
+    @property
+    def max_speed(self):
+        return self.cf_model.get_max_speed()
+
+    @property
+    def dec_max(self):
+        max_dec = self.cf_model.get_max_dec()
+        return abs(max_dec)
+
+    @property
+    def acc_max(self):
+        return self.cf_model.get_max_acc()
+
+    def update_necessary_info(self):
         self.f = self.leader
         self.r = self.follower
         self.lr, self.lf, self.rr, self.rf = self.lane.road.get_neighbour_vehicles(self, "all")
         self.left_lane, self.right_lane = (
             self.lane.road.get_available_adjacent_lane(self.lane, self.x)
         )
+
+        if len(self.hist_traj) in [0, 1]:
+            hist_traj = []
+            current_traj_point = self.get_traj_point()
+            hist_traj.append(current_traj_point.copy())
+            # 按照恒定速度和航向角预测
+            for i in range(19):
+                current_traj_point.x -= current_traj_point.vx * self.dt
+                current_traj_point.y -= current_traj_point.vy * self.dt
+                hist_traj.append(current_traj_point.copy())
+            self.hist_traj = hist_traj[::-1]
+
+    def cal_traj_pred(self):
         self.pred_traj = None
+        self.pred_traj = self.pred_net.pred_traj(self.pack_veh_surr(), time_len=10)
 
     def pack_veh_surr(self):
         """打包车辆周围车辆信息"""
@@ -136,6 +192,8 @@ class Vehicle(Obstacle):
 
     def lc_intention_judge(self):
         """1、判断是否换道并计算换道轨迹"""
+        if self.no_lc:
+            return
         self.target_lane, _ = self.lc_model.step(self.pack_veh_surr())
 
     def lc_decision_making(self):
@@ -155,6 +213,63 @@ class Vehicle(Obstacle):
         new_vehicle.lc_model = self.lc_model
 
         return new_vehicle
+
+    def pred_self_traj(self, time_len, stra=None,
+                       target_lane: "LaneAbstract" = None,
+                       PC_traj=None, to_ndarray=True):
+        """在策略下预测自车轨迹（包含初始状态）
+        :param time_len: 预测时间长度
+        :param stra: 期望时距
+        :param target_lane: 目标车道
+        :param PC_traj: 前车轨迹
+        :param TF_traj: 目标车道前车轨迹
+        :param to_ndarray: 是否转为ndarray
+        """
+        step_num = round(time_len / self.dt) + 1
+        veh = self.clone()
+        if target_lane is not None:
+            veh.target_lane = target_lane
+            veh.lane_changing = True
+        if stra is not None:
+            veh.game_time_wanted = stra
+            veh.is_gaming = True
+        leader = veh.clone()
+
+        if self.f is None and PC_traj is None:
+            traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
+            # 估计轨迹
+            leader.x = veh.x + 1e6
+            leader.speed = veh.speed
+            leader.acc = 0
+            for step in range(step_num - 1):
+                delta = veh.cf_lateral_control()
+                acc = veh.cf_model.step(VehSurr(ev=veh, cp=leader))
+                veh.update_state(acc, delta)
+                traj.append(veh.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
+            PC_traj = None
+            traj = np.array(traj) if to_ndarray else traj
+
+        else:
+            if PC_traj is None:
+                PC_traj = self.f.pred_traj[:step_num]
+            traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
+
+            for step in range(round(step_num) - 1):
+                info = PC_traj[step]
+                leader.x = info.x
+                leader.y = info.y
+                leader.speed = info.speed
+                leader.acc = info.acc
+
+                delta = veh.cf_lateral_control()
+                acc = veh.cf_model.step(VehSurr(ev=veh, cp=leader))
+                veh.update_state(acc, delta)
+                traj.append(veh.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
+            traj = np.array(traj) if to_ndarray else traj
+            if to_ndarray:
+                PC_traj = np.array([traj_point.to_ndarray() for traj_point in PC_traj])
+        assert len(traj) == step_num
+        return traj, PC_traj
 
     def cf_lateral_control(self):
         """自动驾驶跟驰过程/人类驾驶全过程的预瞄横向控制"""
@@ -197,26 +312,20 @@ class Vehicle(Obstacle):
         )
         delta = np.arctan(2 * np.tan(slip_angle))
 
-        d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        delta = self.delta + d_delta
+        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        # delta = self.delta + d_delta
         delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
 
         return delta
 
-    def get_history_trajectory(self, hist_time: float, positive_sequence=True):
+    def get_history_trajectory(self, hist_time: float):
         """获取历史轨迹"""
+        hist_time_step = int(hist_time / self.lane.dt)
         if len(self.hist_traj) == 0:
-            return [None] * int(hist_time / self.lane.dt)
+            traj = [None] * hist_time_step
         else:
-            hist_time_step = int(hist_time / self.lane.dt)
-            traj = []
-            for step in range(1, hist_time_step + 1):
-                if step > len(self.hist_traj):
-                    traj.append(None)
-                traj.append(self.hist_traj[-step])
-            if positive_sequence:
-                traj = traj[::-1]
-            return traj
+            traj = self.hist_traj[-hist_time_step:]
+        return traj
 
     def get_dist(self, pos: float):
         """获取pos与车头的距离，如果为环形边界，选取距离最近的表述，如果为开边界，pos-self.x"""

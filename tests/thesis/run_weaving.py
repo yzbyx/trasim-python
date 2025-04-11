@@ -28,8 +28,8 @@ def run_road():
     weaving_ratio = 1 / 3
     upstream_end = int(road_length * upstream_ratio)
     downstream_start = int(road_length * (upstream_ratio + weaving_ratio))
-    lane_num = 2
-    v_length = 7.5
+    lane_num = 3
+    v_length = 5
 
     sim = Road(road_length)
     lanes: list[LaneOpen] = sim.add_lanes(lane_num, is_circle=False)
@@ -107,7 +107,7 @@ def run_road():
         else:
             lanes[i].car_loader(100, THW_DISTRI.Uniform, 30, 0)
 
-    for step, stage in sim.run(data_save=True, has_ui=False, frame_rate=-1,
+    for step, stage in sim.run(data_save=True, has_ui=True, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         if warm_up_step + offset_step == step and stage == 0:
             take_over_index = sim.get_appropriate_car(lane_add_num=0)

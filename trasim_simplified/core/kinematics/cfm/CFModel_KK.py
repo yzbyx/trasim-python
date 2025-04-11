@@ -3,13 +3,12 @@
 # @Author : yzbyx
 # @File : CFModel_KK.py
 # @Software : PyCharm
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM, SECTION_TYPE, VehSurr
-from trasim_simplified.msg.trasimError import TrasimError
+from trasim_simplified.core.constant import CFM, VehSurr
 
 if TYPE_CHECKING:
     from trasim_simplified.core.agent.vehicle import Vehicle
@@ -68,6 +67,8 @@ class CFModel_KK(CFModel):
         """v_safe计算是否离散化时间"""
 
         self._delta_vr_2 = f_param.get("delta_vr_2", 5.)
+
+        self._time_wanted = f_param.get("time_wanted", 1.3)
 
         self.status = 0
         self.index = None
@@ -213,6 +214,21 @@ class CFModel_KK(CFModel):
 
     def get_expect_speed(self):
         return self.get_speed_limit()
+
+    def get_max_speed(self):
+        return self.get_speed_limit()
+
+    def get_max_dec(self):
+        return 8
+
+    def get_max_acc(self):
+        return 5
+
+    def get_time_wanted(self):
+        return self._time_wanted
+
+    def get_time_safe(self):
+        return self._tau
 
     def cal_an_bn(self):
         r2 = self.random.random()

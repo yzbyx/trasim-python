@@ -44,23 +44,16 @@ class LCModel_Mobil(LCModel):
 
     def base_cal(self):
         if self.left_lane is not None:
-            temp = self.mobil(-1, return_acc_gain=True)
-            if temp is False:
-                l_ok, acc_gain_l = False, -np.inf
-            else:
-                l_ok, acc_gain_l = temp
+            l_ok, acc_gain_l = self.mobil(-1, return_acc_gain=True)
         else:
             l_ok, acc_gain_l = False, -np.inf
         if self.right_lane is not None:
-            temp = self.mobil(1, return_acc_gain=True)
-            if temp is False:
-                r_ok, acc_gain_r = False, -np.inf
-            else:
-                r_ok, acc_gain_r = temp
+            r_ok, acc_gain_r = self.mobil(1, return_acc_gain=True)
         else:
             r_ok, acc_gain_r = False, -np.inf
 
         lc_acc_gain = [acc_gain_l, acc_gain_r]
+        # assert acc_gain_l is not None and acc_gain_r is not None
 
         target_lane = self.veh_surr.ev.lane
         if l_ok and r_ok:
@@ -97,6 +90,25 @@ class LCModel_Mobil(LCModel):
         else:
             new_preceding, new_following = self.veh_surr.rp, self.veh_surr.rr
 
+        if new_preceding is None:
+            new_preceding = self.veh_surr.ev.clone()
+            new_preceding.x += 1e5
+        if new_following is None:
+            new_following = self.veh_surr.ev.clone()
+            new_following.x -= 1e5
+
+        if abs(new_preceding.x - self.veh_surr.ev.x) < new_preceding.length:
+            # The new preceding vehicle is too close
+            if return_acc_gain:
+                return False, -np.inf
+            return False
+
+        if abs(new_following.x - self.veh_surr.ev.x) < new_following.length:
+            # The new following vehicle is too close
+            if return_acc_gain:
+                return False, -np.inf
+            return False
+
         new_following_a = self.veh_surr.ev.cf_model.step(
             VehSurr(ev=new_following, cp=new_preceding)
         )
@@ -105,15 +117,27 @@ class LCModel_Mobil(LCModel):
         )
 
         if new_following_pred_a < -self.LANE_CHANGE_MAX_BRAKING_IMPOSED:
+            if return_acc_gain:
+                return False, -np.inf
             return False
 
         # Do I have a planned route for a specific lane which is safe for me to access?
         old_preceding, old_following = self.veh_surr.cp, self.veh_surr.cr
+
+        if old_preceding is None:
+            old_preceding = self.veh_surr.ev.clone()
+            old_preceding.x += 1e5
+        if old_following is None:
+            old_following = self.veh_surr.ev.clone()
+            old_following.x -= 1e5
+
         self_pred_a = self.veh_surr.ev.cf_model.step(
             VehSurr(ev=self.veh_surr.ev, cp=new_preceding)
         )
         # Unsafe braking required
         if self_pred_a < -self.LANE_CHANGE_MAX_BRAKING_IMPOSED:
+            if return_acc_gain:
+                return False, -np.inf
             return False
 
         # Is there an acceleration advantage for me and/or my followers to change lane?

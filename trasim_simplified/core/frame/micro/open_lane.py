@@ -78,6 +78,7 @@ class LaneOpen(LaneAbstract):
             vehicle.set_car_param(self.car_param_list[i])
             vehicle.destination_lane_indexes = self.destination_lanes_list[i]
             vehicle.route_type = self.route_type_list[i]
+            vehicle.target_lane = self
 
             if self.car_initial_speed_list[i] >= 0:
                 vehicle.speed = np.random.uniform(

@@ -5,6 +5,7 @@
 # Software: PyCharm
 from typing import Optional, TYPE_CHECKING
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -12,6 +13,7 @@ from traj_predictor.dl_dataset import collate_fn
 from traj_predictor.dl_model import PredictionNet
 from traj_predictor.parser import ArgsConfig
 from traj_predictor.util import load_checkpoint
+from traj_process.util.plot_helper import get_fig_ax
 from trasim_simplified.core.constant import VehSurr, TrajPoint
 
 if TYPE_CHECKING:
@@ -42,11 +44,33 @@ def rotate(theta, arr):
     return np.dot(rot_matrix, arr)
 
 
+def add_v_a_yaw(traj_list: list[TrajPoint], dt=0.1):
+    """
+    计算车辆的速度、加速度和航向角
+    :param traj_list: 轨迹点列表
+    :param dt: 时间间隔
+    """
+    x = np.array([traj.x for traj in traj_list])
+    y = np.array([traj.y for traj in traj_list])
+    vx = np.gradient(x, dt)
+    vy = np.gradient(y, dt)
+    yaw = np.arctan2(vy, vx)
+    speed = np.sqrt(vx ** 2 + vy ** 2)
+    acc = np.gradient(speed, dt)
+
+    # 赋值回去
+    for i, traj in enumerate(traj_list):
+        traj.speed = speed[i]
+        traj.yaw = yaw[i]
+        traj.acc = acc[i]
+
+
 class TrajPred:
     def __init__(self):
         self.net: Optional[PredictionNet] = None
 
-    def get_scene(self, veh_surr: VehSurr):
+    @staticmethod
+    def get_scene(veh_surr: VehSurr):
         ev = veh_surr.ev
         cp = veh_surr.cp
         cr = veh_surr.cr
@@ -68,7 +92,7 @@ class TrajPred:
                 traj_hist_mask_all.append([1] * round(2 / dt))
                 veh_surr_history_all.append([[0] * 5 + [i] for _ in range(round(2 / dt))])
                 continue
-            traj_s = veh.get_history_trajectory(2, positive_sequence=True)
+            traj_s = veh.get_history_trajectory(2)
             traj_hist_mask = []
             veh_surr_history = []
             for traj in traj_s:
@@ -82,7 +106,7 @@ class TrajPred:
                 rel_pos = np.array([traj.x - ev_pos[0], traj.y - ev_pos[1]])
                 # 旋转
                 rel_pos = rotate(-ev_yaw, rel_pos)
-                rel_dpos = np.array([traj.dx * dt, traj.dy * dt])
+                rel_dpos = np.array([traj.vx * dt, traj.vy * dt])
                 # 旋转
                 rel_dpos = rotate(-ev_yaw, rel_dpos)
                 veh_surr_history.append(
@@ -101,11 +125,9 @@ class TrajPred:
         l_lane = ev.left_lane
         r_lane = ev.right_lane
         for i, lane in enumerate([c_lane, l_lane, r_lane]):
-            lane_data_mask = []
-            lane_data = []
             if lane is None:
-                lane_data.append([[0] * 5 + [i] for _ in range(100)])
-                lane_data_mask.append([1] * 100)
+                lane_data_all.append([[0] * 5 + [i] for _ in range(100)])
+                lane_data_mask_all.append([1] * 100)
             else:
                 # 获取车道中心线
                 center_pos_array = np.array([(- 49 + i, lane.y_center - ev.y) for i in range(100)])
@@ -117,13 +139,16 @@ class TrajPred:
 
                 yaw_array = np.array([-ev_yaw for _ in range(100)])
                 # 横向拼接
-                lane_data.append(
-                    np.concatenate((center_pos_array, center_dpos_array, yaw_array, np.array([i] * 100)), axis=1)
+                lane_data_all.append(
+                    np.concatenate(
+                        (center_pos_array, center_dpos_array,
+                         yaw_array.reshape(-1, 1), np.array([i] * 100).reshape(-1, 1)), axis=1
+                    )
                 )
-                lane_data_mask.append([0] * 100)
+                lane_data_mask_all.append([0] * 100)
 
-            lane_data_all.append(lane_data)
-            lane_data_mask_all.append(lane_data_mask)
+            # lane_data_all.append(lane_data)
+            # lane_data_mask_all.append(lane_data_mask)
 
         lane_data_all = np.array(lane_data_all)
         lane_data_mask_all = np.array(lane_data_mask_all)
@@ -131,49 +156,102 @@ class TrajPred:
         return {
             'traj_hist': veh_surr_history_all,
             'traj_hist_mask': traj_hist_mask_all,
-            'lane_data': lane_data_all,
+            'lane_string_data': lane_data_all,
             'lane_data_mask': lane_data_mask_all
         }
 
-    def pred_traj(self, veh_surr: VehSurr, type_="net", time_len=3):
-        assert len(veh_surr.ev.hist_traj) >= 20
-        if type_ == "net":
-            if self.net is None:
-                arg = ArgsConfig()
-                self.net = PredictionNet(arg)
-                optimizer = torch.optim.Adam(self.net.parameters(), lr=arg.lr)
-                load_checkpoint(r'E:\BaiduSyncdisk\traj-predictor\model', self.net, optimizer)
-                self.net.eval()
+    @staticmethod
+    def plot_scene(scene_dict):
+        plt.ioff()
+        traj_hist = scene_dict['traj_hist']
+        traj_hist_mask = scene_dict['traj_hist_mask']
+        lane_string_data = scene_dict['lane_string_data']
+        lane_data_mask = scene_dict['lane_data_mask']
+        fig, ax = get_fig_ax()
+        # 绘制历史轨迹
+        for i, traj in enumerate(traj_hist):
+            traj = traj[traj_hist_mask[i] == 0]
+            traj = np.array(traj)
+            ax.plot(traj[:, 0], traj[:, 1], color="red" if i == 0 else 'b')
+        # 绘制车道线
+        for i, lane in enumerate(lane_string_data):
+            lane = lane[lane_data_mask[i] == 0]
+            lane = np.array(lane)
+            ax.plot(lane[:, 0], lane[:, 1], color="gray", alpha=0.2)
+        plt.show()
+        plt.ion()
 
+    def pred_traj(self, veh_surr: VehSurr, type_="net", time_len=3):
+        """
+        预测轨迹，包括当前轨迹点，轨迹时长为time_len+dt
+        :param veh_surr:
+        :param type_:
+        :param time_len:
+        :return: 得到中心点的轨迹
+        """
+        if type_ == "net":
             if veh_surr.ev.pred_traj is None:
+                if self.net is None:
+                    arg = ArgsConfig()
+                    arg.mode = "test"
+                    arg.batch_size = 1
+                    self.net = PredictionNet(arg).to(arg.device)
+                    optimizer = torch.optim.Adam(self.net.parameters(), lr=arg.lr)
+                    load_checkpoint(r'E:\BaiduSyncdisk\traj-predictor\model', self.net, optimizer)
+                    self.net.eval()
+
                 # 1. 生成模型输入
                 input_data = self.get_scene(veh_surr)
+                # self.plot_scene(input_data)
                 # 2. 进行轨迹预测
                 input_data_fn = collate_fn([input_data])
                 predicted_trajectory = self.net(input_data_fn)
                 # 3. 进行后处理
-                predicted_trajectory = predicted_trajectory.cpu().numpy()[0]
+                predicted_trajectory = predicted_trajectory.cpu().detach().numpy()[0]
                 yaw = veh_surr.ev.yaw
                 predicted_trajectory = rotate(yaw, predicted_trajectory.T).T
                 predicted_trajectory[:, 0] += veh_surr.ev.x
                 predicted_trajectory[:, 1] += veh_surr.ev.y
 
-                pred_traj = []
+                pred_traj = [veh_surr.ev.get_traj_point()]
                 for i in range(predicted_trajectory.shape[0]):
                     pred_traj.append(
                         TrajPoint(
                             x=predicted_trajectory[i, 0],
-                            y=predicted_trajectory[i, 1]
+                            y=predicted_trajectory[i, 1],
+                            length=veh_surr.ev.length,
+                            width=veh_surr.ev.width
                         )
                     )
                 veh_surr.ev.pred_traj = pred_traj
 
+                if time_len > 3:
+                    pred_traj = []
+                    dt = veh_surr.ev.lane.dt
+                    for i in range(round((time_len - 3) / dt)):
+                        pred_traj.append(
+                            TrajPoint(
+                                x=veh_surr.ev.pred_traj[-1].x + veh_surr.ev.v * dt,
+                                y=veh_surr.ev.pred_traj[-1].y + veh_surr.ev.v_lat * dt,
+                                length=veh_surr.ev.length,
+                                width=veh_surr.ev.width
+                            )
+                        )
+                    veh_surr.ev.pred_traj.extend(pred_traj)
+
+                # 获取前time_len秒的轨迹
+                add_v_a_yaw(veh_surr.ev.pred_traj, veh_surr.ev.lane.dt)
+            traj_pred = veh_surr.ev.pred_traj[:round(time_len / veh_surr.ev.lane.dt) + 1]
+
         elif type_ == "const":
             if veh_surr.ev.pred_traj is None:
-                veh_surr.ev.pred_traj = self.pred_traj_const(veh_surr.ev, time_len)
+                veh_surr.ev.pred_traj = self.pred_traj_const(veh_surr.ev, 10)
+                add_v_a_yaw(veh_surr.ev.pred_traj, veh_surr.ev.lane.dt)
+            traj_pred = veh_surr.ev.pred_traj[:round(time_len / veh_surr.ev.lane.dt) + 1]
         else:
             raise ValueError("Invalid type_ value. Expected 'net' or 'const'.")
-        return veh_surr.ev.pred_traj
+
+        return [point.copy() for point in traj_pred]
 
     @staticmethod
     def pred_traj_const(veh: 'Vehicle', time_len=3):
@@ -183,13 +261,15 @@ class TrajPred:
         :param time_len: 预测时间长度
         :return: 预测轨迹
         """
-        pred_traj = []
+        pred_traj = [veh.get_traj_point()]
         dt = veh.lane.dt
         for i in range(round(time_len / dt)):
             pred_traj.append(
                 TrajPoint(
                     x=veh.x + veh.v * dt,
                     y=veh.y + veh.v_lat * dt,
+                    length=veh.length,
+                    width=veh.width
                 )
             )
         return pred_traj

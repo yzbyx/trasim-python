@@ -44,7 +44,7 @@ def get_y_guess(T, state, yf):
 
 
 def get_xy_quintic(x, t):
-    """返回[x, dx, ddx, y, dy, ddy]"""
+    """返回[x, vx, ax, y, vy, ay]"""
     return np.array([
         [1, t, t ** 2, t ** 3, t ** 4, t ** 5, 0, 0, 0, 0, 0, 0],
         [0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4, 0, 0, 0, 0, 0, 0],
@@ -55,7 +55,7 @@ def get_xy_quintic(x, t):
     ]) @ x
 
 
-def get_linearization(order, max_speed, dec_max):
+def get_linear(order, max_speed, dec_max):
     """"刹停距离函数的线性化，dist = av + b，返回a，b"""
     ab_s = []
     stamp = np.linspace(0, max_speed, order + 1)
@@ -67,6 +67,20 @@ def get_linearization(order, max_speed, dec_max):
         b = d0 - a * v0
         ab_s.append([a, b])
     return ab_s
+
+
+def get_v_square_linear(v, l_v, max_v):
+    """
+     v * (v - dxt_PC[:step])线性化
+    :param v: 当前速度
+    :param l_v: 线性化点
+    :return: 线性化后的速度平方
+    """
+    point_1 = (0, 0)
+    point_2 = (l_v / 2, )
+    f_1 = lambda v_, l_v_: - 1 / 2 * l_v_ * v_
+    f_2 = lambda v_, l_v_: (max_v ** 2 - max_v * l_v_ + 1 / 4 * l_v_ ** 2) / (max_v - l_v_ / 2) * v_
+
 
 
 def wrap_to_pi(x: float) -> float:

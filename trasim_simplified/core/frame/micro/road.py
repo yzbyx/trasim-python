@@ -116,7 +116,8 @@ class Road:
         #     self.step_ = lane_iter.__next__()  # 车辆生成，上一步的数据记录
 
         for _ in tqdm.tqdm(range(self.sim_step)):
-            self.step_vehicle_surr()  # 更新车辆周围车辆信息
+            self.step_vehicle_info_update()  # 更新车辆周围车辆信息\
+            self.step_vehicle_traj_pred()  # 轨迹预测
             if self.yield_: yield self.step_, 0  # 跟驰
             self.step_lc_intention_judge()
             if self.yield_: yield self.step_, 1  # 换道意图
@@ -163,21 +164,29 @@ class Road:
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
-                    if car.y_c > lane.y_left:
+                    if car.y > lane.y_left:
                         target_lane = car.left_lane
-                        target_lane.car_insert_by_instance(car)
                         car.lane.car_remove(car)
-                    elif car.y_c < lane.y_right:
+                        target_lane.car_insert_by_instance(car)
+                        car.lane = target_lane
+                    elif car.y < lane.y_right:
                         target_lane = car.right_lane
-                        target_lane.car_insert_by_instance(car)
                         car.lane.car_remove(car)
+                        target_lane.car_insert_by_instance(car)
+                        car.lane = target_lane
                     assert car.target_lane is not None
 
-    def step_vehicle_surr(self):
+    def step_vehicle_info_update(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
-                    car.update_surrounding_vehicle_and_lane()
+                    car.update_necessary_info()
+
+    def step_vehicle_traj_pred(self):
+        for i, lane in enumerate(self.lane_list):
+            for j, car in enumerate(lane.car_list):
+                if car.type != V_TYPE.OBSTACLE:
+                    car.cal_traj_pred()
 
     def get_lane_index(self, y):
         """
