@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-24 16:21
+# @time : 2023-03-24 16:21
 # @Author : yzbyx
 # @File : circle_lane.py
 # @Software : PyCharm
@@ -8,8 +8,8 @@ from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class LaneCircle(LaneAbstract):
-    def __init__(self, lane_length: float):
-        super().__init__(lane_length)
+    def __init__(self, lane_length: float, width: float = 3.5):
+        super().__init__(lane_length, width)
         self.is_circle = True
 
     def step(self):

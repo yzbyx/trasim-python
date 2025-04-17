@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2024/12/19 15:44
+# @time : 2024/12/19 15:44
 # @Author : yzbyx
 # @File : mpc_solver.py
 # Software: PyCharm
@@ -10,6 +10,7 @@ import numpy as np
 import tqdm
 from matplotlib import pyplot as plt
 
+from traj_process.util.plot_helper import get_fig_ax
 from trasim_simplified.core.agent.ref_path import ReferencePath
 
 if TYPE_CHECKING:
@@ -34,17 +35,24 @@ class MPC_Solver:
         self.opt_x = None
         self.opt_u = None
 
-        self.R = np.diag([0.1, 1])  # input cost matrix
-        self.Rd = np.diag([0.1, 1])  # input diff cost matrix
-        self.Q = np.diag([0.1, 0.1, 1, 1])  # state cost matrix
-        self.Qu = np.diag([0.01, 1])  # input-ref diff cost matrix
-        self.Qf = self.Q * 10  # state final matrix
-
-        self.use_R = True
-        self.use_Rd = True
+        self.Q = np.diag([10, 10, 0.1, 0.1])  # state cost matrix
+        self.Qf = self.Q * 100  # state final matrix
+        self.use_R = False
+        self.use_Rd = False
         self.use_Q = True
-        self.use_Qu = True
+        self.use_Qu = False
         self.use_Qf = True
+
+        # self.R = np.diag([0.1, 1])  # input cost matrix
+        # self.Rd = np.diag([0.1, 1])  # input diff cost matrix
+        # self.Q = np.diag([0.1, 0.1, 1, 1])  # state cost matrix
+        # self.Qu = np.diag([0.01, 1])  # input-ref diff cost matrix
+        # self.Qf = self.Q * 10  # state final matrix
+        # self.use_R = True
+        # self.use_Rd = True
+        # self.use_Q = True
+        # self.use_Qu = True
+        # self.use_Qf = True
 
         self.total_j = 0
         self.return_j = False
@@ -62,11 +70,11 @@ class MPC_Solver:
             u, x, x_bar, x_ref, is_end, j = self.mpc_prepare(zero_ref_a=False, return_j=True)
             self.total_j += j
 
-        self.ugv.update_state(u[0, 1], u[1, 1])
+        # self.ugv.update_state(u[0, 1], u[1, 1])
 
         self.step += 1
 
-        return u[0, 1], u[1, 1]
+        return u[0, 1], u[1, 1], is_end
 
     def mpc_prepare(self, zero_ref_a=False, return_j=False):
         # 1s后的index
@@ -97,13 +105,30 @@ class MPC_Solver:
         x0 = self.ugv.get_state()
         x_bar_first = None
         x_bar = self.ugv.predict_motion(x0, u_ref[:, 1:])
+        # print("u_ref", u_ref)
+        # print("x_bar", x_bar)
+        # print("x_ref", x_ref)
+        # print("x_delta", x_ref - x_bar)
+
         if x_bar_first is None:
             x_bar_first = x_bar
-        x_val, u_ref, j = self.mpc_control(x_ref, x_ref, u_ref)
+        x_val, u_val, j = self.mpc_control(x_ref, x_ref, u_ref)
+
+        # x_bar_bar = self.ugv.predict_motion(x0, u_val[:, 1:])
+
+        # fig, ax = get_fig_ax()
+        # ax.plot(x_ref[0, :], x_ref[1, :], label="ref")
+        # ax.plot(x_bar[0, :], x_bar[1, :], label="bar")
+        # ax.plot(x_bar_bar[0, :], x_bar_bar[1, :], label="val")
+        # ax.legend()
+        # print(u_ref)
+        # plt.ioff()
+        # plt.show()
+        # plt.ion()
 
         if return_j:
-            return u_ref, x_val, x_bar_first, x_ref, is_end, j
-        return u_ref, x_val, x_bar_first, x_ref, is_end
+            return u_val, x_val, x_bar_first, x_ref, is_end, j
+        return u_val, x_val, x_bar_first, x_ref, is_end
 
     def mpc_control(self, x_ref, x_bar, u_ref):
         """

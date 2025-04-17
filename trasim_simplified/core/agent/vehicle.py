@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022/1/11
+# @time : 2022/1/11
 # @Author : yzbyx
 # @File : vehicle.py
 # @Software : PyCharm
@@ -10,7 +10,7 @@ import numpy as np
 
 from trasim_simplified.core.agent import utils
 from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
-from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint
+from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.agent.obstacle import Obstacle
@@ -21,22 +21,26 @@ if TYPE_CHECKING:
 
 
 class Vehicle(Obstacle):
-    def __init__(self, lane: Optional['LaneAbstract'], type_: int, id_: int, length: float):
+    def __init__(self, lane: Optional['LaneAbstract'], type_: V_TYPE, id_: int, length: float):
         super().__init__(type_)
         self.ID = id_
         self.length = length
         self.lane = lane
-        # self.left_lane, self.right_lane = (
-        #     self.lane.road.get_available_adjacent_lane(self.lane, self.x)
-        # )
+        self.skip = False
 
         self.leader: Optional[Vehicle] = None
         self.follower: Optional[Vehicle] = None
 
         self.lane_id_list = []
-        self.pos_list = []
+        self.x_list = []
+        self.y_list = []
+        self.x_center_global_list = []
+        self.y_center_global_list = []
         self.speed_list = []
         self.acc_list = []
+        self.yaw_list = []
+        self.delta_list = []
+
         self.step_list = []
         self.time_list = []
         self.dv_list = []
@@ -44,7 +48,6 @@ class Vehicle(Obstacle):
         self.gap_list = []
         self.thw_list = []
         self.dhw_list = []
-
         self.ttc_list = []
         self.tit_list = []
         self.ttc_star = 1.5
@@ -80,7 +83,7 @@ class Vehicle(Obstacle):
         self.right_lane: Optional['LaneAbstract'] = None
 
         self.destination_lane_indexes = None
-        self.route_type = None
+        self.route_type: Optional[RouteType] = None
 
         self.no_lc = False  # 是否禁止换道
         self.lc_direction = 0  # 换道方向，-1为左，1为右
@@ -105,6 +108,8 @@ class Vehicle(Obstacle):
         self.lc_ttc_risk = None
         self.lc_acc_benefit = None
         self.lc_route_desire = None
+
+        self.risk_2d = None
 
     @property
     def time_wanted(self):
@@ -138,6 +143,10 @@ class Vehicle(Obstacle):
     @property
     def acc_max(self):
         return self.cf_model.get_max_acc()
+
+    @property
+    def safe_s0(self):
+        return self.cf_model.get_safe_s0()
 
     def update_necessary_info(self):
         self.f = self.leader
@@ -273,44 +282,44 @@ class Vehicle(Obstacle):
 
     def cf_lateral_control(self):
         """自动驾驶跟驰过程/人类驾驶全过程的预瞄横向控制"""
-        # preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME)
-        # l_lat = self.target_lane.y_center - self.y
-        # dist = np.sqrt(preview_s ** 2 + l_lat ** 2)  # 车头到预瞄点的距离
-        # theta = np.arctan2(l_lat, preview_s)
-        #
-        # R_h = (2 * self.l_rear_axle_2_head + dist) / (2 * (theta + self.lane.heading - self.yaw))
-        # R_r = np.sqrt(R_h ** 2 - self.l_rear_axle_2_head ** 2)
-        #
-        # delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
-        #
-        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        # delta = self.delta + d_delta
-        # delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+        preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME)
+        l_lat = self.target_lane.y_center - self.y
+        dist = np.sqrt(preview_s ** 2 + l_lat ** 2)  # 车头到预瞄点的距离
+        theta = np.arctan2(l_lat, preview_s)
 
-        lane_future_heading = 0
+        R_h = (2 * self.l_rear_axle_2_head + dist) / (2 * (theta + self.lane.heading - self.yaw))
+        R_r = np.sqrt(R_h ** 2 - self.l_rear_axle_2_head ** 2)
 
-        # Lateral position control
-        lateral_speed_command = -self.KP_LATERAL * (self.y - self.target_lane.y_center)
-        # Lateral speed to heading
-        heading_command = np.arcsin(
-            np.clip(lateral_speed_command / utils.not_zero(self.speed), -1, 1)
-        )
-        heading_ref = lane_future_heading + np.clip(
-            heading_command, -np.pi / 4, np.pi / 4
-        )
-        # Heading control
-        heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(
-            heading_ref - self.yaw
-        )
-        # Heading rate to steering angle
-        slip_angle = np.arcsin(
-            np.clip(
-                self.length / 2 / utils.not_zero(self.speed) * heading_rate_command,
-                -1,
-                1,
-                )
-        )
-        delta = np.arctan(2 * np.tan(slip_angle))
+        delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
+
+        d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        delta = self.delta + d_delta
+        delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+
+        # lane_future_heading = 0
+        #
+        # # Lateral position control
+        # lateral_speed_command = -self.KP_LATERAL * (self.y_c - self.target_lane.y_center)
+        # # Lateral speed to heading
+        # heading_command = np.arcsin(
+        #     np.clip(lateral_speed_command / utils.not_zero(self.speed), -1, 1)
+        # )
+        # heading_ref = lane_future_heading + np.clip(
+        #     heading_command, -np.pi / 4, np.pi / 4
+        # )
+        # # Heading control
+        # heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(
+        #     heading_ref - self.yaw
+        # )
+        # # Heading rate to steering angle
+        # slip_angle = np.arcsin(
+        #     np.clip(
+        #         self.length / 2 / utils.not_zero(self.speed) * heading_rate_command,
+        #         -1,
+        #         1,
+        #         )
+        # )
+        # delta = np.arctan(2 * np.tan(slip_angle))
 
         # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
         # delta = self.delta + d_delta
@@ -351,19 +360,32 @@ class Vehicle(Obstacle):
         if C_Info.lane_add_num == info:
             return self.lane_id_list
         elif C_Info.id == info:
-            return [self.ID] * len(self.pos_list)
-        if C_Info.Preceding_ID == info:
+            return [self.ID] * len(self.lane_id_list)
+        elif C_Info.Preceding_ID == info:
             return self.preceding_id_list
         elif C_Info.car_type == info:
-            return [self.type] * len(self.pos_list)
-        elif C_Info.v_Length == info:
-            return [self.length] * len(self.pos_list)
-        elif C_Info.a == info:
+            return [self.type] * len(self.lane_id_list)
+        elif C_Info.length == info:
+            return [self.length] * len(self.lane_id_list)
+        elif C_Info.width == info:
+            return [self.width] * len(self.lane_id_list)
+        elif C_Info.acc == info:
             return self.acc_list
-        elif C_Info.v == info:
+        elif C_Info.speed == info:
             return self.speed_list
         elif C_Info.x == info:
-            return self.pos_list
+            return self.x_list
+        elif C_Info.Local_Y == info:
+            return self.y_list
+        elif C_Info.xCenterGlobal == info:
+            return self.x_center_global_list
+        elif C_Info.yCenterGlobal == info:
+            return self.y_center_global_list
+        elif C_Info.yaw == info:
+            return self.yaw_list
+        elif C_Info.delta == info:
+            return self.delta_list
+
         elif C_Info.dv == info:
             return self.dv_list
         elif C_Info.gap == info:
@@ -377,9 +399,9 @@ class Vehicle(Obstacle):
         elif C_Info.step == info:
             return self.step_list
         elif C_Info.cf_id == info:
-            return [get_cf_id(self.cf_model.name)] * len(self.pos_list)
+            return [get_cf_id(self.cf_model.name)] * len(self.lane_id_list)
         elif C_Info.lc_id == info:
-            return [get_lc_id(None if self.lc_model is None else self.lc_model.name)] * len(self.pos_list)
+            return [get_lc_id(None if self.lc_model is None else self.lc_model.name)] * len(self.lane_id_list)
 
         elif C_Info.safe_ttc == info:
             return self.ttc_list
@@ -400,12 +422,23 @@ class Vehicle(Obstacle):
                 self.lane_id_list.append(self.lane.add_num)
             if C_Info.Preceding_ID == info:
                 self.preceding_id_list.append(self.leader.ID if self.leader is not None else np.nan)
-            if C_Info.a == info:
-                self.acc_list.append(self.a)
-            elif C_Info.v == info:
-                self.speed_list.append(self.v)
-            elif C_Info.x == info:
-                self.pos_list.append(self.x)
+            if C_Info.acc == info:
+                self.acc_list.append(self.acc)
+            elif C_Info.speed == info:
+                self.speed_list.append(self.speed)
+            elif C_Info.Local_X == info:
+                self.x_list.append(self.x)
+            elif C_Info.Local_Y == info:
+                self.y_list.append(self.y - self.lane.y_center)
+            elif C_Info.xCenterGlobal == info:
+                self.x_center_global_list.append(self.x_c)
+            elif C_Info.yCenterGlobal == info:
+                self.y_center_global_list.append(self.y_c)
+            elif C_Info.yaw == info:
+                self.yaw_list.append(self.yaw)
+            elif C_Info.delta == info:
+                self.delta_list.append(self.delta)
+
             elif C_Info.dv == info:
                 self.dv_list.append(self.dv)
             elif C_Info.gap == info:
@@ -527,7 +560,7 @@ class Vehicle(Obstacle):
             return np.nan
 
     def has_data(self):
-        return len(self.pos_list) != 0
+        return len(self.x_list) != 0
 
     def set_car_param(self, param: dict):
         self.color = param.get("color", COLOR.yellow)
@@ -544,5 +577,7 @@ class Vehicle(Obstacle):
             if self.leader is not None else ""
 
     def __repr__(self):
-        return f"type: {self.cf_model.name}, step: {self.lane.step_}" +\
-            f" x: {self.x:.3f}, v: {self.v:.3f}, a: {self.a:.3f}, gap: {self.gap}"
+        print(self.risk_2d)
+        return (f"id: {self.ID}, x: {self.x:.3f}, y: {self.y:.3f}, speed: {self.speed:.3f}"
+                f" acc: {self.acc:.3f}, lane: {self.lane.index}, gap: {self.gap:.3f},"
+                f" is_lc: {self.lane_changing}, ttc: {self.ttc:.3f}, ttc2d: {float(self.risk_2d):.3f}")

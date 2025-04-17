@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-03-09 16:37
+# @time : 2022-03-09 16:37
 # @Author : yzbyx
 # @File : constant.py
 # @Software : PyCharm
@@ -9,7 +9,7 @@
 # ******************************
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Callable
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,7 @@ import pandas as pd
 if TYPE_CHECKING:
     from trasim_simplified.core.agent import Vehicle
     from trasim_simplified.core.agent.game_agent import Game_Vehicle
+    from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
 class RANDOM_SEED:
@@ -29,40 +30,40 @@ class RANDOM_SEED:
 class TrackInfo:
     # ------Vehicle Tracks------ #
     # basic 单车道仿真
-    Frame_ID = "Frame_ID"
+    frame = "frame"
     """当前帧ID"""
-    Time = "Time"
+    time = "time"
     """当前帧时间 [s]"""
-    v_ID = "v_ID"
+    trackId = "trackId"
     """车辆ID"""
-    Local_X = "Local_X"
+    Local_X = "localLon"
     """车头中点投影到车道线的车道起点偏移量 [m]"""
-    Local_Y = "Local_Y"
+    Local_Y = "localLat"
     """车头中点距离所在车道中轴线的偏移量 [m]"""
-    v_Length = "v_Length"
+    length = "length"
     """车辆长度 [m]"""
     v_Class = "v_Class"
     """车辆类别 [Car/Truck]"""
-    Lane_ID = "Lane_ID"
+    Lane_ID = "laneId"
     """车道ID [0/1/2...]"""
 
     # extend basic-1 车辆基础信息拓展
-    Velocity = "Velocity"
-    """车辆的速度（非道路方向速度） [m/s]"""
-    Local_Heading = "Local_Heading"
+    acc = "acc"
+    """车辆的加速度 [m/s^2]"""
+    speed = "speed"
+    """车辆的速度 [m/s]"""
+    heading = "heading"
     """沿车道方向的车辆方向夹角（逆时针为正） [radian]"""
-    Local_xVelocity = "Local_xVelocity"
+    localLonVel = "localLonVel"
     """车辆平行于车道中轴线的速度分量 [m/s]"""
-    Local_yVelocity = "Local_yVelocity"
+    localLatVel = "localLatVel"
     """车辆垂直于车道中轴线的速度分量 [m/s]"""
-    Local_xAcc = "Local_xAcc"
+    localLonAcc = "localLonAcc"
     """车辆平行于车道中轴线的加速度分量 [m/s^2]"""
-    Local_yAcc = "Local_yAcc"
+    localLatAcc = "localLatAcc"
     """车辆垂直于车道中轴线的加速度分量 [m/s^2]"""
-    Local_xJerk = "Local_xJerk"
-    """车辆平行于车道中轴线的加加速度分量 [m/s^3]"""
-    Local_yJerk = "Local_yJerk"
-    """车辆垂直于车道中轴线的加加速度分量 [m/s^3]"""
+    delta = "delta"
+    """车辆前轮转向角 [radian]"""
 
     # extended basic-2 车辆关系拓展
     Following_ID = "Following_ID"
@@ -89,37 +90,32 @@ class TrackInfo:
     """与前车的碰撞时间 [s]"""
 
     # multi lane 多车道单方向
-    v_Width = "v_Width"
+    width = "width"
     """车辆宽度"""
 
     # level-1 extended 碰撞箱详细表述
-    Global_Heading = "Global_Heading"
+    yaw = "yaw"
     """车辆全局朝向 [radian]"""
 
     # extended level-3 坐标详细表述
-    Global_Y = "Global_Y"
-    """车头中点的全局y坐标，左上角为原点，横轴为x，纵轴为y [m]"""
-    Global_X = "Global_X"
-    """车头中点的全局x坐标，左上角为原点，横轴为x，纵轴为y [m]"""
+    yFrontGlobal = "yFrontGlobal"
+    """车头中点的全局y坐标，横轴为x，纵轴为y [m]"""
+    xFrontGlobal = "xFrontGlobal"
+    """车头中点的全局x坐标，横轴为x，纵轴为y [m]"""
+    xCenterGlobal = "xCenterGlobal"
+    yCenterGlobal = "yCenterGlobal"
 
-    # other (CitySim)
-    Local_X_Tail = "Local_X_Tail"
-    """车尾中点投影到车道线的车道起点偏移量 [m]"""
-    Local_Y_Tail = "Local_Y_Tail"
-    """车尾中点距离所在车道中轴线的偏移量 [m]"""
-    Course = "Course"
-    """车辆的运动方向 [rad]"""
-
-    Pair_ID = "Pair_ID"
+    Pair_ID = "pairId"
 
     # 兼容trasim_simplified
     lane_add_num = Lane_ID
-    id = v_ID
-    time = Time
-    step = Frame_ID
-    v = Local_xVelocity
+    id = trackId
+    step = frame
+    v = localLonVel
     x = Local_X
-    a = Local_xAcc
+    y = Local_Y
+    a = localLonAcc
+
     cf_acc = "cf_acc"
     cf_id = "cf model ID"
     """跟驰模型类别ID"""
@@ -226,7 +222,7 @@ class V_CLASS(Enum):
 # ******************************
 # 车辆类别
 # ******************************
-class V_TYPE:
+class V_TYPE(Enum):
     # 汽车
     PASSENGER = 0
     # 货车
@@ -408,6 +404,26 @@ class TrajPoint:
 
 
 @dataclass
+class TrajData:
+    EV_traj: Optional[np.ndarray]
+    """换道车辆的轨迹"""
+    TF_traj: Optional[np.ndarray]
+    """目标间隙前车的轨迹"""
+    TR_traj: Optional[np.ndarray]
+    """目标间隙后车的轨迹"""
+    PC_traj: Optional[np.ndarray]
+    """当前车道前车的轨迹"""
+    TF_PC_traj: Optional[np.ndarray]
+    """目标间隙前车的前车轨迹"""
+    TR_PC_traj: Optional[np.ndarray]
+    """目标间隙后车的前车轨迹"""
+    PC_PC_traj: Optional[np.ndarray]
+    """前车的前车轨迹"""
+    TF_cost_lambda: Optional[Callable]
+    TR_cost_lambda: Optional[Callable]
+
+
+@dataclass
 class GameRes:
     cost_df: Optional[pd.DataFrame]
     """成本函数"""
@@ -431,7 +447,72 @@ class GameRes:
     """目标间隙后车的成本函数"""
     EV_opti_series: Optional[pd.Series]
     """换道车辆的最优时距下的成本函数序列"""
-    EV_opti_traj: Optional[np.ndarray] = None
+    traj_data: Optional[TrajData] = None
+    """其他车辆的轨迹"""
+
+
+@dataclass
+class GapJudge:
+    lc_direction: float
+    target_acc: Optional[float]
+    """速度调整的加速度"""
+    adapt_time: float
+    """调整时间"""
+    EV: 'Game_Vehicle'
+    """换道车辆"""
+    TF: Optional['Game_Vehicle'] = None
+    """目标间隙前车"""
+    TR: Optional['Game_Vehicle'] = None
+    """目标间隙后车"""
+    PC: Optional['Game_Vehicle'] = None
+    """当前车道前车"""
+    acc_gain: Optional[float] = None
+    """加速度增益"""
+    ttc_risk: Optional[float] = None
+    """碰撞风险"""
+    route_gain: Optional[float] = None
+    """路径成本函数"""
+    adapt_end_time: float = None
+    """调整结束时间"""
+    target_lane: Optional['LaneAbstract'] = None
+    """目标车道"""
+
+
+@dataclass
+class ScenarioTraj:
+    dataset_name: str
+    """数据集名称"""
+    pattern_name: str
+    """场景名称"""
+    track_id: int
+    """车辆ID"""
+    lc_start_frame: int
+    lc_frame: int
+    lc_end_frame: int
+
+    EV_traj: Optional[pd.DataFrame]
+
+    TP_traj: Optional[pd.DataFrame] = None
+    TR_traj: Optional[pd.DataFrame] = None
+
+    CP_traj: Optional[pd.DataFrame] = None
+    CPP_traj: Optional[pd.DataFrame] = None
+
+    TRR_traj: Optional[pd.DataFrame] = None
+    TPP_traj: Optional[pd.DataFrame] = None
+
+    OR_traj: Optional[pd.DataFrame] = None
+    ORR_traj: Optional[pd.DataFrame] = None
+
+    OP_traj: Optional[pd.DataFrame] = None
+    OPP_traj: Optional[pd.DataFrame] = None
+
+
+class ScenarioMode(Enum):
+    NO_INTERACTION = 0
+    """无交互"""
+    INTERACTION = 1
+    """有交互"""
 
 
 if __name__ == '__main__':

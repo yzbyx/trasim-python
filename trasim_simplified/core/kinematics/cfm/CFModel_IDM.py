@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 14:22
+# @time : 2022-04-04 14:22
 # @Author : yzbyx
 # @File : CFModel_IDM.py
 # @Software : PyCharm
@@ -71,7 +71,7 @@ class CFModel_IDM(CFModel):
         if self.veh_surr.cp is None:
             expect_speed = self.get_expect_speed()
             expect_acc = self.get_expect_acc()
-            acc = min(expect_acc, (expect_speed - self.veh_surr.ev.v) / self.dt)
+            acc = min(expect_acc, (expect_speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt)
             return acc
         self._update_dynamic()
         T_wanted = self._T
@@ -131,6 +131,15 @@ class CFModel_IDM(CFModel):
     def get_max_acc(self):
         return 5
 
+    def get_com_acc(self):
+        return self._omega
+
+    def get_com_dec(self):
+        return self._d
+
+    def get_safe_s0(self):
+        return self._s0
+
     def get_time_safe(self):
         return self._time_safe
 
@@ -151,7 +160,7 @@ def cf_IDM_acc(s0, v0, T, omega, d, delta, speed, gap, leaderV, **kwargs) -> dic
     return cf_IDM_acc_jit(s0, 0, v0, T, omega, d, delta, speed, gap, leaderV)
 
 
-@numba.njit()
+# @numba.njit()
 def cf_IDM_equilibrium_jit(s0, s1, v0, T, delta, v):
     return (s0 + v * T + s1 * np.sqrt(v / v0)) / np.sqrt(1 - np.power(v / v0, delta))
 

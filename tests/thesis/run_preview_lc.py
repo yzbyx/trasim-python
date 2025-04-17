@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/4/7 11:28
+# @time : 2025/4/7 11:28
 # @Author : yzbyx
 # @File : run_preview_lc.py
 # Software: PyCharm

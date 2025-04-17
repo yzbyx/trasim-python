@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/10 17:39
+# @time : 2023/5/10 17:39
 # @Author : yzbyx
 # @File : CFModel_TPACC.py
 # Software: PyCharm
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from trasim_simplified.core.agent.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM, V_TYPE
+from trasim_simplified.core.constant import CFM, V_TYPE, VehSurr
 from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_v_safe, CFModel_KK
 
 
@@ -18,6 +18,8 @@ class CFModel_TPACC(CFModel):
         super().__init__()
         self.name = CFM.TPACC
         self.thesis = "Physics of automated driving in framework of three-phase traffic theory (2018)"
+
+        self._v0 = f_param.get("v0", 33.3)
 
         self._kdv = f_param.get("kdv", 0.3)
         """速度适配区间的速度差系数"""
@@ -37,6 +39,7 @@ class CFModel_TPACC(CFModel):
         """v_safe计算是否离散化时间"""
         self.tau = f_param.get("tau", 1)
         """仿真步长即反应时间 [s]"""
+        self.tau_safe = 1
 
         self.record_cf_info = f_param.get("record_cf_info", False)
         self.cf_info: Optional[TPACCInfo] = None
@@ -54,7 +57,31 @@ class CFModel_TPACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
+        return self._v0
+
+    def get_max_speed(self):
         return self.get_speed_limit()
+
+    def get_max_dec(self):
+        return 8
+
+    def get_max_acc(self):
+        return 5
+
+    def get_com_acc(self):
+        return self._a
+
+    def get_com_dec(self):
+        return self._b
+
+    def get_safe_s0(self):
+        return 2
+
+    def get_time_safe(self):
+        return 0.5
+
+    def get_time_wanted(self):
+        return 1
 
     def _update_dynamic(self):
         self.gap = self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
@@ -65,17 +92,19 @@ class CFModel_TPACC(CFModel):
         # self.l_v_a = CFModel_KK.update_v_safe(self)
         self.l_v_a = self.veh_surr.cp.a
 
-    def step(self, index, *args):
-        self.clear()
+    def step(self, veh_surr: VehSurr):
+        self.veh_surr = veh_surr
+        if self.veh_surr.ev is None:
+            return None
         if self.veh_surr.ev.leader is None:
-            speed = max(0, min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
+            speed = max(0., min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
             return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
         f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
         leader_is_dummy = True if self.veh_surr.cp.type == V_TYPE.OBSTACLE else False
         result = calculate(
             *f_params, self.dt, self.gap, self.veh_surr.ev.v, self.veh_surr.cp.v, self.get_expect_speed(),
-            leader_is_dummy, self.l_v_a
+            leader_is_dummy, self.l_v_a, self.tau_safe
         )
         if self.record_cf_info:
             self.cf_info.step.append(self.veh_surr.ev.lane.step_)
@@ -90,7 +119,7 @@ class CFModel_TPACC(CFModel):
 
 
 def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
-              dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a):
+              dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a, tau=1):
     if gap > v * g_tau_:
         acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
         is_speed_adaptive = 0
@@ -101,10 +130,10 @@ def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
     is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
     v_c = v + dt * max(- dec_, min(acc, acc_))
 
-    v_safe = cal_v_safe(v_safe_dispersed_, dt, l_v, gap, dec_, dec_)
+    v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
     is_thw_constraint = 0
     if not leader_is_dummy:
-        temp = (gap / dt) + l_v_a
+        temp = (gap / tau) + l_v_a
         is_thw_constraint = 1 if v_safe > temp else 0
         v_safe = min(v_safe, temp)
 
@@ -112,7 +141,9 @@ def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
     is_v_safe_constraint = 1 if v_safe < v_c else 0
     v_next = max(0, min(v_free, v_c, v_safe))
 
-    return (v_next - v) / dt, \
+    a_final = (v_next - v) / dt
+
+    return a_final, \
         is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
 
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/6/3 19:35
+# @time : 2023/6/3 19:35
 # @Author : yzbyx
 # @File : CFModel_CTM.py
 # Software: PyCharm

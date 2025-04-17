@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 16:43
+# @time : 2023-03-31 16:43
 # @Author : yzbyx
 # @File : basic_diagram.py
 # @Software : PyCharm

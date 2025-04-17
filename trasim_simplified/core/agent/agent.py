@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/3/22 20:55
+# @time : 2025/3/22 20:55
 # @Author : yzbyx
 # @File : agent.py
 # Software: PyCharm
@@ -10,7 +10,7 @@ import numpy as np
 
 from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
 from trasim_simplified.core.agent.vehicle import Vehicle
-from trasim_simplified.core.constant import RouteType, VehSurr
+from trasim_simplified.core.constant import RouteType, VehSurr, V_TYPE
 from trasim_simplified.core.kinematics.cfm import CFModel
 
 if TYPE_CHECKING:
@@ -21,15 +21,9 @@ class AgentBase(Vehicle, abc.ABC):
     """
     自主驾驶类
     """
-    def __init__(self, lane: 'LaneAbstract', type_: int, id_: int, length: float):
+    def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
         self.crashed = False
-
-        self.state = None
-        self.lc_end_step = -1
-        self.lc_step_conti = 0
-
-        self.target_speed = 30
 
     def get_state_for_traj(self):
         """返回车辆状态量[x, dx, ddx, y, dy, ddy]"""
@@ -43,11 +37,11 @@ class AgentBase(Vehicle, abc.ABC):
         next_acc_block = np.inf
         if self.lane.index not in self.destination_lane_indexes:
             next_acc_block = self.cf_model.step(VehSurr(ev=self, cp=self.lane.road.end_weaving_block_veh))
-        next_acc = self.cf_model.step(self.pack_veh_surr())
+        veh_surr = self.pack_veh_surr()
+        next_acc = self.cf_model.step(veh_surr)
         self.next_acc = min(next_acc, next_acc_block)
         self.next_delta = self.cf_lateral_control()
+        # print("ID:", self.ID, "lane_changing", self.lane_changing,
+        #       "lc_end_step", self.lc_end_step, "current_step", self.lane.step_,
+        #       'acc', self.next_acc, 'delta', self.next_delta)
         return self.next_acc, self.next_delta
-
-    def pred_lc_risk(self):
-        """预测周边车辆轨迹、判断碰撞概率"""
-

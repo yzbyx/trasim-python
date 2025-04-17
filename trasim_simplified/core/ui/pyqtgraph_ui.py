@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/9/30 17:27
+# @time : 2023/9/30 17:27
 # @Author : yzbyx
 # @File : pyqtgraph_ui.py
 # Software: PyCharm

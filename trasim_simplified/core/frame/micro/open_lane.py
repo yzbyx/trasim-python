@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-04-14 12:07
+# @time : 2023-04-14 12:07
 # @Author : yzbyx
 # @File : open_lane.py
 # @Software : PyCharm
@@ -18,8 +18,8 @@ class THW_DISTRI:
 
 
 class LaneOpen(LaneAbstract):
-    def __init__(self, lane_length: float):
-        super().__init__(lane_length)
+    def __init__(self, lane_length: float, width: float):
+        super().__init__(lane_length, width)
         self.is_circle = False
         self.outflow_point = True
         """此车道是否为流出车道 (影响车辆跟驰行为)"""
@@ -57,10 +57,9 @@ class LaneOpen(LaneAbstract):
             assert self.car_num_percent is not None
             if len(self.car_list) != 0:
                 first = self.car_list[0]
-                # if first.x - first.length - first.v * self.dt < 0:
-                if first.x - first.length < 0:
+                if first.x - first.length - first.v * self.dt < 0:
                     self.fail_summon_num += 1
-                    # print(f"车道{self.ID}在{self.step_}仿真步生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
+                    print(f"车道{self.ID}在{self.step_}仿真步生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
                     return
 
             i = np.random.choice(self.car_num_percent, p=self.car_num_percent.ravel())
@@ -134,8 +133,9 @@ class LaneOpen(LaneAbstract):
 
     def update_state(self):
         for car in self.car_list:
-            car.update_state(car.next_acc, car.next_delta)
+            if not car.skip:
+                car.update_state(car.next_acc, car.next_delta)
 
-            if car.x > self.lane_length:
-                car.is_run_out = True
-                self.car_remove(car, car.has_data())
+                if car.x > self.lane_length:
+                    car.is_run_out = True
+                    self.car_remove(car, car.has_data())

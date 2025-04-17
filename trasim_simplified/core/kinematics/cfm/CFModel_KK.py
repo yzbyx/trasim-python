@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-07-04 12:41
+# @time : 2022-07-04 12:41
 # @Author : yzbyx
 # @File : CFModel_KK.py
 # @Software : PyCharm
@@ -44,8 +44,10 @@ class CFModel_KK(CFModel):
         self.name = CFM.KK
         self.thesis = 'Physics of automated driving in framework of three-phase traffic theory (2018)'
 
+        self._v0 = f_param.get("v0", 33.3)
+
         # -----模型变量------ #
-        self._d = f_param.get("d", 7.5)
+        self._d = f_param.get("d", 2)
         self._tau = f_param.get("tau", 1)
 
         self._k = f_param.get("k", 3)
@@ -74,12 +76,12 @@ class CFModel_KK(CFModel):
         self.index = None
 
     def _update_dynamic(self):
-        self.dt = self.veh_surr.ev.lane.dt
+        self.dt = self.veh_surr.ev.dt
         self._vf = self.get_expect_speed()
 
         self.v = self.veh_surr.ev.v
         self.l_length = self.veh_surr.cp.length
-        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._d
         self.l_v = self.veh_surr.cp.v
         self.l_v_a = self.veh_surr.cp.a
 
@@ -213,7 +215,7 @@ class CFModel_KK(CFModel):
         return self._b
 
     def get_expect_speed(self):
-        return self.get_speed_limit()
+        return self._v0
 
     def get_max_speed(self):
         return self.get_speed_limit()
@@ -230,6 +232,15 @@ class CFModel_KK(CFModel):
     def get_time_safe(self):
         return self._tau
 
+    def get_com_acc(self):
+        return self._a
+
+    def get_com_dec(self):
+        return self._b
+
+    def get_safe_s0(self):
+        return 2.5
+
     def cal_an_bn(self):
         r2 = self.random.random()
         P_0 = 1 if self.status == 1 else self.p_0_v(self.v)
@@ -240,8 +251,8 @@ class CFModel_KK(CFModel):
         return a_n, b_n
 
     def _cal_v_c(self, G, a_n, b_n):
-        if self.veh_surr.ev.lane_changing or self.veh_surr.ev.is_gaming:
-            return self.v + (0.3 * (self.gap - 2 - 0.3 * self.v) + 0.3 * (self.l_v - self.v)) * self.dt
+        # if self.veh_surr.ev.is_gaming:
+        #     return self.v + (0.3 * (self.gap - 2 - self.veh_surr.ev.game_time_wanted * self.v) + 0.3 * (self.l_v - self.v)) * self.dt
         if self.gap <= G:
             delta = max(-b_n * self._tau, min(a_n * self._tau, self.l_v - self.v))
             v_c = self.v + delta
@@ -304,21 +315,21 @@ def cal_G(k_, tau_, a_, v, l_v):
     return max(0, k_ * tau_ * v + (1 / a_) * v * (v - l_v))
 
 
-def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
+def cal_v_safe(v_safe_dispersed, tau, leaderV, gap, dec, leader_dec):
     """其中的dt为反应时间，同时也是离散化时间步长"""
     if v_safe_dispersed:
-        alpha_l = int(leaderV / (leader_dec * dt))
-        beta_l = leaderV / (leader_dec * dt) - alpha_l
-        X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
-        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
-        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
+        alpha_l = int(leaderV / (leader_dec * tau))
+        beta_l = leaderV / (leader_dec * tau) - alpha_l
+        X_d_l = leader_dec * (tau ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
+        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (tau ** 2)) + 0.25) - 0.5)
+        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (tau ** 2)) - alpha_safe / 2
 
-        return dec * dt * (alpha_safe + beta_safe)
+        return dec * tau * (alpha_safe + beta_safe)
     else:
         x_d_l = (leaderV ** 2) / (2 * leader_dec)
         total_allow_dist = x_d_l + gap
         a = 1 / (2 * dec)
-        v_safe = (- dt + np.sqrt(dt ** 2 + 4 * a * total_allow_dist)) / (2 * a)
+        v_safe = (- tau + np.sqrt(tau ** 2 + 4 * a * total_allow_dist)) / (2 * a)
 
         return v_safe
 

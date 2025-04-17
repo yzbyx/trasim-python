@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-04-09 9:44
+# @time : 2023-04-09 9:44
 # @Author : yzbyx
 # @File : CFModel_Linear.py
 # @Software : PyCharm

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/4/5 17:00
+# @time : 2025/4/5 17:00
 # @Author : yzbyx
 # @File : traj_predictor.py
 # Software: PyCharm
@@ -193,6 +193,7 @@ class TrajPred:
             if veh_surr.ev.pred_traj is None:
                 if self.net is None:
                     arg = ArgsConfig()
+                    arg.device = "cpu"
                     arg.mode = "test"
                     arg.batch_size = 1
                     self.net = PredictionNet(arg).to(arg.device)

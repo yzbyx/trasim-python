@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-25 22:37
+# @time : 2023-03-25 22:37
 # @Author : yzbyx
 # @File : frame.py
 # @Software : PyCharm
@@ -7,6 +7,7 @@ import abc
 from abc import ABC
 from typing import Optional, TYPE_CHECKING, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from trasim_simplified.core.agent import get_veh_class
@@ -46,7 +47,7 @@ class LaneAbstract(ABC):
 
         self.id_accumulate = 0
         self.car_num_list: list[int] = []
-        self.car_type_list: list[int] = []
+        self.car_type_list: list[V_TYPE] = []
         self.car_class_list: list[V_CLASS] = []
         self.car_length_list: list[float] = []
         self.car_initial_speed_list: list[float] = []
@@ -185,7 +186,7 @@ class LaneAbstract(ABC):
     def car_num(self):
         return len(self.car_list)
 
-    def car_config(self, car_num: Union[int, float], car_length: float, car_type: int, car_class: V_CLASS,
+    def car_config(self, car_num: Union[int, float], car_length: float, car_type: V_TYPE, car_class: V_CLASS,
                    car_initial_speed: float, speed_with_random: bool,
                    cf_name: str, cf_param: dict[str, float], car_param: dict,
                    lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None,
@@ -286,7 +287,10 @@ class LaneAbstract(ABC):
         """预热步数 [s]"""
         # self.dt = kwargs.get("dt", 0.1)
         """仿真步长 [s]"""
-        self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt))
+        if self.road_control:
+            self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt)) + 1
+        else:
+            self.sim_step = kwargs.get("sim_step", int(10 * 60 / self.dt))
         """总仿真步 [次]"""
         frame_rate = kwargs.get("frame_rate", -1)
         """pygame刷新率 [fps]"""
@@ -313,9 +317,11 @@ class LaneAbstract(ABC):
             # 能够记录warm_up_step仿真步时的车辆数据
             if self.data_save and self.step_ >= self.warm_up_step:
                 self.record()
+            # print("车辆生成与记录完成")
             if self.road_control: yield self.step_
             # 控制车辆对应的step需要在下一个仿真步才能显现到数据记录中
             self.update_state()  # 更新车辆状态
+            # print("车辆状态更新完成")
             if self.road_control: yield self.step_
             self.step_ += 1
             self.time_ += self.dt
@@ -360,7 +366,7 @@ class LaneAbstract(ABC):
             if car.ID == car_id:
                 car.cf_acc = acc_values
 
-    def car_insert(self, car_length: float, car_type: int, car_class: V_CLASS, car_pos: float,
+    def car_insert(self, car_length: float, car_type: V_TYPE, car_class: V_CLASS, car_pos: float,
                    car_speed: float, car_acc: float,
                    cf_name: str, cf_param: dict[str, float], car_param: dict,
                    lc_name: Optional[str] = None, lc_param: Optional[dict[str, float]] = None,

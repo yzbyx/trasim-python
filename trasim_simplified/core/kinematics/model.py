@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-24 12:12
+# @time : 2023-03-24 12:12
 # @Author : yzbyx
 # @File : model.py
 # @Software : PyCharm

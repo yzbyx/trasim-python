@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 16:02
+# @time : 2023-03-31 16:02
 # @Author : yzbyx
 # @File : has_ui.py
 # @Software : PyCharm

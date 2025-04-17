@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/10/22 15:44
+# @time : 2023/10/22 15:44
 # @Author : yzbyx
 # @File : intensity.py
 # Software: PyCharm

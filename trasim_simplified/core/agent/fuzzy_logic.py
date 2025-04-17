@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/3/30 23:19
+# @time : 2025/3/30 23:19
 # @Author : yzbyx
 # @File : fuzzy_logic.py
 # Software: PyCharm

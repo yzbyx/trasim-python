@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/10/14 21:27
+# @time : 2023/10/14 21:27
 # @Author : yzbyx
 # @File : tools.py
 # Software: PyCharm

@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022/1/11
+# @time : 2022/1/11
 # @Author : yzbyx
 # @File : obstacle.py
 # @Software : PyCharm
@@ -8,11 +8,11 @@ from typing import Optional, Tuple
 import numpy as np
 from matplotlib import pyplot as plt
 
-from trasim_simplified.core.constant import COLOR, TrajPoint
+from trasim_simplified.core.constant import COLOR, TrajPoint, V_TYPE
 
 
 class Obstacle:
-    def __init__(self, type_: int):
+    def __init__(self, type_: V_TYPE):
         self.x = 0
         """车头中点的x坐标 [m]"""
         self.y = 0
@@ -43,16 +43,16 @@ class Obstacle:
         self.DD_DELTA_MAX = 20
 
         self.wb_prop = 0.6
-        self.wheelbase = self.length * self.wb_prop
         self._update_prop()
         self.l_rear_axle_2_head = self.wheelbase * ((1 - self.wb_prop) / 2 + self.wb_prop)
         self._define_shape()
 
-        # 时间步+车辆角点
-        self.predict_bbox: Optional[dict[int, list[np.ndarray[float]]]] = {}
+    @property
+    def wheelbase(self):
+        return self.length * self.wb_prop
 
     @property
-    def v(self):
+    def v(self) -> float:
         return self.speed * np.cos(self.yaw)
 
     @property
@@ -166,18 +166,26 @@ class Obstacle:
         :param a: acceleration
         :param delta: steering angle
         """
+        # if abs((a - self.acc) / self.dt) > self.JERK_MAX:
+        #     a = self.acc + self.dt * self.JERK_MAX * np.sign(a - self.acc)
+
+        if abs((delta - self.delta) / self.dt) > self.D_DELTA_MAX:
+            delta = self.delta + self.dt * self.D_DELTA_MAX * np.sign(delta - self.delta)
+
         self.acc = a
         self.delta = delta
 
         self.speed = self.speed + self.dt * a
+        if self.speed < 0:
+            self.speed = 0
         # head
         beta = np.arctan(self.prop_ * np.tan(delta))
         self.x = self.x + self.dt * self.speed * np.cos(self.yaw + beta)
         self.y = self.y + self.dt * self.speed * np.sin(self.yaw + beta)
         self.yaw = self.yaw + self.dt * self.speed * np.sin(beta) / (self.wheelbase * self.prop_)
 
-        if np.isnan(self.x):
-            print(self.speed, self.yaw, self.yaw + beta)
+        # if np.isnan(self.x):
+        #     print(self.speed, self.yaw, self.yaw + beta)
 
     def predict_motion(self, x0, u_ctrl):
         """
@@ -195,7 +203,7 @@ class Obstacle:
 
         oa = u_ctrl[0, :]
         od = u_ctrl[1, :]
-        model = Obstacle(self.type)
+        model = self.clone()
         for (ai, di, i) in zip(oa, od, range(1, N + 1)):
             model.update_state(ai, di)
             xbar[0, i] = model.x
@@ -204,6 +212,22 @@ class Obstacle:
             xbar[3, i] = model.speed
 
         return xbar
+
+    def clone(self):
+        """
+        克隆当前对象
+        """
+        new_obj = Obstacle(self.type)
+        new_obj.x = self.x
+        new_obj.y = self.y
+        new_obj.speed = self.speed
+        new_obj.acc = self.acc
+        new_obj.yaw = self.yaw
+        new_obj.delta = self.delta
+        new_obj.length = self.length
+        new_obj.width = self.width
+        new_obj.dt = self.dt
+        return new_obj
 
     def get_error_state_space(self, ref_v, ref_yaw, ref_delta):
         """

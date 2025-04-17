@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 17:10
+# @time : 2022-04-04 17:10
 # @Author : yzbyx
 # @File : trasimWarning.py
 # @Software : PyCharm

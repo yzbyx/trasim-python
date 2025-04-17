@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/12 10:32
+# @time : 2023/5/12 10:32
 # @Author : yzbyx
 # @File : road.py
 # Software: PyCharm
@@ -7,8 +7,10 @@ import random
 import time
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import tqdm
+from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import V_TYPE, MARKING_TYPE
 from trasim_simplified.core.data.data_processor import DataProcessor
@@ -48,7 +50,10 @@ class Road:
 
         self._end_weaving_pos = None
         self._start_weaving_pos = None
-        self.end_weaving_block_veh = Vehicle(None, -1, -1, 0)
+        self.end_weaving_block_veh = Vehicle(None, V_TYPE.PASSENGER, -1, 0)
+
+        self.mainline_end_indexes = []
+        self.auxiliary_end_indexes = []
 
     @property
     def end_weaving_pos(self):
@@ -65,18 +70,21 @@ class Road:
     def set_start_weaving_pos(self, value):
         self._start_weaving_pos = value
 
-    def add_lanes(self, lane_num: int, is_circle=False):
+    def add_lanes(self, lane_num: int, is_circle=False, lane_width_list: list[float] = None):
         """
+        :param lane_width_list:
         :param lane_num:
         :param is_circle:
         :return:
         """
         real_index = list(range(lane_num))
+        if lane_width_list is None:
+            lane_width_list = [3.5] * lane_num
         for i in range(lane_num):
             if is_circle:
-                lane = LaneCircle(self.lane_length)
+                lane = LaneCircle(self.lane_length, lane_width_list[i])
             else:
-                lane = LaneOpen(self.lane_length)
+                lane = LaneOpen(self.lane_length, lane_width_list[i])
             lane.index = real_index[len(self.lane_list)]
             lane.add_num = len(self.lane_list)
             lane.ID = f"{lane.index}-{lane.add_num}"
@@ -112,11 +120,13 @@ class Road:
         time_stamp = "%s.%s" % (data_head, str(timeIn).split('.')[-1][:5])
         timeStart = time_stamp
 
-        # for i, lane_iter in enumerate(lanes_iter):
-        #     self.step_ = lane_iter.__next__()  # 车辆生成，上一步的数据记录
+        print("进入仿真主循环")
+        for i, lane_iter in enumerate(lanes_iter):
+            self.step_ = lane_iter.__next__()  # 车辆生成，数据记录
 
         for _ in tqdm.tqdm(range(self.sim_step)):
-            self.step_vehicle_info_update()  # 更新车辆周围车辆信息\
+            # print("仿真步数：", self.step_)
+            self.step_vehicle_info_update()  # 更新周围车辆信息
             self.step_vehicle_traj_pred()  # 轨迹预测
             if self.yield_: yield self.step_, 0  # 跟驰
             self.step_lc_intention_judge()
@@ -127,7 +137,9 @@ class Road:
             if self.yield_: yield self.step_, 3  # 控制量计算
             for i, lane_iter in enumerate(lanes_iter):
                 self.step_ = lane_iter.__next__()  # 车辆控制量和坐标姿态更新
+            if self.yield_: yield self.step_, 4
             self.step_vehicle_lane_update()  # 车辆车道更新和前后车辆更新
+            # print("车辆车道更新完成")
             for i, lane_iter in enumerate(lanes_iter):
                 self.step_ = lane_iter.__next__()  # 车辆输入与数据记录
             self.step_ += 1
@@ -142,21 +154,21 @@ class Road:
     def step_lc_intention_judge(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
-                if car.type != V_TYPE.OBSTACLE:
+                if car.type != V_TYPE.OBSTACLE and not car.skip:
                     car.lc_intention_judge()
                     assert car.target_lane is not None
 
     def step_lc_decision_making(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
-                if car.type != V_TYPE.OBSTACLE:
+                if car.type != V_TYPE.OBSTACLE and not car.skip:
                     car.lc_decision_making()
                     assert car.target_lane is not None
 
     def step_vehicle_control(self):
         for i, lane in enumerate(self.lane_list):
             for j, car in enumerate(lane.car_list):
-                if car.type != V_TYPE.OBSTACLE:
+                if car.type != V_TYPE.OBSTACLE and not car.skip:
                     car.cal_vehicle_control()
                     assert car.target_lane is not None
 
@@ -301,6 +313,7 @@ class Road:
                                         ignore_index=True)
             self.total_data = self.total_data.sort_values(by=[C_Info.lane_add_num, C_Info.id, C_Info.step])\
                 .reset_index(drop=True)
+        assert len(self.total_data) != 0, "数据为空！"
         return self.total_data
 
     def find_on_lanes(self, car_id: int):
@@ -314,3 +327,29 @@ class Road:
                 if car.ID == car_id:
                     car.cf_acc = acc_values
                     car.lc_result = lc_result
+
+    def draw(self, ax: plt.Axes):
+        """绘制车道线"""
+        for i, lane in enumerate(self.lane_list):
+            x = np.linspace(0, lane.lane_length, 2)
+            # y = np.ones_like(x) * lane.y_center
+            # ax.plot(x, y, color="white", linewidth=0.5)
+            ax.fill_between(x, lane.y_left, lane.y_right, color="gray", alpha=0.5)
+
+            if lane.marking_type is not None:
+                for j in range(len(lane.marking_type[0]) - 1):
+                    x = np.linspace(lane.marking_type[0][j], lane.marking_type[0][j + 1], 2)
+                    for k, y_marking in enumerate(lane.marking_type[1][j]):
+                        if k == 0:
+                            if lane.index != 0:
+                                continue
+                            else:
+                                y = np.ones_like(x) * lane.y_left
+                        else:
+                            y = np.ones_like(x) * lane.y_right
+
+                        if y_marking == MARKING_TYPE.SOLID:
+                            ax.plot(x, y, color="yellow", linewidth=1)
+                            # pass
+                        elif y_marking == MARKING_TYPE.DASHED:
+                            ax.plot(x, y, color="white", linestyle="--", linewidth=1)

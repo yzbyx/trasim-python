@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 15:50
+# @time : 2023-03-31 15:50
 # @Author : yzbyx
 # @File : data_plot.py
 # @Software : PyCharm
@@ -375,8 +375,8 @@ class Plot:
         ax: plt.Axes = ax
         ax.set_xlabel(x_index)
         ax.set_ylabel(y_index)
-        for id_ in df[C_Info.v_ID].unique():
-            target = df[df[C_Info.v_ID] == id_]
+        for id_ in df[C_Info.trackId].unique():
+            target = df[df[C_Info.trackId] == id_]
             ax.plot(target[x_index], target[y_index], label=id_, **kwargs)
         fig.legend()
         return fig, ax

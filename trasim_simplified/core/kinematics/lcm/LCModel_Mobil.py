@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/3/24 0:48
+# @time : 2025/3/24 0:48
 # @Author : yzbyx
 # @File : LCModel_Mobil.py
 # Software: PyCharm
@@ -44,11 +44,21 @@ class LCModel_Mobil(LCModel):
 
     def base_cal(self):
         if self.left_lane is not None:
-            l_ok, acc_gain_l = self.mobil(-1, return_acc_gain=True)
+            l_ok, acc_gain_l = self.mobil(
+                -1, self.veh_surr, return_acc_gain=True,
+                LANE_CHANGE_MAX_BRAKING_IMPOSED=self.LANE_CHANGE_MAX_BRAKING_IMPOSED,
+                LANE_CHANGE_MIN_ACC_GAIN=self.LANE_CHANGE_MIN_ACC_GAIN,
+                POLITENESS=self.POLITENESS,
+            )
         else:
             l_ok, acc_gain_l = False, -np.inf
         if self.right_lane is not None:
-            r_ok, acc_gain_r = self.mobil(1, return_acc_gain=True)
+            r_ok, acc_gain_r = self.mobil(
+                1, self.veh_surr, return_acc_gain=True,
+                LANE_CHANGE_MAX_BRAKING_IMPOSED=self.LANE_CHANGE_MAX_BRAKING_IMPOSED,
+                LANE_CHANGE_MIN_ACC_GAIN=self.LANE_CHANGE_MIN_ACC_GAIN,
+                POLITENESS=self.POLITENESS
+            )
         else:
             r_ok, acc_gain_r = False, -np.inf
 
@@ -72,7 +82,12 @@ class LCModel_Mobil(LCModel):
             "acc_gain": lc_acc_gain,
         }
 
-    def mobil(self, direction: int, return_acc_gain=False) -> bool | tuple:
+    @staticmethod
+    def mobil(direction: int, veh_surr, return_acc_gain=False,
+              LANE_CHANGE_MAX_BRAKING_IMPOSED=9.,
+              LANE_CHANGE_MIN_ACC_GAIN=0.,
+              POLITENESS=0.5,
+              ) -> bool | tuple:
         """
         MOBIL lane change model: Minimizing Overall Braking Induced by a Lane change
 
@@ -80,80 +95,81 @@ class LCModel_Mobil(LCModel):
             - after changing it (and/or following vehicles) can accelerate more;
             - it doesn't impose an unsafe braking on its new following vehicle.
 
+        :param LANE_CHANGE_MAX_BRAKING_IMPOSED:
         :param lane_index: the candidate lane for the change
         :param return_acc_gain: whether to return the jerk value
         :return: whether the lane change should be performed
         """
         # Is the maneuver unsafe for the new following vehicle?
         if direction == -1:
-            new_preceding, new_following = self.veh_surr.lp, self.veh_surr.lr
+            new_preceding, new_following = veh_surr.lp, veh_surr.lr
         else:
-            new_preceding, new_following = self.veh_surr.rp, self.veh_surr.rr
+            new_preceding, new_following = veh_surr.rp, veh_surr.rr
 
         if new_preceding is None:
-            new_preceding = self.veh_surr.ev.clone()
+            new_preceding = veh_surr.ev.clone()
             new_preceding.x += 1e5
         if new_following is None:
-            new_following = self.veh_surr.ev.clone()
+            new_following = veh_surr.ev.clone()
             new_following.x -= 1e5
 
-        if abs(new_preceding.x - self.veh_surr.ev.x) < new_preceding.length:
+        if abs(new_preceding.x - veh_surr.ev.x) < new_preceding.length:
             # The new preceding vehicle is too close
             if return_acc_gain:
                 return False, -np.inf
             return False
 
-        if abs(new_following.x - self.veh_surr.ev.x) < new_following.length:
+        if abs(new_following.x - veh_surr.ev.x) < new_following.length:
             # The new following vehicle is too close
             if return_acc_gain:
                 return False, -np.inf
             return False
 
-        new_following_a = self.veh_surr.ev.cf_model.step(
+        new_following_a = veh_surr.ev.cf_model.step(
             VehSurr(ev=new_following, cp=new_preceding)
         )
-        new_following_pred_a = self.veh_surr.ev.cf_model.step(
-            VehSurr(ev=new_following, cp=self.veh_surr.ev),
+        new_following_pred_a = veh_surr.ev.cf_model.step(
+            VehSurr(ev=new_following, cp=veh_surr.ev),
         )
 
-        if new_following_pred_a < -self.LANE_CHANGE_MAX_BRAKING_IMPOSED:
+        if new_following_pred_a < -LANE_CHANGE_MAX_BRAKING_IMPOSED:
             if return_acc_gain:
                 return False, -np.inf
             return False
 
         # Do I have a planned route for a specific lane which is safe for me to access?
-        old_preceding, old_following = self.veh_surr.cp, self.veh_surr.cr
+        old_preceding, old_following = veh_surr.cp, veh_surr.cr
 
         if old_preceding is None:
-            old_preceding = self.veh_surr.ev.clone()
+            old_preceding = veh_surr.ev.clone()
             old_preceding.x += 1e5
         if old_following is None:
-            old_following = self.veh_surr.ev.clone()
+            old_following = veh_surr.ev.clone()
             old_following.x -= 1e5
 
-        self_pred_a = self.veh_surr.ev.cf_model.step(
-            VehSurr(ev=self.veh_surr.ev, cp=new_preceding)
+        self_pred_a = veh_surr.ev.cf_model.step(
+            VehSurr(ev=veh_surr.ev, cp=new_preceding)
         )
         # Unsafe braking required
-        if self_pred_a < -self.LANE_CHANGE_MAX_BRAKING_IMPOSED:
+        if self_pred_a < -LANE_CHANGE_MAX_BRAKING_IMPOSED:
             if return_acc_gain:
                 return False, -np.inf
             return False
 
         # Is there an acceleration advantage for me and/or my followers to change lane?
-        self_a = self.veh_surr.ev.cf_model.step(
-            VehSurr(ev=self.veh_surr.ev, cp=old_preceding)
+        self_a = veh_surr.ev.cf_model.step(
+            VehSurr(ev=veh_surr.ev, cp=old_preceding)
         )
-        old_following_a = self.veh_surr.ev.cf_model.step(
-            VehSurr(ev=old_following, cp=self.veh_surr.ev)
+        old_following_a = veh_surr.ev.cf_model.step(
+            VehSurr(ev=old_following, cp=veh_surr.ev)
         )
-        old_following_pred_a = self.veh_surr.ev.cf_model.step(
+        old_following_pred_a = veh_surr.ev.cf_model.step(
             VehSurr(ev=old_following, cp=old_preceding)
         )
         jerk = (
                 self_pred_a
                 - self_a
-                + self.POLITENESS
+                + POLITENESS
                 * (
                         new_following_pred_a
                         - new_following_a
@@ -161,7 +177,7 @@ class LCModel_Mobil(LCModel):
                         - old_following_a
                 )
         )
-        if jerk < self.LANE_CHANGE_MIN_ACC_GAIN:
+        if jerk < LANE_CHANGE_MIN_ACC_GAIN:
             if return_acc_gain:
                 return False, jerk
             else:

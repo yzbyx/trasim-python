@@ -1,10 +1,10 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 16:02
+# @time : 2023-03-31 16:02
 # @Author : yzbyx
 # @File : sim_ui_matplotlib.py
 # @Software : PyCharm
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Polygon
+from matplotlib.patches import Rectangle
 from typing import TYPE_CHECKING, Optional, Union, Tuple
 
 from trasim_simplified.core.constant import MARKING_TYPE
@@ -12,7 +12,7 @@ from trasim_simplified.core.constant import MARKING_TYPE
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
     from trasim_simplified.core.frame.micro.road import Road
-    from trasim_simplified.core.agent import Vehicle, Game_A_Vehicle
+    from trasim_simplified.core.agent import Vehicle
 
 
 class UI2DMatplotlib:
@@ -79,6 +79,9 @@ class UI2DMatplotlib:
                     y = [point.y for point in hist_traj]
                     self.ax.plot(x, y, color='red', linestyle='-', linewidth=1)
 
+    def plot_static(self, x, y):
+        line = self.ax.plot(x, y, color='red', linestyle='-', linewidth=1)[-1]
+
     def ui_init(self, caption="traffic simulation", frame_rate=-1):
         """
         初始化UI
@@ -93,55 +96,8 @@ class UI2DMatplotlib:
         self.ax.set_aspect('equal', adjustable='box')
         plt.ion()  # 开启交互模式
 
-        self.draw_road()  # 只在初始化时绘制道路
+        self.frame.draw(self.ax)
         self.ui_update()  # 更新显示
-
-    def draw_road(self):
-        """绘制道路，只在初始化时调用一次"""
-        self.ax.set_facecolor('green')
-
-        for lane in self.lane_list:
-            # 绘制车道背景
-            rect = Rectangle((0, lane.y_right), lane.lane_length,
-                             lane.width, facecolor='gray', alpha=1)
-            self.ax.add_patch(rect)
-            self.road_patches.append(rect)
-
-            # 绘制车道线
-            if lane.marking_type is None or len(lane.marking_type[1]) == 0:
-                line1, = self.ax.plot([0, lane.lane_length], [lane.y_left, lane.y_left],
-                                      color='yellow', linewidth=1)
-                line2, = self.ax.plot([0, lane.lane_length], [lane.y_right, lane.y_right],
-                                      color='yellow', linewidth=1)
-                self.road_patches.extend([line1, line2])
-            else:
-                if lane.marking_type is None:
-                    line1, = self.ax.plot([0, lane.lane_length], [lane.y_left, lane.y_left],
-                                          color='yellow', linewidth=1)
-                    line2, = self.ax.plot([0, lane.lane_length], [lane.y_right, lane.y_right],
-                                          color='yellow', linewidth=1)
-                    self.road_patches.extend([line1, line2])
-                else:
-                    for i in range(0, len(lane.marking_type[1])):
-                        # 绘制左车道线
-                        marker_type: MARKING_TYPE = lane.marking_type[1][i][0]
-                        start = lane.marking_type[0][i]
-                        end = lane.marking_type[0][i + 1]
-                        color = 'white' if marker_type == MARKING_TYPE.DASHED else 'yellow'
-                        linestyle = '--' if marker_type == MARKING_TYPE.DASHED else '-'
-                        line1, = self.ax.plot([start, end], [lane.y_left, lane.y_left],
-                                              color=color, linewidth=1, linestyle=linestyle)
-                        self.road_patches.append(line1)
-
-                        # 绘制右车道线
-                        marker_type: MARKING_TYPE = lane.marking_type[1][i][1]
-                        start = lane.marking_type[0][i]
-                        end = lane.marking_type[0][i + 1]
-                        color = 'white' if marker_type == MARKING_TYPE.DASHED else 'yellow'
-                        linestyle = '--' if marker_type == MARKING_TYPE.DASHED else '-'
-                        line2, = self.ax.plot([start, end], [lane.y_right, lane.y_right],
-                                              color=color, linewidth=1, linestyle=linestyle)
-                        self.road_patches.append(line2)
 
     def ui_update(self):
         """更新UI显示，只更新动态内容"""

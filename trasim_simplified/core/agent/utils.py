@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2024/6/11 20:54
+# @time : 2024/6/11 20:54
 # @Author : yzbyx
 # @File : util.py
 # Software: PyCharm

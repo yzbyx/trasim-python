@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 10:56
+# @time : 2022-04-04 10:56
 # @Author : yzbyx
 # @File : CFModel.py
 # @Software : PyCharm
@@ -62,6 +62,18 @@ class CFModel(Model, ABC):
 
     @abc.abstractmethod
     def get_max_acc(self):
+        pass
+
+    @abc.abstractmethod
+    def get_safe_s0(self):
+        pass
+
+    @abc.abstractmethod
+    def get_com_acc(self):
+        pass
+
+    @abc.abstractmethod
+    def get_com_dec(self):
         pass
 
     def get_speed_limit(self):

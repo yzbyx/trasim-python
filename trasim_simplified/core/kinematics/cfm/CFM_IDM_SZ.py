@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2024/1/19 21:04
+# @time : 2024/1/19 21:04
 # @Author : yzbyx
 # @File : CFM_IDM_SZ.py
 # Software: PyCharm

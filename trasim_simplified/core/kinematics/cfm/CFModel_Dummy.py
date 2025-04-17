@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/15 17:39
+# @time : 2023/5/15 17:39
 # @Author : yzbyx
 # @File : CFModel_Dummy.py
 # Software: PyCharm

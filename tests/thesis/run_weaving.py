@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2025/3/22 14:58
+# @time : 2025/3/22 14:58
 # @Author : yzbyx
 # @File : run_weaving.py
 # Software: PyCharm
@@ -23,7 +23,7 @@ def run_road():
     sim_step = warm_up_step + int(3600 / dt)
     offset_step = int(1800 / dt)
 
-    road_length = 600
+    road_length = 150
     upstream_ratio = 1 / 3
     weaving_ratio = 1 / 3
     upstream_end = int(road_length * upstream_ratio)
@@ -69,36 +69,35 @@ def run_road():
         if i == lane_num - 1:
             lanes[i].car_config(
                 80, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-                0, False,
-                CFM.KK, _cf_param, {"color": COLOR.yellow},
+                10, False,
+                CFM.IDM, _cf_param, {"color": COLOR.yellow},
                 lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple(range(lane_num - 1)),
                 route_type=RouteType.merge
             )
             lanes[i].car_config(
                 20, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-                0, False,
-                CFM.KK, _cf_param, {"color": COLOR.blue},
-                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([i]),
+                10, False,
+                CFM.IDM, _cf_param, {"color": COLOR.blue},
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([lane_num - 1]),
                 route_type=RouteType.auxiliary
             )
         else:
             lanes[i].car_config(
                 80, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-                0, False,
-                CFM.KK, _cf_param, {"color": COLOR.yellow},
+                10, False,
+                CFM.IDM, _cf_param, {"color": COLOR.yellow},
                 lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple(range(lane_num - 1)),
                 route_type=RouteType.mainline
             )
             lanes[i].car_config(
                 20, v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-                0, False,
-                CFM.KK, _cf_param, {"color": COLOR.blue},
-                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([i]),
+                10, False,
+                CFM.IDM, _cf_param, {"color": COLOR.blue},
+                lc_name=LCM.MOBIL, lc_param={}, destination_lanes=tuple([lane_num - 1]),
                 route_type=RouteType.diverge
             )
 
-        # lanes[0].speed_limit = 20
-        # lanes[1].speed_limit = 20
+        lanes[i].set_speed_limit(10)
 
         lanes[i].data_container.config()
 
@@ -109,9 +108,12 @@ def run_road():
 
     for step, stage in sim.run(data_save=True, has_ui=True, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+        if stage == 0:
+            sim.ui.ax.set_xlim(0, 200)
         if warm_up_step + offset_step == step and stage == 0:
             take_over_index = sim.get_appropriate_car(lane_add_num=0)
             print(take_over_index)
+
         if warm_up_step + offset_step <= step < warm_up_step + offset_step + int(60 / dt):
             sim.take_over(take_over_index, -3, lc_result={"lc": 0})
         # if warm_up_step + offset_step == step and stage == 1:

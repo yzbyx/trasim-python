@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-02-26 9:49
+# @time : 2022-02-26 9:49
 # @Author : yzbyx
 # @File : timer.py
 # @Software : PyCharm

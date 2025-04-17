@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/12 16:31
+# @time : 2023/5/12 16:31
 # @Author : yzbyx
 # @File : LCModel_KK.py
 # Software: PyCharm
@@ -160,8 +160,8 @@ class LCModel_KK(LCModel):
         if not (head_safe and behind_safe):
             if _l is not None and _f is not None:
                 if _f.gap > self._lambda_b * _f.v + self.vehicle.length:
-                    condition_1 = (self.vehicle.pos_list[-1] < self.xm and self.vehicle.x >= xm)
-                    condition_2 = (self.vehicle.pos_list[-1] >= self.xm and self.vehicle.x < xm)
+                    condition_1 = (self.vehicle.x_list[-1] < self.xm and self.vehicle.x >= xm)
+                    condition_2 = (self.vehicle.x_list[-1] >= self.xm and self.vehicle.x < xm)
                     if condition_1 or condition_2:
                         head_safe = behind_safe = True
                         x = xm

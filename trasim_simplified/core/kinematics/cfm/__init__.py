@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-27 21:31
+# @time : 2022-04-27 21:31
 # @Author : yzbyx
 # @File : __init__.py
 # @Software : PyCharm
@@ -97,6 +97,9 @@ def get_cf_func(cf_name):
     elif cf_name == CFM.TPACC:
         from trasim_simplified.core.kinematics.cfm.CFModel_TPACC import cf_TPACC_acc
         return cf_TPACC_acc
+    elif cf_name == CFM.KK:
+        from trasim_simplified.core.kinematics.cfm.CFModel_KK import cf_KK_acc
+        cf_func = cf_KK_acc
     else:
         raise TrasimError(f"{cf_name} is not be configured!")
     return cf_func

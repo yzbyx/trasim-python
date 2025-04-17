@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 10:55
+# @time : 2022-04-04 10:55
 # @Author : yzbyx
 # @File : CFModel_W99.py
 # @Software : PyCharm

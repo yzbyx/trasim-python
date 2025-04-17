@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/11/18 22:23
+# @time : 2023/11/18 22:23
 # @Author : yzbyx
 # @File : slow_to_go_hys.py
 # Software: PyCharm

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/12 16:22
+# @time : 2023/5/12 16:22
 # @Author : yzbyx
 # @File : __init__.py.py
 # Software: PyCharm

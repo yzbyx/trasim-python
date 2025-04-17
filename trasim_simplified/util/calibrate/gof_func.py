@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/10/14 18:33
+# @time : 2023/10/14 18:33
 # @Author : yzbyx
 # @File : gof_func.py
 # Software: PyCharm

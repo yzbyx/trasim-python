@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/6/3 17:01
+# @time : 2023/6/3 17:01
 # @Author : yzbyx
 # @File : ctm_ui.py
 # Software: PyCharm

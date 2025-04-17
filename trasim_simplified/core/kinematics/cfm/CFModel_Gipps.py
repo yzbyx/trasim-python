@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 19:55
+# @time : 2022-04-04 19:55
 # @Author : yzbyx
 # @File : CFModel_Gipps.py
 # @Software : PyCharm

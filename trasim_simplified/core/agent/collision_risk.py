@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import multivariate_normal
 
-from trasim_simplified.core.agent.TwoDimTTC import TTC
+from trasim_simplified.core.agent.TwoDimSSM import TTC
 from trasim_simplified.core.constant import TrajPoint
 
 if TYPE_CHECKING:

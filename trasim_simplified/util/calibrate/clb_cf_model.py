@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-06 23:24
+# @time : 2022-04-06 23:24
 # @Author : yzbyx
 # @File : clb_cf_model.py
 # @Software : PyCharm
@@ -12,7 +12,7 @@ import tqdm
 from matplotlib import pyplot as plt
 
 from trasim_simplified.core.constant import CFM, TrackInfo as TI, Prefix
-from trasim_simplified.core.kinematics.cfm import get_cf_default_param, get_cf_func
+from trasim_simplified.core.kinematics.cfm import get_cf_default_param, get_cf_func, get_cf_model
 
 from trasim_simplified.util.calibrate.gof_func import RMSE
 from trasim_simplified.util.calibrate.follow_sim import simulation, customize_sim
@@ -51,6 +51,9 @@ cf_param_ranges = {
     },
     CFM.ACC: {
         "k1": [0, 1], "k2": [0, 1], "thw": [0, 10], "s0": [0, 10]
+    },
+    CFM.KK: {
+        "k": [1, 5], "b": [0, 5], "a": [0, 5], "d": [0, 5]
     }
 }
 cf_param_types = {
@@ -60,7 +63,8 @@ cf_param_types = {
     CFM.WIEDEMANN_99: {"CC0": 0, "CC1": 0, "CC2": 0, "CC3": 0, "CC4": 0, "CC5": 0, "CC6": 0, "CC7": 0, "CC8": 0,
                        "CC9": 0, "vDesire": 0},
     CFM.OPTIMAL_VELOCITY: {"a": 0, "V0": 0, "m": 0, "bf": 0, "bc": 0},
-    CFM.ACC: {"k1": 0, "k2": 0, "thw": 0, "s0": 0}
+    CFM.ACC: {"k1": 0, "k2": 0, "thw": 0, "s0": 0},
+    CFM.KK: {"k": 0, "b": 0, "a": 0, "d": 0}
 }
 cf_param_ins = {
     CFM.IDM: {
@@ -82,18 +86,24 @@ cf_param_ins = {
     },
     CFM.ACC: {
         "k1": [1, 1], "k2": [1, 1], "thw": [1, 1], "s0": [1, 1]
+    },
+    CFM.KK: {
+        "k": [1, 1], "b": [1, 1], "a": [1, 1], "d": [1, 1]
     }
 }
 
 
-def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins: dict, types, seed, drawing=0):
+def ga_cal(cf_func, obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la,
+           leaderL, dt, ranges: dict, ins: dict, types, seed, drawing=0):
     """
     :param cf_func: 跟驰模型函数
     :param dt: 仿真步长
     :param obs_x: 观测轨迹x
     :param obs_v: 观测轨迹v
+    :param obs_a: 观测轨迹a
     :param obs_lx: 观测轨迹leader x
     :param obs_lv: 观测轨迹leader v
+    :param obs_la: 观测轨迹leader a
     :param leaderL: 观测轨迹leaderL
     :param ranges: 参数范围{"a": 1, ...}
     :param ins: 参数边界是否包含{"a": [1, 1], ...}, 1表示包含，0表示不包含
@@ -104,6 +114,7 @@ def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins
     param_names = list(ranges.keys())
     init_x = obs_x[0]
     init_v = obs_v[0]
+    init_a = obs_a[0]
 
     if __opti_package == "sko":
         def eval_vars(params):  # 定义目标函数（含约束）
@@ -129,7 +140,8 @@ def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins
         def eval_vars(params):  # 定义目标函数（含约束）
             param = {k: v for k, v in zip(ranges.keys(), params)}
             x, v, _, _ = simulation(
-                cf_func=cf_func, init_x=init_x, init_v=init_v, obs_lx=obs_lx, obs_lv=obs_lv,
+                cf_func=cf_func, init_x=init_x, init_v=init_v, init_a=init_a,
+                obs_lx=obs_lx, obs_lv=obs_lv, obs_la=obs_la,
                 cf_param=param, leaderL=leaderL, dt=dt, update_method="Euler")
             return RMSE(sim_x=x, sim_v=v, obs_x=obs_x, obs_v=obs_v, obs_lx=obs_lx, eval_params=["dhw"])
 
@@ -164,15 +176,18 @@ def ga_cal(cf_func, obs_x, obs_v, obs_lx, obs_lv, leaderL, dt, ranges: dict, ins
     return res
 
 
-def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s, dt, seed,
+def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_a_s, obs_lx_s, obs_lv_s, obs_la_s,
+            leaderL_s, dt, seed,
             drawing=0, n_jobs=-1, parallel=True, cf_param_ranges_=None) -> list[dict]:
     """
     :param cf_func 跟驰模型加速度函数
     :param cf_name 跟驰模型名称
     :param obs_x_s 观测轨迹x
     :param obs_v_s 观测轨迹v
+    :param obs_a_s 观测轨迹a
     :param obs_lx_s 观测轨迹leader x
     :param obs_lv_s 观测轨迹leader v
+    :param obs_la_s 观测轨迹leader a
     :param leaderL_s 观测轨迹leaderL
     :param dt 仿真步长
     :param seed GA算法种子
@@ -187,14 +202,19 @@ def clb_run(cf_func, cf_name, obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s, d
     if parallel:
         result = joblib.Parallel(n_jobs=n_jobs)(
             joblib.delayed(ga_cal)(cf_func=cf_func,
-                                   obs_x=np.array(obs_x), obs_v=np.array(obs_v), obs_lx=np.array(obs_lx),
-                                   obs_lv=np.array(obs_lv), leaderL=leaderL,
+                                   obs_x=np.array(obs_x),
+                                   obs_v=np.array(obs_v),
+                                   obs_a=np.array(obs_a),
+                                   obs_lx=np.array(obs_lx),
+                                   obs_lv=np.array(obs_lv),
+                                   obs_la=np.array(obs_la),
+                                   leaderL=leaderL,
                                    dt=dt, ranges=cf_param_ranges[cf_name],
                                    types=cf_param_types[cf_name],
                                    ins=cf_param_ins[cf_name],
                                    seed=seed, drawing=drawing)
-            for obs_x, obs_v, obs_lx, obs_lv, leaderL in
-            tqdm.tqdm(list(zip(obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s))))
+            for obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la, leaderL in
+            tqdm.tqdm(list(zip(obs_x_s, obs_v_s, obs_a_s, obs_lx_s, obs_lv_s, obs_la_s, leaderL_s))))
     else:
         result = []
         for obs_x, obs_v, obs_lx, obs_lv, leaderL in zip(obs_x_s, obs_v_s, obs_lx_s, obs_lv_s, leaderL_s):
@@ -264,7 +284,7 @@ def get_clb_traj(df_follow_pair: dict[str | int, pd.DataFrame], cut_pos: dict[st
                                                              obs_lx=target[Prefix.leader + TI.x],
                                                              obs_lv=target[Prefix.leader + TI.v],
                                                              cf_param=clb_param, dt=dt,
-                                                             leaderL=target[Prefix.leader + TI.v_Length].unique()[0])
+                                                             leaderL=target[Prefix.leader + TI.length].unique()[0])
         target[TI.x] = sim_pos
         target[TI.v] = sim_speed
         target[TI.a] = sim_acc
@@ -273,15 +293,23 @@ def get_clb_traj(df_follow_pair: dict[str | int, pd.DataFrame], cut_pos: dict[st
     return final_data
 
 
-def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_lx, obs_lv, leaderL, traj_step=None, pair_ID=None):
-    cf_func = get_cf_func(cf_name)
+def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_a,
+              obs_lx, obs_lv, obs_la, leaderL, traj_step=None, pair_ID=None):
+    try:
+        cf_func = get_cf_func(cf_name)
+    except:
+        cf_func = get_cf_model(cf_name)
     cf_param = {k: v for k, v in zip(cf_param_ranges[cf_name].keys(), cf_param)}
     # 标定后跟驰模型轨迹仿真
-    sim_pos, sim_speed, sim_acc, sim_cf_acc = simulation(cf_func, init_v=np.array(obs_v)[0],
-                                                         init_x=np.array(obs_x)[0],
-                                                         obs_lx=obs_lx, obs_lv=obs_lv, dt=dt,
-                                                         cf_param=cf_param,
-                                                         leaderL=leaderL)
+    sim_pos, sim_speed, sim_acc, sim_cf_acc = simulation(
+        cf_func, init_v=np.array(obs_v)[0],
+        init_x=np.array(obs_x)[0],
+        init_a=np.array(obs_a)[0],
+        obs_lx=obs_lx, obs_lv=obs_lv, obs_la=obs_la,
+        dt=dt,
+        cf_param=cf_param,
+        leaderL=leaderL
+    )
 
     if traj_step is None:
         traj_step = range(len(obs_x))
