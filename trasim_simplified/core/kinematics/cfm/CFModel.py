@@ -52,9 +52,8 @@ class CFModel(Model, ABC):
     def get_expect_speed(self):
         pass
 
-    @abc.abstractmethod
-    def get_max_speed(self):
-        pass
+    def get_speed_limit(self):
+        return self.veh_surr.ev.lane.get_speed_limit(self.veh_surr.ev.x)
 
     @abc.abstractmethod
     def get_max_dec(self):
@@ -75,11 +74,6 @@ class CFModel(Model, ABC):
     @abc.abstractmethod
     def get_com_dec(self):
         pass
-
-    def get_speed_limit(self):
-        # if self.veh_surr.ev.lane.force_speed_limit is False:
-        #     return np.inf
-        return self.veh_surr.ev.lane.get_speed_limit(self.veh_surr.ev.x)
 
     def equilibrium_state(self, *args):
         pass

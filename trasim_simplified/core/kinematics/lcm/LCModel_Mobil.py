@@ -38,6 +38,8 @@ class LCModel_Mobil(LCModel):
 
     def step(self, veh_surr: "VehSurr"):
         self.veh_surr = veh_surr
+        if hasattr(self.veh_surr.ev, "rho"):
+            self.POLITENESS = self.veh_surr.ev.rho
         self._update_dynamic()
         res = self.base_cal()
         return res

@@ -5,8 +5,9 @@
 # Software: PyCharm
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn
 
-from trasim_simplified.core.agent.game_agent import Game_Vehicle
+from trasim_simplified.core.agent.game_agent import Game_Vehicle, Game_A_Vehicle
 from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, V_CLASS, RouteType, MARKING_TYPE, SECTION_TYPE
 from trasim_simplified.core.frame.micro.road import Road
 from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_equilibrium_jit
@@ -93,16 +94,16 @@ def run_road(road: Road):
     veh_TRR = lanes[0].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base - dhw * 2, 10, 0,
-        CFM.IDM, {"v0": 15}, {"color": COLOR.red},
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
     )
     veh_TRR.no_lc = True
-    veh_TRR.rho = 0.9
+    veh_TRR.rho = 0.1
 
     veh_TR = lanes[0].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base - dhw, 10, 0,
-        CFM.IDM, {"v0": 15}, {"color": COLOR.red},
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
     )
     veh_TR.no_lc = True
@@ -111,49 +112,123 @@ def run_road(road: Road):
     veh_TF: Game_Vehicle = lanes[0].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base, 10, 0,
-        CFM.IDM, {"v0": 10}, {"color": COLOR.red},
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
     )
     veh_TF.no_lc = True
 
-    veh_EV: Game_Vehicle = lanes[1].car_insert(
+    veh_EV: Game_A_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_AV,
-        x_base - dhw - 5, 10, 0,
-        CFM.IDM, {"v0": 15}, {"color": COLOR.green},
+        x_base - dhw - 10, 10, 0,
+        CFM.TPACC, {"v0": 10}, {"color": COLOR.green},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.merge
     )
     # veh_EV.no_lc = True
+    veh_EV.rho = 0.7
 
     veh_PC: Game_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base - 5, 10, 0,
-        CFM.IDM, {"v0": 15}, {"color": COLOR.red},
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[1], route_type=RouteType.auxiliary
     )
     veh_PC.no_lc = True
 
-    for veh in [veh_TRR, veh_TR]:
-        veh.single_stra = True
+    # for veh in [veh_TRR, veh_TR]:
+    #     veh.single_stra = True
 
     has_ui = True
 
     lc_cross_time = []
     lc_end_time = []
+    TR_stra_dict = {}
     for step, stage in sim.run(data_save=True, has_ui=has_ui, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
-        if stage == 0:
+        if stage == 4:
             sim.ui.focus_on(veh_EV)
             sim.ui.plot_pred_traj()
             sim.ui.plot_hist_traj()
             plt.pause(0.01)
+
+            print("-" * 10 + "basic_info" + "-" * 10)
+            print("step:", step, veh_EV)
+            if veh_EV.gap_res_list is not None:
+                print("-" * 10 + "gap_res_list" + "-" * 10)
+                for res in veh_EV.gap_res_list:
+                    print(res)
+
+            if veh_EV.opti_gap is not None:
+                print("-" * 10 + "opti_gap_res" + "-" * 10)
+                print(veh_EV.opti_gap)
+
+            if veh_EV.game_res_list is not None:
+                print("-" * 10 + "game_res_list" + "-" * 10)
+                for res in veh_EV.game_res_list:
+                    print(res)
+
             if veh_EV.opti_game_res is not None:
-                TF = veh_EV.opti_game_res.TF
-                TR = veh_EV.opti_game_res.TR
-                print(
-                    "game_TF", TF.ID, "game_TR", TR.ID,
-                    "game_time_wanted", TR.game_time_wanted,
-                    "rho_hat", veh_EV.rho_hat_s[TR.ID],
-                )
+                print("-" * 10 + "opti_game_res" + "-" * 10)
+                print(veh_EV.opti_game_res)
+
+            print(veh_EV.lc_conti_time)
+
+            if veh_EV.opti_game_res is not None:
+                print("-" * 10 + "opti_game_res" + "-" * 10)
+                print(veh_EV.opti_game_res)
+                if veh_EV.opti_game_res.TR_stra is not None:
+                    tr_id = veh_EV.opti_game_res.TR.ID
+                    TR_stra_dict[step] = \
+                        (tr_id, veh_EV.opti_game_res.TR_stra, np.mean(veh_EV.rho_hat_s[tr_id]))
+
+    # 绘制激进度估计与TR策略变化曲线
+    tr_id_s = []
+    tr_stra_s = []
+    tr_rho_s = []
+    if TR_stra_dict is not None:
+        steps = np.arange(sim_step)
+        for step in steps:
+            if step in TR_stra_dict:
+                tr_id, tr_stra, rho = TR_stra_dict[step]
+            else:
+                tr_id = np.nan
+                tr_stra = np.nan
+                rho = np.nan
+            tr_id_s.append(tr_id)
+            tr_stra_s.append(tr_stra)
+            tr_rho_s.append(rho)
+        tr_id_s = np.array(tr_id_s)
+        tr_stra_s = np.array(tr_stra_s)
+        tr_rho_s = np.array(tr_rho_s)
+
+        # 设置坐标轴范围
+        mm = 1 / 25.4  # mm转inch
+        _width = 70 * mm * 2  # 图片宽度英寸
+        _ratio = 5 / 14  # 图片长宽比
+        figsize = (_width, _width * _ratio)
+
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        fig: plt.Figure = fig
+        ax: plt.Axes = ax
+        colors = seaborn.color_palette('Set1', n_colors=3)
+        # 根据tr_id的数量对stra和rho进行绘制
+        tr_ids_unique = np.unique(tr_id_s)
+        tr_ids_unique = tr_ids_unique[~np.isnan(tr_ids_unique) & (tr_ids_unique > 0)]
+        for i, tr_id in enumerate(tr_ids_unique):
+            indexes = np.where(tr_id_s == tr_id)[0]
+            tr_stra_temp = np.zeros(len(steps)) * np.nan
+            tr_stra_temp[indexes] = tr_stra_s[indexes]
+            tr_rho_temp = np.zeros(len(steps)) * np.nan
+            tr_rho_temp[indexes] = tr_rho_s[indexes]
+            ax.plot(steps * 0.1, tr_stra_temp, label=r"$s_{TR}$" + str(int(tr_id)), color=colors[i])
+            ax.plot(steps * 0.1, tr_rho_temp, label=r"$\rho_{TR}$" + str(int(tr_id)),
+                    color=colors[i], linestyle='--')
+
+        ax.set_xlabel("时间 (s)")
+        ax.set_ylabel("数值")
+        ax.legend(fontsize=9)
+
+        plt.ioff()
+        plt.show()
 
     df = sim.data_to_df()
 

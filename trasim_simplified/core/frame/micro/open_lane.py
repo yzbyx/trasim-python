@@ -18,7 +18,7 @@ class THW_DISTRI:
 
 
 class LaneOpen(LaneAbstract):
-    def __init__(self, lane_length: float, width: float):
+    def __init__(self, lane_length: float, width: float = 3.5):
         super().__init__(lane_length, width)
         self.is_circle = False
         self.outflow_point = True

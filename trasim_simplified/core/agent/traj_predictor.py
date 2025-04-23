@@ -187,7 +187,7 @@ class TrajPred:
         :param veh_surr:
         :param type_:
         :param time_len:
-        :return: 得到中心点的轨迹
+        :return: 得到车头中点的轨迹
         """
         if type_ == "net":
             if veh_surr.ev.pred_traj is None:

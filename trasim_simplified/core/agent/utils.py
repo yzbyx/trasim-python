@@ -137,9 +137,6 @@ def get_state_space(dt, ref_yaw, ref_delta, ref_v, L):
     #     [dt * np.tan(ref_delta) / L, ref_v * dt / (L * np.cos(ref_delta) * np.cos(ref_delta))]]
     # )
 
-    # 以车头为中心
-    ref_beta = np.arctan(0.5 * np.tan(ref_delta))
-
     # 以质心为中心
     ref_beta = np.arctan(0.5 * np.tan(ref_delta))
     A = np.array([
@@ -154,3 +151,21 @@ def get_state_space(dt, ref_yaw, ref_delta, ref_v, L):
         [dt * np.sin(ref_beta) / L, ref_v * dt * np.cos(ref_beta) * c / L]
     ])
     return A, B
+
+
+def interval_intersection(interval1, interval2, print_flag=False):
+    a1, b1 = interval1
+    a2, b2 = interval2
+
+    # 计算交集的开始和结束
+    start = round(np.maximum(a1, a2), 3)
+    end = round(np.minimum(b1, b2), 3)
+
+    # 判断是否有交集
+    if start <= end:
+        return start, end
+    else:
+        if print_flag:
+            print(f"intersection none: {interval1}, {interval2}")
+            raise ValueError("没有交集")
+        return None  # 没有交集

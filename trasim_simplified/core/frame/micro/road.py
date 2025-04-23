@@ -63,6 +63,10 @@ class Road:
     def start_weaving_pos(self):
         return self._start_weaving_pos
 
+    @property
+    def weaving_length(self):
+        return self._end_weaving_pos - self._start_weaving_pos
+
     def set_end_weaving_pos(self, value):
         self.end_weaving_block_veh.x = value
         self._end_weaving_pos = value
@@ -177,12 +181,12 @@ class Road:
             for j, car in enumerate(lane.car_list):
                 if car.type != V_TYPE.OBSTACLE:
                     if car.y > lane.y_left:
-                        target_lane = car.left_lane
+                        target_lane = lane.left_neighbour_lane
                         car.lane.car_remove(car)
                         target_lane.car_insert_by_instance(car)
                         car.lane = target_lane
                     elif car.y < lane.y_right:
-                        target_lane = car.right_lane
+                        target_lane = lane.right_neighbour_lane
                         car.lane.car_remove(car)
                         target_lane.car_insert_by_instance(car)
                         car.lane = target_lane
@@ -330,8 +334,9 @@ class Road:
 
     def draw(self, ax: plt.Axes):
         """绘制车道线"""
+        static_lines = []
         for i, lane in enumerate(self.lane_list):
-            x = np.linspace(0, lane.lane_length, 2)
+            x = np.linspace(0, self.lane_length, 2)
             # y = np.ones_like(x) * lane.y_center
             # ax.plot(x, y, color="white", linewidth=0.5)
             ax.fill_between(x, lane.y_left, lane.y_right, color="gray", alpha=0.5)
@@ -349,7 +354,24 @@ class Road:
                             y = np.ones_like(x) * lane.y_right
 
                         if y_marking == MARKING_TYPE.SOLID:
-                            ax.plot(x, y, color="yellow", linewidth=1)
-                            # pass
+                            line = ax.plot(x, y, color="yellow", linewidth=1)[-1]
                         elif y_marking == MARKING_TYPE.DASHED:
-                            ax.plot(x, y, color="white", linestyle="--", linewidth=1)
+                            line = ax.plot(x, y, color="white", linestyle="--", linewidth=1)[-1]
+                        else:
+                            raise ValueError(f"Unknown marking type: {y_marking}")
+
+                        static_lines.append(line)
+        return static_lines
+
+    def reset(self):
+        """清理数据"""
+        self.total_data = None
+        self.id_accumulate = 0
+        for lane in self.lane_list:
+            lane.reset()
+        self.sim_step = 0
+        self.step_ = 0
+        self.time_ = 0
+        self.dt = None
+        self.has_ui = False
+        self.yield_ = True

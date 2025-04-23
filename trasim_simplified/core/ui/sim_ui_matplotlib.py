@@ -26,7 +26,7 @@ class UI2DMatplotlib:
         self.base_line_factor = 2
         self.fig: Optional[plt.Figure] = None
         self.ax: Optional[plt.Axes] = None
-        self.road_patches = []  # 存储道路相关的patches
+        self.static_item = []  # 存储道路相关的patches
         self.text_list: Optional[list[plt.Text]] = []
         self.step_text = None
 
@@ -79,9 +79,6 @@ class UI2DMatplotlib:
                     y = [point.y for point in hist_traj]
                     self.ax.plot(x, y, color='red', linestyle='-', linewidth=1)
 
-    def plot_static(self, x, y):
-        line = self.ax.plot(x, y, color='red', linestyle='-', linewidth=1)[-1]
-
     def ui_init(self, caption="traffic simulation", frame_rate=-1):
         """
         初始化UI
@@ -96,17 +93,17 @@ class UI2DMatplotlib:
         self.ax.set_aspect('equal', adjustable='box')
         plt.ion()  # 开启交互模式
 
-        self.frame.draw(self.ax)
+        self.static_item.extend(self.frame.draw(self.ax))
         self.ui_update()  # 更新显示
 
     def ui_update(self):
         """更新UI显示，只更新动态内容"""
         # 清除之前的车辆patches
         for patch in self.ax.patches:
-            if patch not in self.road_patches:
+            if patch not in self.static_item:
                 patch.remove()
         for line in self.ax.lines:
-            if line not in self.road_patches:
+            if line not in self.static_item:
                 line.remove()
         for text in self.text_list:
             text.remove()
@@ -133,10 +130,9 @@ class UI2DMatplotlib:
                                     color='white', ha='center', va='center')
                 self.text_list.append(text)
                 # 如果换道，且为AV，则绘制换道轨迹
-                if car.lane_changing and hasattr(car, "lc_traj"):
-                    if car.lc_traj is None:
-                        continue
-                    self.ax.plot(car.lc_traj[:, 0], car.lc_traj[:, 3],
+                if car.opti_game_res is not None:
+                    lc_traj = car.opti_game_res.EV_opti_traj
+                    self.ax.plot(lc_traj[:, 0], lc_traj[:, 3],
                                  color='blue', linestyle='--', linewidth=1)
 
         plt.pause(0.01)  # 短暂暂停以更新显示

@@ -53,7 +53,11 @@ cf_param_ranges = {
         "k1": [0, 1], "k2": [0, 1], "thw": [0, 10], "s0": [0, 10]
     },
     CFM.KK: {
-        "k": [1, 5], "b": [0, 5], "a": [0, 5], "d": [0, 5]
+        "tau": [0.1, 2], "v0": [5, 30], "k": [1, 5], "a": [0, 5], "s0": [0, 5]
+    },
+    CFM.TPACC: {
+        "v0": [5, 30], "safe_tau": [0.1, 2], "thw": [0.1, 5], "g_tau": [0.1, 5], "s0": [0, 5],
+        "kdv": [0, 1], "k1": [0, 1], "k2": [0, 1], "a": [0, 5], "b": [0, 5],
     }
 }
 cf_param_types = {
@@ -64,7 +68,9 @@ cf_param_types = {
                        "CC9": 0, "vDesire": 0},
     CFM.OPTIMAL_VELOCITY: {"a": 0, "V0": 0, "m": 0, "bf": 0, "bc": 0},
     CFM.ACC: {"k1": 0, "k2": 0, "thw": 0, "s0": 0},
-    CFM.KK: {"k": 0, "b": 0, "a": 0, "d": 0}
+    CFM.KK: {"tau": 0, "v0": 0, "k": 0, "a": 0, "s0": 0},
+    CFM.TPACC: {"v0": 0, "safe_tau": 0, "thw": 0, "g_tau": 0, "s0": 0,
+                "kdv": 0, "k1": 0, "k2": 0, "a": 0, "b": 0}
 }
 cf_param_ins = {
     CFM.IDM: {
@@ -88,13 +94,17 @@ cf_param_ins = {
         "k1": [1, 1], "k2": [1, 1], "thw": [1, 1], "s0": [1, 1]
     },
     CFM.KK: {
-        "k": [1, 1], "b": [1, 1], "a": [1, 1], "d": [1, 1]
+        "tau": [1, 1], "v0": [1, 1], "k": [1, 1], "a": [1, 1], "s0": [1, 1]
+    },
+    CFM.TPACC: {
+        "v0": [1, 1], "safe_tau": [1, 1], "thw": [1, 1], "g_tau": [1, 1], "s0": [1, 1],
+        "kdv": [1, 1], "k1": [1, 1], "k2": [1, 1], "a": [1, 1], "b": [1, 1]
     }
 }
 
 
 def ga_cal(cf_func, obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la,
-           leaderL, dt, ranges: dict, ins: dict, types, seed, drawing=0):
+           leaderL, dt, ranges: dict, ins: dict, types, seed, drawing=0, verbose=False) -> dict:
     """
     :param cf_func: 跟驰模型函数
     :param dt: 仿真步长
@@ -110,6 +120,7 @@ def ga_cal(cf_func, obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la,
     :param types: 参数类型，0：实数；1：整数
     :param seed: GA随机种子
     :param drawing: 是否绘图 0表示不绘图； 1表示绘制最终结果图； 2表示实时绘制目标空间动态图； 3表示实时绘制决策空间动态图。
+    :param verbose: 是否打印详细信息
     """
     param_names = list(ranges.keys())
     init_x = obs_x[0]
@@ -165,9 +176,10 @@ def ga_cal(cf_func, obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la,
         algorithm.recOper.XOVR = 0.7  # 重组概率
 
         # 求解
-        res = ea.optimize(algorithm, verbose=False, seed=seed, drawing=drawing, outputMsg=False, drawLog=False,
+        res = ea.optimize(algorithm, verbose=verbose, seed=seed, drawing=drawing, outputMsg=verbose, drawLog=False,
                           saveFlag=False)
-        print(f"{cf_func.__name__}-seed{seed}: {res['ObjV'][0]}, {res['Vars']}, {res['executeTime']}")
+        print(f"{cf_func.__name__}-seed{seed}: ObjV-{res['ObjV'][0]}, Vars-{res['Vars']},"
+              f" executeTime-{res['executeTime']}")
         res["Vars"] = {k: v for k, v in zip(ranges.keys(), res["Vars"][0])}
         res["ObjV"] = res["ObjV"][0]
     else:
@@ -295,11 +307,9 @@ def get_clb_traj(df_follow_pair: dict[str | int, pd.DataFrame], cut_pos: dict[st
 
 def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_a,
               obs_lx, obs_lv, obs_la, leaderL, traj_step=None, pair_ID=None):
-    try:
-        cf_func = get_cf_func(cf_name)
-    except:
-        cf_func = get_cf_model(cf_name)
-    cf_param = {k: v for k, v in zip(cf_param_ranges[cf_name].keys(), cf_param)}
+    cf_func = get_cf_model(cf_name)
+    if isinstance(cf_param, list):
+        cf_param = {k: v for k, v in zip(cf_param_ranges[cf_name].keys(), cf_param)}
     # 标定后跟驰模型轨迹仿真
     sim_pos, sim_speed, sim_acc, sim_cf_acc = simulation(
         cf_func, init_v=np.array(obs_v)[0],
@@ -313,8 +323,21 @@ def show_traj(cf_name, cf_param, dt, obs_x, obs_v, obs_a,
 
     if traj_step is None:
         traj_step = range(len(obs_x))
-    plt.plot(traj_step, obs_lx, label="obs_lx")
-    plt.plot(traj_step, obs_x, label=f"obs_x: {pair_ID}")
-    plt.plot(traj_step, sim_pos, label=f"sim_x: {pair_ID}")
-    plt.legend()
+
+    print(obs_lx - sim_pos - leaderL)
+
+    fig, ax = plt.subplots(3, 1, figsize=(10, 8))
+    ax[0].plot(traj_step, obs_lx, label="obs_lx")
+    ax[0].plot(traj_step, obs_x, label=f"obs_x: {pair_ID}")
+    ax[0].plot(traj_step, sim_pos, label=f"sim_x: {pair_ID}")
+    ax[0].legend()
+
+    ax[1].plot(traj_step, obs_a, label="obs_a")
+    ax[1].plot(traj_step, sim_acc, label="sim_a")
+    ax[1].legend()
+
+    ax[2].plot(traj_step, obs_v, label="obs_v")
+    ax[2].plot(traj_step, sim_speed, label="sim_v")
+    ax[2].legend()
+
     plt.show()

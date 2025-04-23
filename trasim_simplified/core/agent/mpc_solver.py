@@ -35,7 +35,7 @@ class MPC_Solver:
         self.opt_x = None
         self.opt_u = None
 
-        self.Q = np.diag([10, 10, 0.1, 0.1])  # state cost matrix
+        self.Q = np.diag([10, 10, 10, 10])  # state cost matrix
         self.Qf = self.Q * 100  # state final matrix
         self.use_R = False
         self.use_Rd = False

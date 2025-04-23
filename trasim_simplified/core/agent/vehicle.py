@@ -3,14 +3,13 @@
 # @Author : yzbyx
 # @File : vehicle.py
 # @Software : PyCharm
-import queue
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from trasim_simplified.core.agent import utils
 from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
-from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType
+from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType, GameRes, \
+    GapJudge
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.agent.obstacle import Obstacle
@@ -40,6 +39,7 @@ class Vehicle(Obstacle):
         self.acc_list = []
         self.yaw_list = []
         self.delta_list = []
+        self.is_lc_list = []
 
         self.step_list = []
         self.time_list = []
@@ -54,7 +54,6 @@ class Vehicle(Obstacle):
         self.tet_list = []
         self.picud_list = []
         self.picud_KK_list = []
-
         self.preceding_id_list = []
 
         self.cf_model: Optional[CFModel] = None
@@ -69,10 +68,11 @@ class Vehicle(Obstacle):
         self.pre_left_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
         self.pre_right_leader_follower: Optional[tuple[Vehicle, Vehicle]] = None
 
+        # 车辆控制参数
         self.next_acc = 0
         self.next_delta = 0
-        self.target_lane = lane
 
+        # 周边车辆
         self.lf: Optional['Vehicle'] = None
         self.lr: Optional['Vehicle'] = None
         self.f: Optional['Vehicle'] = None
@@ -82,34 +82,54 @@ class Vehicle(Obstacle):
         self.left_lane: Optional['LaneAbstract'] = None
         self.right_lane: Optional['LaneAbstract'] = None
 
+        # 目标车道与交织路线类型
         self.destination_lane_indexes = None
         self.route_type: Optional[RouteType] = None
 
+        # 换道相关
         self.no_lc = False  # 是否禁止换道
+        self.no_left_lc = False  # 是否禁止左换道
+        self.no_right_lc = False  # 是否禁止右换道
+        self.lane_can_lc = None  # 可以换道的车道编号
         self.lc_direction = 0  # 换道方向，-1为左，1为右
         self.lane_changing = False  # 是否处于换道状态
-        self.is_gaming = False  # 是否处于博弈状态
-        self.game_time_wanted = None  # 博弈策略（期望时距）
+        self.target_lane = lane  # 目标车道
+        self.lc_conti_time = 0  # 换道持续时间
 
-        self.hist_traj: list[TrajPoint] = []
-        """包含当前时间步的轨迹点"""
-
-        self.PREVIEW_TIME = 1
-        self.MIN_PREVIEW_S = 2
-        self.TAU_HEADING = 0.2  # [s]
-        self.TAU_LATERAL = 0.6  # [s]
-        self.TAU_PURSUIT = 0.5 * self.TAU_HEADING  # [s]
-        self.KP_HEADING = 1 / self.TAU_HEADING
-        self.KP_LATERAL = 1 / self.TAU_LATERAL  # [1/s]
-
-        self.pred_net: Optional[TrajPred] = get_pred_net()
-        self.pred_traj: Optional[list[TrajPoint]] = None
-
+        # 换道意图相关
+        self.risk_2d = None
         self.lc_ttc_risk = None
         self.lc_acc_benefit = None
         self.lc_route_desire = None
+        self.gap_res_list: Optional[list[GapJudge]] = None
+        self.opti_gap: Optional[GapJudge] = None
 
-        self.risk_2d = None
+        # 博弈相关
+        self.is_gaming = False  # 是否处于博弈状态
+        self.game_factor = None  # 博弈策略（期望时距）
+        self.is_game_leader = False
+        self.game_leader = None
+        self.opti_game_res: Optional[GameRes] = None
+        self.game_res_list: Optional[list[GameRes]] = None
+        self.rho_hat_s = {}  # 储存车辆id_对应的rho_hat范围
+        self.rho = 0.5
+        self.game_co = 1  # 自动驾驶的公平协作程度 [0, 1]
+        """激进系数"""
+
+        # 横向控制参数
+        self.PREVIEW_TIME = 2
+        self.MIN_PREVIEW_S = 5
+
+        # 轨迹预测相关
+        self.pred_net: Optional[TrajPred] = get_pred_net()
+        self.pred_traj: Optional[list[TrajPoint]] = None
+        self.hist_traj: list[TrajPoint] = []
+        """包含当前时间步的轨迹点"""
+
+        self.k_s = 1
+        self.k_c = 1 / 3
+        self.k_r = 1
+        self.k_e = 1
 
     @property
     def time_wanted(self):
@@ -133,7 +153,7 @@ class Vehicle(Obstacle):
 
     @property
     def max_speed(self):
-        return self.cf_model.get_max_speed()
+        return self.cf_model.get_speed_limit()
 
     @property
     def dec_max(self):
@@ -194,11 +214,6 @@ class Vehicle(Obstacle):
     def set_lc_model(self, lc_name: str, lc_param: dict):
         self.lc_model = get_lc_model(lc_name)(lc_param)
 
-    def cal_vehicle_control(self):
-        """3、车辆运动控制"""
-        self.next_acc = self.cf_model.step(self.pack_veh_surr())
-        self.next_delta = 0
-
     def lc_intention_judge(self):
         """1、判断是否换道并计算换道轨迹"""
         if self.no_lc:
@@ -231,7 +246,6 @@ class Vehicle(Obstacle):
         :param stra: 期望时距
         :param target_lane: 目标车道
         :param PC_traj: 前车轨迹
-        :param TF_traj: 目标车道前车轨迹
         :param to_ndarray: 是否转为ndarray
         """
         step_num = round(time_len / self.dt) + 1
@@ -240,8 +254,11 @@ class Vehicle(Obstacle):
             veh.target_lane = target_lane
             veh.lane_changing = True
         if stra is not None:
-            veh.game_time_wanted = stra
+            veh.game_factor = stra
             veh.is_gaming = True
+        else:
+            veh.game_factor = None
+            veh.is_gaming = False
         leader = veh.clone()
 
         if self.f is None and PC_traj is None:
@@ -250,13 +267,18 @@ class Vehicle(Obstacle):
             leader.x = veh.x + 1e6
             leader.speed = veh.speed
             leader.acc = 0
+            PC_traj = [leader.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
             for step in range(step_num - 1):
                 delta = veh.cf_lateral_control()
                 acc = veh.cf_model.step(VehSurr(ev=veh, cp=leader))
                 veh.update_state(acc, delta)
+                leader.x = veh.x + 1e6
+                leader.speed = veh.speed
+                leader.acc = 0
                 traj.append(veh.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
-            PC_traj = None
+                PC_traj.append(leader.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
             traj = np.array(traj) if to_ndarray else traj
+            PC_traj = np.array(PC_traj) if to_ndarray else PC_traj
 
         else:
             if PC_traj is None:
@@ -282,8 +304,10 @@ class Vehicle(Obstacle):
 
     def cf_lateral_control(self):
         """自动驾驶跟驰过程/人类驾驶全过程的预瞄横向控制"""
-        preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME)
         l_lat = self.target_lane.y_center - self.y
+
+        preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME * (1 + abs(l_lat) / self.lane.width))
+
         dist = np.sqrt(preview_s ** 2 + l_lat ** 2)  # 车头到预瞄点的距离
         theta = np.arctan2(l_lat, preview_s)
 
@@ -292,9 +316,16 @@ class Vehicle(Obstacle):
 
         delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
 
-        d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        delta = self.delta + d_delta
-        delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        # delta = self.delta + d_delta
+        # delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
+
+        # 使用加速度/转向率限制平滑转向角度的变化
+        d_delta_smooth = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        delta_smooth = self.delta + d_delta_smooth
+
+        dynamic_delta_max = self.DELTA_MAX * max(0.5, 1 - abs(l_lat) / self.lane.width)
+        delta = np.clip(delta_smooth, -dynamic_delta_max, dynamic_delta_max)
 
         # lane_future_heading = 0
         #
@@ -375,7 +406,7 @@ class Vehicle(Obstacle):
             return self.speed_list
         elif C_Info.x == info:
             return self.x_list
-        elif C_Info.Local_Y == info:
+        elif C_Info.localLat == info:
             return self.y_list
         elif C_Info.xCenterGlobal == info:
             return self.x_center_global_list
@@ -385,6 +416,8 @@ class Vehicle(Obstacle):
             return self.yaw_list
         elif C_Info.delta == info:
             return self.delta_list
+        elif C_Info.isLC == info:
+            return self.is_lc_list
 
         elif C_Info.dv == info:
             return self.dv_list
@@ -403,15 +436,15 @@ class Vehicle(Obstacle):
         elif C_Info.lc_id == info:
             return [get_lc_id(None if self.lc_model is None else self.lc_model.name)] * len(self.lane_id_list)
 
-        elif C_Info.safe_ttc == info:
+        elif C_Info.ttc == info:
             return self.ttc_list
-        elif C_Info.safe_tit == info:
+        elif C_Info.tit == info:
             return self.tit_list
-        elif C_Info.safe_tet == info:
+        elif C_Info.tet == info:
             return self.tet_list
-        elif C_Info.safe_picud == info:
+        elif C_Info.picud == info:
             return self.picud_list
-        elif C_Info.safe_picud_KK == info:
+        elif C_Info.picud_KK == info:
             return self.picud_KK_list
         else:
             TrasimError(f"{info}未创建！")
@@ -426,9 +459,9 @@ class Vehicle(Obstacle):
                 self.acc_list.append(self.acc)
             elif C_Info.speed == info:
                 self.speed_list.append(self.speed)
-            elif C_Info.Local_X == info:
+            elif C_Info.localLon == info:
                 self.x_list.append(self.x)
-            elif C_Info.Local_Y == info:
+            elif C_Info.localLat == info:
                 self.y_list.append(self.y - self.lane.y_center)
             elif C_Info.xCenterGlobal == info:
                 self.x_center_global_list.append(self.x_c)
@@ -438,6 +471,8 @@ class Vehicle(Obstacle):
                 self.yaw_list.append(self.yaw)
             elif C_Info.delta == info:
                 self.delta_list.append(self.delta)
+            elif C_Info.isLC == info:
+                self.is_lc_list.append(self.lane_changing)
 
             elif C_Info.dv == info:
                 self.dv_list.append(self.dv)
@@ -452,15 +487,15 @@ class Vehicle(Obstacle):
             elif C_Info.step == info:
                 self.step_list.append(self.lane.step_)
 
-            elif C_Info.safe_ttc == info:
+            elif C_Info.ttc == info:
                 self.ttc_list.append(self.ttc)
-            elif C_Info.safe_tit == info:
+            elif C_Info.tit == info:
                 self.tit_list.append(self.tit)
-            elif C_Info.safe_tet == info:
+            elif C_Info.tet == info:
                 self.tet_list.append(self.tet)
-            elif C_Info.safe_picud == info:
+            elif C_Info.picud == info:
                 self.picud_list.append(self.picud)
-            elif C_Info.safe_picud_KK == info:
+            elif C_Info.picud_KK == info:
                 self.picud_KK_list.append(self.picud_KK)
             else:
                 TrasimError(f"{info}未创建！")
@@ -505,9 +540,11 @@ class Vehicle(Obstacle):
     @property
     def ttc(self):
         if self.leader is not None:
-            if self.dv != 0:
+            if self.dv < 0:
                 return self.gap / (- self.dv)
-        return np.nan
+            else:
+                return np.inf
+        return np.inf
 
     @property
     def tit(self):
@@ -563,8 +600,20 @@ class Vehicle(Obstacle):
         return len(self.x_list) != 0
 
     def set_car_param(self, param: dict):
-        self.color = param.get("color", COLOR.yellow)
-        self.width = param.get("width", 1.8)
+        if param is None:
+            return
+        for key, value in param.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise TrasimError(f"车辆参数{key}不存在！")
+
+    def cal_vehicle_control(self):
+        veh_surr = self.pack_veh_surr()
+        next_acc = self.cf_model.step(veh_surr)
+        self.next_acc = next_acc
+        self.next_delta = self.cf_lateral_control()
+        return self.next_acc, self.next_delta
 
     def get_basic_info(self, sep="\n"):
         return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}{sep}" \
@@ -577,7 +626,11 @@ class Vehicle(Obstacle):
             if self.leader is not None else ""
 
     def __repr__(self):
-        print(self.risk_2d)
-        return (f"id: {self.ID}, x: {self.x:.3f}, y: {self.y:.3f}, speed: {self.speed:.3f}"
-                f" acc: {self.acc:.3f}, lane: {self.lane.index}, gap: {self.gap:.3f},"
-                f" is_lc: {self.lane_changing}, ttc: {self.ttc:.3f}, ttc2d: {float(self.risk_2d):.3f}")
+        if self.risk_2d is not None:
+            return (f"id: {self.ID}, x: {self.x:.3f}, y: {self.y:.3f}, speed: {self.speed:.3f}"
+                    f" acc: {self.acc:.3f}, lane: {self.lane.index}, gap: {self.gap:.3f},"
+                    f" is_lc: {self.lane_changing}, ttc: {self.ttc:.3f}, ttc2d: {self.risk_2d:.3f}")
+        else:
+            return (f"id: {self.ID}, x: {self.x:.3f}, y: {self.y:.3f}, speed: {self.speed:.3f}"
+                    f" acc: {self.acc:.3f}, lane: {self.lane.index}, gap: {self.gap:.3f},"
+                    f" is_lc: {self.lane_changing}, ttc: {self.ttc:.3f}")

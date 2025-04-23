@@ -58,6 +58,9 @@ vehicles almost (or although seldom, already) occurred.
 import numpy as np
 import warnings
 
+import pandas as pd
+
+from trasim_simplified.core.constant import TrackInfo as TI
 
 # Useful functions
 def line(point0, point1):
@@ -405,3 +408,46 @@ def efficiency(samples, indicator, iterations):
         _ = compute_func(samples, 'values')
         ts.append(systime.time()-t)
     return sum(ts)/iterations
+
+
+def traj_data_TTC(traj_i: pd.DataFrame, traj_j: pd.DataFrame, is_ori=False):
+    # 转化为标准数据Dataframe
+    x_i = traj_i[TI.xCenterGlobal] if not is_ori else traj_i[TI.xCenterGlobal + '_ori']
+    y_i = traj_i[TI.yCenterGlobal] if not is_ori else traj_i[TI.yCenterGlobal + '_ori']
+    vx_i = traj_i[TI.speed] * np.cos(traj_i[TI.yaw]) if not is_ori else traj_i[TI.speed + "_ori"] * np.cos(traj_i[TI.yaw + '_ori'])
+    vy_i = traj_i[TI.speed] * np.sin(traj_i[TI.yaw]) if not is_ori else traj_i[TI.speed + "_ori"] * np.sin(traj_i[TI.yaw + '_ori'])
+    hx_i = np.cos(traj_i[TI.yaw]) if not is_ori else np.cos(traj_i[TI.yaw + '_ori'])
+    hy_i = np.sin(traj_i[TI.yaw]) if not is_ori else np.sin(traj_i[TI.yaw + '_ori'])
+    length_i = traj_i[TI.length]
+    width_i = traj_i[TI.width]  # ATTENTION
+
+    x_j = traj_j[TI.xCenterGlobal] if not is_ori else traj_j[TI.xCenterGlobal + '_ori']
+    y_j = traj_j[TI.yCenterGlobal] if not is_ori else traj_j[TI.yCenterGlobal + '_ori']
+    vx_j = traj_j[TI.speed] * np.cos(traj_j[TI.yaw]) if not is_ori else traj_j[TI.speed + "_ori"] * np.cos(traj_j[TI.yaw + '_ori'])
+    vy_j = traj_j[TI.speed] * np.sin(traj_j[TI.yaw]) if not is_ori else traj_j[TI.speed + "_ori"] * np.sin(traj_j[TI.yaw + '_ori'])
+    hx_j = np.cos(traj_j[TI.yaw]) if not is_ori else np.cos(traj_j[TI.yaw + '_ori'])
+    hy_j = np.sin(traj_j[TI.yaw]) if not is_ori else np.sin(traj_j[TI.yaw + '_ori'])
+    length_j = traj_j[TI.length]
+    width_j = traj_j[TI.width]  # ATTENTION
+
+    df = pd.DataFrame({
+        'x_i': x_i,
+        'y_i': y_i,
+        'vx_i': vx_i,
+        'vy_i': vy_i,
+        'hx_i': hx_i,
+        'hy_i': hy_i,
+        'length_i': length_i,
+        'width_i': width_i,
+        'x_j': x_j,
+        'y_j': y_j,
+        'vx_j': vx_j,
+        'vy_j': vy_j,
+        'hx_j': hx_j,
+        'hy_j': hy_j,
+        'length_j': length_j,
+        'width_j': width_j
+    })
+
+    res = TTC(df, toreturn='values')
+    return res

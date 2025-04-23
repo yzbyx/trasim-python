@@ -25,13 +25,13 @@ def simulation(cf_func, init_x, init_v, init_a,
 
     注意！原始数据的位置、速度的关系需要与模型状态的更新方式相对应
     """
-    tau = cf_param.get('tau', False)
-    if tau:
-        assert tau >= dt
+    # tau = cf_param.get('tau', False)
+    # if tau:
+    #     assert tau >= dt
     acc = float(init_a)
     speed = float(init_v)
     pos = float(init_x)
-    sim_pos, sim_speed, sim_acc, sim_cf_acc = [pos], [speed], [0], [0]
+    sim_pos, sim_speed, sim_acc, sim_cf_acc = [pos], [speed], [acc], [0]
 
     lane = LaneOpen(1000)
     lane.set_speed_limit(30)

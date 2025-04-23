@@ -556,3 +556,16 @@ class LaneAbstract(ABC):
             "\tdt: " + str(self.dt) + \
             "\twarm_up_step: " + str(self.warm_up_step) + \
             "\tsim_step: " + str(self.sim_step)
+
+    def reset(self):
+        """清除车道上的车辆"""
+        for car in self.car_list:
+            if hasattr(car, "plot_item"):
+                car.__getattribute__("screen").removeItem(car.plot_item)
+        self.car_list.clear()
+        self._dummy_car_list.clear()
+        self.out_car_has_data.clear()
+        self.sim_step = 0
+        self.step_ = 0
+        self.time_ = 0
+        self.data_container.reset()

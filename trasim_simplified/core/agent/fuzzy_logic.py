@@ -85,8 +85,8 @@ class FuzzyLogic:
 
     def compute(self, benefit, risk, aggressiveness):
         # sigmoid函数
-        benefit = 1 / (1 + np.exp(-benefit))
-        risk = 1 / (1 + np.exp(-risk))
+        # benefit = 1 / (1 + np.exp(-benefit))
+        # risk = 1 / (1 + np.exp(-risk))
         # 输入值
         self.lane_change_sim.input['收益'] = benefit
         self.lane_change_sim.input['风险'] = risk

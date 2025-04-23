@@ -43,6 +43,8 @@ class Model(metaclass=abc.ABCMeta):
 
         :_param param: 包含待更新参数的字典
         """
+        if param is None:
+            return
         for key in param.keys():
             inner_name = "_" + key
             if hasattr(self, inner_name):

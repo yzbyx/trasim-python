@@ -159,6 +159,10 @@ class Obstacle:
             width=self.width
         )
 
+    def get_state_for_traj(self):
+        """返回车辆状态量[x, dx, ddx, y, dy, ddy]"""
+        return np.array([self.x, self.v, self.a, self.y, self.v_lat, self.a_lat])
+
     def update_state(self, a, delta):
         """
         Update ego_local_state
@@ -166,8 +170,8 @@ class Obstacle:
         :param a: acceleration
         :param delta: steering angle
         """
-        # if abs((a - self.acc) / self.dt) > self.JERK_MAX:
-        #     a = self.acc + self.dt * self.JERK_MAX * np.sign(a - self.acc)
+        if abs((a - self.acc) / self.dt) > self.JERK_MAX:
+            a = self.acc + self.dt * self.JERK_MAX * np.sign(a - self.acc)
 
         if abs((delta - self.delta) / self.dt) > self.D_DELTA_MAX:
             delta = self.delta + self.dt * self.D_DELTA_MAX * np.sign(delta - self.delta)

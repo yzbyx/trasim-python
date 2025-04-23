@@ -19,8 +19,8 @@ def make_road_from_osm(osm_file, map_config: dict, weaving_offset: int = 20):
     lane_num = len(lanelet_in_lane)
     road_length = sum([lanelet.lanelet_length[i] for i in lanelet_in_lane[0]])
     lane_width_s = [lanelet.get_lanelet(i).width for i in lanelet_base]
-    upstream_length = sum([lanelet.lanelet_length[data[0]] for data in mainline_upstream_list])
-    weaving_length = sum([lanelet.lanelet_length[data[0]] for data in mainline_weaving_list])
+    upstream_length = sum([lanelet.lanelet_length[i] for i in mainline_upstream_list[0]])
+    weaving_length = sum([lanelet.lanelet_length[i] for i in mainline_weaving_list[0]])
 
     upstream_end = upstream_length - weaving_offset
     downstream_start = upstream_length + weaving_length + weaving_offset
@@ -30,6 +30,7 @@ def make_road_from_osm(osm_file, map_config: dict, weaving_offset: int = 20):
     road.auxiliary_end_indexes = ramp_indexes
     road.set_start_weaving_pos(upstream_end)
     road.set_end_weaving_pos(downstream_start)
+    print("upstream_end:", upstream_end, "downstream_start:", downstream_start, "road_length:", road_length)
     lanes = road.add_lanes(lane_num, is_circle=False, lane_width_list=lane_width_s)
     for i in range(lane_num):
         if i == 0:

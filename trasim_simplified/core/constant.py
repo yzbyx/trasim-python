@@ -36,19 +36,19 @@ class TrackInfo:
     """当前帧时间 [s]"""
     trackId = "trackId"
     """车辆ID"""
-    Local_X = "localLon"
+    localLon = "localLon"
     """车头中点投影到车道线的车道起点偏移量 [m]"""
-    Local_Y = "localLat"
+    localLat = "localLat"
     """车头中点距离所在车道中轴线的偏移量 [m]"""
     length = "length"
     """车辆长度 [m]"""
     v_Class = "v_Class"
     """车辆类别 [Car/Truck]"""
-    Lane_ID = "laneId"
+    laneId = "laneId"
     """车道ID [0/1/2...]"""
 
     # extend basic-1 车辆基础信息拓展
-    acc = "acc"
+    acc = "acceleration"
     """车辆的加速度 [m/s^2]"""
     speed = "speed"
     """车辆的速度 [m/s]"""
@@ -104,16 +104,28 @@ class TrackInfo:
     """车头中点的全局x坐标，横轴为x，纵轴为y [m]"""
     xCenterGlobal = "xCenterGlobal"
     yCenterGlobal = "yCenterGlobal"
+    roadLon = "roadLon"
+    roadLat = "roadLat"
+
+    isLC = "isLC"
+    gap_res_list = "gap_res_list"
+    """换道决策结果列表"""
+    opti_gap_res = "gap_res"
+    """换道决策结果"""
+    game_res_list = "game_res_list"
+    """博弈决策结果列表"""
+    opti_game_res = "game_res"
+    """博弈决策结果"""
 
     Pair_ID = "pairId"
 
     # 兼容trasim_simplified
-    lane_add_num = Lane_ID
+    lane_add_num = laneId
     id = trackId
     step = frame
     v = localLonVel
-    x = Local_X
-    y = Local_Y
+    x = localLon
+    y = localLat
     a = localLonAcc
 
     cf_acc = "cf_acc"
@@ -124,11 +136,10 @@ class TrackInfo:
     car_type = v_Class
     """车辆类型"""
 
-    safe_ttc = "ttc (s)"
-    safe_tet = "tet"
-    safe_tit = "tit (s)"
-    safe_picud = "picud (m)"
-    safe_picud_KK = "picud_KK (m)"
+    tet = "tet"
+    tit = "tit (s)"
+    picud = "picud (m)"
+    picud_KK = "picud_KK (m)"
 
 
 class Prefix:
@@ -213,9 +224,9 @@ class MARKING_TYPE(Enum):
 class V_CLASS(Enum):
     BASE = 0
     """基本车辆"""
-    GAME_HV = 1
+    GAME_HV = "HV"
     """博弈人类车辆"""
-    GAME_AV = 2
+    GAME_AV = "AV"
     """博弈自动驾驶车辆"""
 
 
@@ -413,46 +424,78 @@ class TrajData:
     """目标间隙后车的轨迹"""
     PC_traj: Optional[np.ndarray]
     """当前车道前车的轨迹"""
+    CR_traj: Optional[np.ndarray]
+    """当前车道后车的轨迹"""
     TF_PC_traj: Optional[np.ndarray]
     """目标间隙前车的前车轨迹"""
     TR_PC_traj: Optional[np.ndarray]
     """目标间隙后车的前车轨迹"""
     PC_PC_traj: Optional[np.ndarray]
     """前车的前车轨迹"""
+    CR_PC_traj: Optional[np.ndarray]
+    """后车的前车轨迹"""
     TF_cost_lambda: Optional[Callable]
     TR_cost_lambda: Optional[Callable]
+    CP_cost_lambda: Optional[Callable]
+    CR_cost_lambda: Optional[Callable]
 
 
 @dataclass
 class GameRes:
+    step: int
+    """当前决策时步"""
     cost_df: Optional[pd.DataFrame]
     """成本函数"""
+    EV: 'Game_Vehicle'
+    """换道车辆"""
     TF: 'Game_Vehicle'
     """目标间隙前车"""
     TR: 'Game_Vehicle'
     """目标间隙后车"""
     PC: 'Game_Vehicle'
     """当前车道前车"""
+    CR: 'Game_Vehicle'
+    """当前车道后车"""
+
     EV_stra: Optional[float]
-    """换道车辆的最优换道时间"""
     TF_stra: Optional[float]
-    """目标间隙前车的期望时距"""
-    TR_real_stra: Optional[float]
-    """目标间隙后车的期望时距"""
+    TR_stra: Optional[float]
+    CR_stra: Optional[float]
+    CP_stra: Optional[float]
+
     EV_cost: Optional[float]
-    """换道车辆的成本函数"""
     TF_cost: Optional[float]
-    """目标间隙前车的成本函数"""
-    TR_real_cost: Optional[float]
-    """目标间隙后车的成本函数"""
+    TR_cost: Optional[float]
+    CR_cost: Optional[float]
+    CP_cost: Optional[float]
+
     EV_opti_series: Optional[pd.Series]
-    """换道车辆的最优时距下的成本函数序列"""
+
     traj_data: Optional[TrajData] = None
     """其他车辆的轨迹"""
+    EV_safe_cost: Optional[float] = None
+    EV_com_cost: Optional[float] = None
+    EV_eff_cost: Optional[float] = None
+    EV_route_cost: Optional[float] = None
+    EV_opti_traj: Optional[np.ndarray] = None
+    EV_lc_step: Optional[int] = None
+
+    TR_esti_lambda: Optional[Callable] = None
+    TR_real_lambda: Optional[Callable] = None
+
+    def __repr__(self):
+        return f"step: {self.step}, EV: {self.EV.ID}, TF: {self.TF.ID}, TR: {self.TR.ID}, " \
+               f"EV: {self.EV_stra}, TF: {self.TF_stra}, TR: {self.TR_stra}, " \
+               f"cost: {self.EV_cost:.3f}, " \
+               f"TF_cost: {self.TF_cost:.3f}, " \
+               f"TR_real_cost: {self.TR_cost:.3f} " \
+               f"safe: {self.EV_safe_cost:.3f}, com: {self.EV_com_cost:.3f}, " \
+               f"eff: {self.EV_eff_cost:.3f}, route: {self.EV_route_cost:.3f}, " \
 
 
 @dataclass
 class GapJudge:
+    step: int
     lc_direction: float
     target_acc: Optional[float]
     """速度调整的加速度"""
@@ -460,6 +503,7 @@ class GapJudge:
     """调整时间"""
     EV: 'Game_Vehicle'
     """换道车辆"""
+    gap: Optional[float] = None
     TF: Optional['Game_Vehicle'] = None
     """目标间隙前车"""
     TR: Optional['Game_Vehicle'] = None
@@ -476,6 +520,15 @@ class GapJudge:
     """调整结束时间"""
     target_lane: Optional['LaneAbstract'] = None
     """目标车道"""
+    lc_prob: Optional[float] = -1
+    """换道概率"""
+
+    def __repr__(self):
+        return f"step: {self.step}, EV: {self.EV.ID}, lc_d: {self.lc_direction}, tar_a: {self.target_acc}, " \
+               f"a_time: {self.adapt_time}, gap: {self.gap}, "\
+               f"a_gain: {self.acc_gain:.3f}, ttc_risk: {self.ttc_risk:.3f}, route_gain: {self.route_gain:.3f} " \
+               f"lc_prob: {self.lc_prob:.3f}, "\
+               f"TF: {self.TF.ID}, TR: {self.TR.ID}, PC: {self.PC.ID}, "
 
 
 @dataclass
@@ -507,12 +560,22 @@ class ScenarioTraj:
     OP_traj: Optional[pd.DataFrame] = None
     OPP_traj: Optional[pd.DataFrame] = None
 
+    CR_traj: Optional[pd.DataFrame] = None
+    CRR_traj: Optional[pd.DataFrame] = None
 
-class ScenarioMode(Enum):
-    NO_INTERACTION = 0
-    """无交互"""
-    INTERACTION = 1
-    """有交互"""
+
+class ScenarioMode:
+    NO_INTERACTION = "无交互"
+    """第一类（无交互）"""
+    INTERACTION_TR_HV_TP_HV = "有交互(TR-HV TP-HV)"
+    """第二类（有交互TR_HV_TP_HV）"""
+    INTERACTION_TR_AV_TP_HV = "有交互(TR-AV TP-HV)"
+    """第三类（有交互，TR_AV_TP_HV）"""
+    INTERACTION_TR_HV_TP_AV = "有交互(TR-HV TP-AV)"
+    """第三类（有交互，TR_HV_TP_AV）"""
+    INTERACTION_TR_AV_TP_AV = "有交互(TR-AV TP-AV)"
+    """第三类（有交互，TR_AV_TP_AV）"""
+
 
 
 if __name__ == '__main__':

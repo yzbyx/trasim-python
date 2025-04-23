@@ -29,7 +29,7 @@ from trasim_simplified.msg.trasimError import ErrorMessage as rem, TrasimError
 __All__ = ['get_cf_model', 'CFModel', 'get_cf_id']
 
 
-def get_cf_model(name=CFM.IDM) -> [CFModel]:
+def get_cf_model(name=CFM.IDM) -> type[CFModel]:
     if name == CFM.IDM:
         return IDM
     elif name == CFM.IDM_SZ:

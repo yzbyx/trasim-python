@@ -13,9 +13,9 @@ from trasim_simplified.core.agent.vehicle import Vehicle
 """
 Welcome to CARLA No-Rendering Mode Visualizer
 
-    TAB          : toggle hero mode
+    TAB          : toggle hero mode_name
     Mouse Wheel  : zoom in / zoom out
-    Mouse Drag   : move map (map mode only)
+    Mouse Drag   : move map (map mode_name only)
 
     W            : throttle
     S            : brake
@@ -220,7 +220,7 @@ class FadingText(object):
 
 class HelpText(object):
     def __init__(self, font, width, height):
-        """Renders the help text that shows the controls for using no rendering mode"""
+        """Renders the help text that shows the controls for using no rendering mode_name"""
         lines = __doc__.split('\n')
         self.font = font
         self.dim = (680, len(lines) * 22 + 12)
@@ -840,7 +840,7 @@ class World(object):
         self.result_surface = pygame.Surface((self.surface_size, self.surface_size)).convert()
         self.result_surface.set_colorkey(COLOR_BLACK)
 
-        # Start hero mode by default
+        # Start hero mode_name by default
         self.select_hero_actor()
         self.hero_actor.set_autopilot(False)
         self._input.wheel_offset = HERO_DEFAULT_SCALE
@@ -891,7 +891,7 @@ class World(object):
         self.update_hud_info(clock)
 
     def update_hud_info(self, clock):
-        """Updates the HUD info regarding simulation, hero mode and whether there is a traffic light affecting the hero actor"""
+        """Updates the HUD info regarding simulation, hero mode_name and whether there is a traffic light affecting the hero actor"""
 
         hero_mode_text = []
         if self.hero_actor is not None:
@@ -1041,14 +1041,14 @@ class World(object):
 
             # Blit
             if self.hero_actor is not None:
-                # In hero mode, Rotate font surface with respect to hero vehicle front
+                # In hero mode_name, Rotate font surface with respect to hero vehicle front
                 angle = -self.hero_transform.rotation.yaw - 90.0
                 font_surface = pygame.transform.rotate(font_surface, angle)
                 offset = font_surface.get_rect(center=(x, y))
                 surface.blit(font_surface, offset)
 
             else:
-                # In map mode, there is no need to rotate the text of the speed limit
+                # In map mode_name, there is no need to rotate the text of the speed limit
                 surface.blit(font_surface, (x - radius / 2, y - radius / 2))
 
     def _render_walkers(self, surface, list_w, world_to_pixel):
@@ -1129,7 +1129,7 @@ class World(object):
         self.map_image.scale_map(scale_factor)
 
     def render(self, display):
-        """Renders the map and all the actors in hero and map mode"""
+        """Renders the map and all the actors in hero and map mode_name"""
         if self.actors_with_transforms is None:
             return
         self.result_surface.fill(COLOR_BLACK)
@@ -1155,7 +1155,7 @@ class World(object):
         # Render Ids
         self._hud.render_vehicles_ids(self.vehicle_id_surface, vehicles,
                                       self.map_image.world_to_pixel, self.hero_actor, self.hero_transform)
-        # Show nearby actors from hero mode
+        # Show nearby actors from hero mode_name
         self._show_nearby_vehicles(vehicles)
 
         # Blit surfaces
@@ -1274,7 +1274,7 @@ class InputControl(object):
                 elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
                     self._hud.help.toggle()
                 elif event.key == K_TAB:
-                    # Toggle between hero and map mode
+                    # Toggle between hero and map mode_name
                     if self._world.hero_actor is None:
                         self._world.select_hero_actor()
                         self.wheel_offset = HERO_DEFAULT_SCALE

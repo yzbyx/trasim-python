@@ -133,7 +133,7 @@ def calculate_collision_risk(traj_i: list[TrajPoint], traj_j: list[TrajPoint]):
     hx_i = traj_i[:, 6]
     hy_i = traj_i[:, 7]
     length_i = traj_i[:, 8]
-    width_i = traj_i[:, 9]
+    width_i = traj_i[:, 9] * 0.1  # ATTENTION
 
     traj_j = np.array([point.to_center() for point in traj_j])
     x_j = traj_j[:, 0]
@@ -143,7 +143,7 @@ def calculate_collision_risk(traj_i: list[TrajPoint], traj_j: list[TrajPoint]):
     hx_j = traj_j[:, 6]
     hy_j = traj_j[:, 7]
     length_j = traj_j[:, 8]
-    width_j = traj_j[:, 9]
+    width_j = traj_j[:, 9] * 0.1  # ATTENTION
     df = pd.DataFrame({
         'x_i': x_i,
         'y_i': y_i,
@@ -163,4 +163,5 @@ def calculate_collision_risk(traj_i: list[TrajPoint], traj_j: list[TrajPoint]):
         'width_j': width_j
     })
     ttc_2d = TTC(df, toreturn='values')
+    ttc_2d[ttc_2d < 0] = -np.inf
     return ttc_2d

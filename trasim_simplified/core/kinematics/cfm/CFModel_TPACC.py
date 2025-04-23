@@ -20,6 +20,12 @@ class CFModel_TPACC(CFModel):
         self.thesis = "Physics of automated driving in framework of three-phase traffic theory (2018)"
 
         self._v0 = f_param.get("v0", 33.3)
+        self._safe_tau = f_param.get("safe_tau", 1)
+        self._thw = f_param.get("thw", 1.3)  # 原文似乎未提供
+        """期望时距，从公式上看并非车头时距"""
+        self._g_tau = f_param.get("g_tau", 1.4)
+        """速度适配时距"""
+        self._s0 = f_param.get("s0", 2)
 
         self._kdv = f_param.get("kdv", 0.3)
         """速度适配区间的速度差系数"""
@@ -27,24 +33,19 @@ class CFModel_TPACC(CFModel):
         """期望间距差系数"""
         self._k2 = f_param.get("k2", 0.3)
         """速度差系数"""
-        self._thw = f_param.get("thw", 1.3)  # 原文似乎未提供
-        """期望时距，从公式上看并非车头时距"""
-        self._g_tau = f_param.get("g_tau", 1.4)
-        """速度适配时距"""
         self._a = f_param.get("a", 3.)
         """期望加速度，用于安全速度计算"""
         self._b = f_param.get("b", 3.)
         """期望减速度，用于安全速度计算"""
         self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
         """v_safe计算是否离散化时间"""
-        self.tau = f_param.get("tau", 1)
-        """仿真步长即反应时间 [s]"""
-        self.tau_safe = 1
 
         self.record_cf_info = f_param.get("record_cf_info", False)
         self.cf_info: Optional[TPACCInfo] = None
         if self.record_cf_info:
             self.cf_info = TPACCInfo()
+
+        self.scale = 1
 
     @property
     def v_safe_dispersed(self):
@@ -59,9 +60,6 @@ class CFModel_TPACC(CFModel):
     def get_expect_speed(self):
         return self._v0
 
-    def get_max_speed(self):
-        return self.get_speed_limit()
-
     def get_max_dec(self):
         return 8
 
@@ -75,16 +73,17 @@ class CFModel_TPACC(CFModel):
         return self._b
 
     def get_safe_s0(self):
-        return 2
+        return self._s0
 
     def get_time_safe(self):
-        return 0.5
+        return self._safe_tau
 
     def get_time_wanted(self):
-        return 1
+        return self._thw
 
     def _update_dynamic(self):
-        self.gap = self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
+        self.scale = self.veh_surr.ev.game_factor if self.veh_surr.ev.is_gaming else 1
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length - self.get_safe_s0() * self.scale
         self.dt = self.veh_surr.ev.lane.dt
         self._update_v_safe()
 
@@ -100,11 +99,12 @@ class CFModel_TPACC(CFModel):
             speed = max(0., min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
             return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
-        f_params = [self._kdv, self._k1, self._k2, self._thw, self._g_tau, self._a, self._b, self._v_safe_dispersed]
+        f_params = [self._kdv, self._k1, self._k2, self._thw * self.scale,
+                    self._g_tau * self.scale, self._a, self._b, self._v_safe_dispersed]
         leader_is_dummy = True if self.veh_surr.cp.type == V_TYPE.OBSTACLE else False
-        result = calculate(
+        result = self.calculate(
             *f_params, self.dt, self.gap, self.veh_surr.ev.v, self.veh_surr.cp.v, self.get_expect_speed(),
-            leader_is_dummy, self.l_v_a, self.tau_safe
+            leader_is_dummy, self.l_v_a, self._safe_tau * self.scale
         )
         if self.record_cf_info:
             self.cf_info.step.append(self.veh_surr.ev.lane.step_)
@@ -117,34 +117,40 @@ class CFModel_TPACC(CFModel):
 
         return result[0]
 
+    def calculate(self, kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
+                  dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a, tau):
+        if gap > v * g_tau_:
+            acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
+            is_speed_adaptive = 0
+        else:
+            acc = kdv_ * (l_v - v)
+            is_speed_adaptive = 1
 
-def calculate(kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
-              dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a, tau=1):
-    if gap > v * g_tau_:
-        acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
-        is_speed_adaptive = 0
-    else:
-        acc = kdv_ * (l_v - v)
-        is_speed_adaptive = 1
+        if self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader:
+            acc += self.veh_surr.ev.game_factor * 1
 
-    is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
-    v_c = v + dt * max(- dec_, min(acc, acc_))
+        is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
+        v_c = v + dt * max(- dec_, min(acc, acc_))
 
-    v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
-    is_thw_constraint = 0
-    if not leader_is_dummy:
-        temp = (gap / tau) + l_v_a
-        is_thw_constraint = 1 if v_safe > temp else 0
-        v_safe = min(v_safe, temp)
+        v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
+        # # v_safe = v_free
+        is_thw_constraint = 0
+        if not leader_is_dummy:
+            temp = (gap / tau) + l_v_a
+            is_thw_constraint = 1 if v_safe > temp else 0
+            v_safe = min(v_safe, temp)
+        # v_safe = 100
 
-    is_v_free_constraint = 1 if v_free < v_c else 0
-    is_v_safe_constraint = 1 if v_safe < v_c else 0
-    v_next = max(0, min(v_free, v_c, v_safe))
+        is_v_free_constraint = 1 if v_free < v_c else 0
+        is_v_safe_constraint = 1 if v_safe < v_c else 0
+        v_next = max(0, min(v_free, v_c, v_safe))
 
-    a_final = (v_next - v) / dt
+        a_final = (v_next - v) / dt
 
-    return a_final, \
-        is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
+        # print("v_safe:", v_safe, "v_c:", v_c, "v_free:", v_free, "a_final:", a_final)
+
+        return a_final, \
+            is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
 
 
 def cf_TPACC_acc(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,
