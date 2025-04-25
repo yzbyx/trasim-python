@@ -80,28 +80,30 @@ class CFModel_KK(CFModel):
         self.index = None
         self.ev: Optional["Vehicle"] = None
 
+        self.scale = 1
+
     def _update_dynamic(self):
-        factor = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
+        self.scale = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
 
         vf_change = 0
         if self.veh_surr.ev.is_gaming:
             game_factor = self.veh_surr.ev.game_factor
             if game_factor < 1:
                 game_factor = 1 / game_factor
-            vf_change = ((game_factor * 2) * np.sign(1 - self.veh_surr.ev.game_factor))
+                vf_change = ((game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor))
 
         self.dt = self.veh_surr.ev.dt
         self._vf = self.get_expect_speed() + vf_change
 
         self.v = self.veh_surr.ev.v
         self.l_length = self.veh_surr.cp.length
-        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._s0
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._s0 * self.scale
         self.l_v = self.veh_surr.cp.v
         self.l_v_a = self.veh_surr.cp.a
 
         self.v_safe = cal_v_safe(
             self.v_safe_dispersed,
-            self._tau * factor,
+            self._tau * self.scale,
             self.veh_surr.cp.v,
             self.gap,
             self.get_expect_dec(),
@@ -189,7 +191,7 @@ class CFModel_KK(CFModel):
 
         # ----G计算---- #
         factor = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
-        self.G = cal_G(self._k * factor, self._tau, self._a, self.v, self.l_v)
+        self.G = cal_G(self._k, self._tau * factor, self._a, self.v, self.l_v)
 
         # ----v_c计算---- #
         v_c = self._cal_v_c(self.G, a_n, b_n)
@@ -198,14 +200,15 @@ class CFModel_KK(CFModel):
             game_factor = self.veh_surr.ev.game_factor
             if game_factor < 1:
                 game_factor = 1 / game_factor
-            v_c += ((game_factor * 1 * self.dt) *
-                    np.sign(1 - self.veh_surr.ev.game_factor))
+                v_c += ((game_factor * 8 * self.dt) *
+                        np.sign(1 - self.veh_surr.ev.game_factor))
 
         # ----v_s计算---- #
         v_s = self._cal_v_s()
 
         # ----v_hat计算---- #
         v_hat = min(self._vf, v_s, v_c)
+        # print("v_hat计算:", self._vf, v_s, v_c)
 
         # ----xi扰动计算---- #
         xi, S = self._cal_xi(v_hat, self.dt, self.v)
@@ -250,14 +253,13 @@ class CFModel_KK(CFModel):
         return 8
 
     def get_max_acc(self):
-        return 5
+        return 8
 
     def get_time_wanted(self):
-        # return self._time_wanted
-        return self._tau * 1.3
+        return (self._tau * self.scale) * (self._k * self.scale) / 2
 
     def get_time_safe(self):
-        return self._tau
+        return self._tau * self.scale
 
     def get_com_acc(self):
         return self._a

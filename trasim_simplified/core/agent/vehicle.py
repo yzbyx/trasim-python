@@ -118,7 +118,7 @@ class Vehicle(Obstacle):
 
         # 横向控制参数
         self.PREVIEW_TIME = 2
-        self.MIN_PREVIEW_S = 5
+        self.MIN_PREVIEW_S = 10
 
         # 轨迹预测相关
         self.pred_net: Optional[TrajPred] = get_pred_net()
@@ -127,9 +127,14 @@ class Vehicle(Obstacle):
         """包含当前时间步的轨迹点"""
 
         self.k_s = 1
-        self.k_c = 1 / 3
-        self.k_r = 1
+        self.k_c = 2
+        self.k_r = 10
         self.k_e = 1
+
+        self.game_traj_ache: Optional[
+            dict[tuple[float, float], tuple[np.ndarray, np.ndarray]]
+        ] = None
+        """博弈轨迹缓存，包含自车对应策略的轨迹以及前车预估轨迹 (策略，时间): (自车轨迹，前车轨迹)"""
 
     @property
     def time_wanted(self):
@@ -175,6 +180,9 @@ class Vehicle(Obstacle):
         self.left_lane, self.right_lane = (
             self.lane.road.get_available_adjacent_lane(self.lane, self.x)
         )
+        self.game_traj_ache = None
+        self.gap_res_list = None
+        self.game_res_list = None
 
         if len(self.hist_traj) in [0, 1]:
             hist_traj = []
@@ -240,16 +248,20 @@ class Vehicle(Obstacle):
 
     def pred_self_traj(self, time_len, stra=None,
                        target_lane: "LaneAbstract" = None,
-                       PC_traj=None, to_ndarray=True):
+                       PC_traj=None, to_ndarray=True, ache=False):
         """在策略下预测自车轨迹（包含初始状态）
         :param time_len: 预测时间长度
         :param stra: 期望时距
         :param target_lane: 目标车道
         :param PC_traj: 前车轨迹
         :param to_ndarray: 是否转为ndarray
+        :param ache: 是否缓存
         """
+        if ache and self.game_traj_ache is not None and (stra, time_len) in self.game_traj_ache:
+            return self.game_traj_ache[(stra, time_len)]
         step_num = round(time_len / self.dt) + 1
         veh = self.clone()
+        leader = veh.clone()
         if target_lane is not None:
             veh.target_lane = target_lane
             veh.lane_changing = True
@@ -259,7 +271,6 @@ class Vehicle(Obstacle):
         else:
             veh.game_factor = None
             veh.is_gaming = False
-        leader = veh.clone()
 
         if self.f is None and PC_traj is None:
             traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
@@ -300,6 +311,10 @@ class Vehicle(Obstacle):
             if to_ndarray:
                 PC_traj = np.array([traj_point.to_ndarray() for traj_point in PC_traj])
         assert len(traj) == step_num
+        if ache:
+            if self.game_traj_ache is None:
+                self.game_traj_ache = {}
+            self.game_traj_ache[(stra, time_len)] = (traj, PC_traj)
         return traj, PC_traj
 
     def cf_lateral_control(self):

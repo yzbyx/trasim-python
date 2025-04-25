@@ -167,5 +167,5 @@ def interval_intersection(interval1, interval2, print_flag=False):
     else:
         if print_flag:
             print(f"intersection none: {interval1}, {interval2}")
-            raise ValueError("没有交集")
+            # raise ValueError("没有交集")
         return None  # 没有交集

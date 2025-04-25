@@ -469,6 +469,8 @@ class GameRes:
     CR_cost: Optional[float]
     CP_cost: Optional[float]
 
+    TR_real_EV_stra: Optional[float]
+
     EV_opti_series: Optional[pd.Series]
 
     traj_data: Optional[TrajData] = None
@@ -486,6 +488,7 @@ class GameRes:
     def __repr__(self):
         return f"step: {self.step}, EV: {self.EV.ID}, TF: {self.TF.ID}, TR: {self.TR.ID}, " \
                f"EV: {self.EV_stra}, TF: {self.TF_stra}, TR: {self.TR_stra}, " \
+               f"TR_EV_stra: {self.TR_real_EV_stra}" \
                f"cost: {self.EV_cost:.3f}, " \
                f"TF_cost: {self.TF_cost:.3f}, " \
                f"TR_real_cost: {self.TR_cost:.3f} " \
@@ -567,9 +570,9 @@ class ScenarioTraj:
 class ScenarioMode:
     NO_INTERACTION = "无交互"
     """第一类（无交互）"""
-    INTERACTION_TR_HV_TP_HV = "有交互(TR-HV TP-HV)"
+    INTERACTION_TR_HV_TP_HV = "有交互(TR-HV)"
     """第二类（有交互TR_HV_TP_HV）"""
-    INTERACTION_TR_AV_TP_HV = "有交互(TR-AV TP-HV)"
+    INTERACTION_TR_AV_TP_HV = "有交互(TR-AV)"
     """第三类（有交互，TR_AV_TP_HV）"""
     INTERACTION_TR_HV_TP_AV = "有交互(TR-HV TP-AV)"
     """第三类（有交互，TR_HV_TP_AV）"""

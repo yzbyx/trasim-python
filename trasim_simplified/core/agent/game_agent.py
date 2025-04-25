@@ -25,9 +25,14 @@ if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
-def cal_other_cost(veh, cal_cost, rho_hat, traj, other_traj_s, v_length_s):
+def cal_other_cost(veh, cal_cost, rho_hat, traj, other_traj_s,
+                   v_length_s, route_cost=0, print_cost=False):
     if cal_cost:
-        cost_lambda = veh.cal_cost_by_traj(traj, other_traj_s, v_length_s, return_lambda=True)
+        cost_lambda = veh.cal_cost_by_traj(
+            traj, other_traj_s, v_length_s,
+            return_lambda=True, route_cost=route_cost,
+            print_cost=print_cost
+        )
         cost_hat = cost_lambda(rho_hat) if cal_cost else np.nan
         real_cost = cost_lambda(veh.rho)
     else:
@@ -43,7 +48,7 @@ class Game_Vehicle(Vehicle):
     def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
 
-    def cal_safe_cost(self, traj, other_traj, v_length, k_sf=1):
+    def cal_safe_cost(self, traj, other_traj, v_length, current_gap):
         """计算与其他轨迹的安全成本"""
         if other_traj is None:
             return -np.inf
@@ -65,24 +70,26 @@ class Game_Vehicle(Vehicle):
             dhw = point2[0] - point1[0]
             vx = point1[1]
             if dhw >= 0:
-                if dhw <= v_length:
+                if dhw <= v_length + vx * self.time_safe:
                     # 车辆间距大于安全距离
-                    safe_cost_list.append(np.inf)
+                    safe_cost_list.append(1)
                     continue
                 gap = dhw - v_length
             else:  # 自车在前
-                if abs(dhw) <= self.length:
+                if abs(dhw) <= self.length + point2[1] * self.time_safe:
                     # 车辆间距小于安全距离
-                    safe_cost_list.append(np.inf)
+                    safe_cost_list.append(1)
                     continue
                 gap = abs(dhw) - self.length
                 vx = point2[1]
-            safe_cost_list.append(k_sf * (self.time_wanted * vx - gap))  # ATTENTION
+            safe_cost_list.append(
+                (current_gap - gap) / current_gap  # 计算安全成本
+            )  # ATTENTION
 
         safe_cost = max(safe_cost_list)
         return safe_cost
 
-    def _get_rho_hat_s(self, vehicles):
+    def get_rho_hat_s(self, vehicles):
         rho_hat_s = []
         for v in vehicles:
             if v is not None:
@@ -107,7 +114,7 @@ class Game_Vehicle(Vehicle):
 
     def cal_cost_by_traj(self, traj, other_traj_s, v_length_s,
                          rho=None, return_lambda=False,
-                         route_cost=0, return_sub_cost=False):
+                         route_cost=0, return_sub_cost=False, print_cost=False):
         """
         :param traj: 预测轨迹 x, dx, ddx, y, dy, ddy
         :param other_traj_s: 其他车辆的轨迹
@@ -119,30 +126,35 @@ class Game_Vehicle(Vehicle):
         """
         # 计算安全成本
         safe_cost_list = []
+        current_gap = self.gap if not np.isnan(self.gap) else self.v * self.time_wanted
         for other_traj, v_length in zip(other_traj_s, v_length_s):
             if other_traj is None:
                 continue
-            safe_cost_list.append(self.cal_safe_cost(traj, other_traj, v_length))
+            safe_cost_list.append(self.cal_safe_cost(traj, other_traj, v_length, current_gap))
 
         if len(safe_cost_list) == 0:
             safe_cost = 0
         else:
-            safe_cost = self.k_s * max(max(safe_cost_list), 0)
+            # safe_cost = self.k_s * max(max(safe_cost_list), -2)
+            safe_cost = self.k_s * max(safe_cost_list)
         # 舒适性计算 横纵向最大加速度、横摆角速度
         ddx_max = max(abs(traj[:, 2]))
         ddy_max = max(abs(traj[:, 5]))
 
-        com_cost = self.k_c * (ddx_max + ddy_max)  # 舒适性计算
+        com_cost = self.k_c * (0.5 * ddx_max + 0.5 * ddy_max) / self.acc_max  # 舒适性计算
         # # 效率计算 单位时间内的平均速度-初始速度
         vx = traj[:, 1]
-        eff_cost = self.k_e * (vx[0] - np.mean(vx))  # 效率计算
+        eff_cost = self.k_e * (vx[0] - np.mean(vx)) / 10  # 效率计算
 
-        route_cost = self.k_r * route_cost  # 路径成本
+        route_cost = route_cost  # 路径成本
+
+        if print_cost:
+            print("traj_cost:", safe_cost, com_cost, eff_cost, route_cost)
 
         def cost(rho_, is_print=False):
             total_cost = (
-                    (1 - rho_) * (safe_cost + com_cost) +
-                    rho_ * eff_cost + route_cost
+                    (1 - rho_) * (safe_cost + route_cost) +
+                    rho_ * eff_cost
             )
             if is_print:
                 print("call lambda", rho_, safe_cost, com_cost, eff_cost, route_cost)
@@ -166,7 +178,8 @@ class Game_Vehicle(Vehicle):
                 else:
                     strategy = itertools.product(np.arange(1, 10.1, 2), (1, 0))
             else:
-                strategy = [1 / 3, 0.5, 1, 2, 3]
+                # strategy = [1 / 3, 1 / 2.5, 1 / 2, 1 / 1.5, 1, 1.5, 2, 2.5, 3]
+                strategy = [1 / 3, 1 / 2, 1, 2, 3]
         return strategy
 
     def pred_lc_risk(self, time_len=3., lc_direction=None):
@@ -233,7 +246,7 @@ class Game_Vehicle(Vehicle):
         # 目标路径
         target_direction = 0
         weaving_length = self.lane.road.end_weaving_pos - self.lane.road.start_weaving_pos
-        d_r = self.lane.road.end_weaving_pos - x - weaving_length / 2
+        d_r = self.lane.road.end_weaving_pos - x
         t_r = d_r / self.v
         if self.route_type == RouteType.diverge and lane_index not in self.destination_lane_indexes:
             current_lane_index = lane_index
@@ -297,16 +310,22 @@ class Game_Vehicle(Vehicle):
                     TF_end = TF_traj[-1]
                     PC_end = PC_traj[-1]
                     # 判断3s（速度调整时间）内能否以舒适的加减速度达到可行换道位置，用于MOBIL模型判断
-                    x_safe_min = TR_end.x + TR.length + self.time_safe * TR_end.vx
+                    x_safe_min = TR_end.x + self.length + self.time_safe * TR_end.vx
                     x_safe_max = TF_end.x - TF.length - self.time_safe * TF_end.vx
-                    if not x_safe_min <= self.x <= x_safe_max:
+                    # x_safe_min = TR_end.x + self.length
+                    # x_safe_max = TF_end.x - TF.length
+                    if x_safe_max < x_safe_min:
+                        # print(f"{lc_direction}_{adapt_time}_{gap}，x_safe_max={x_safe_max:.2f}，不换道")
+                        continue
+                    if not (x_safe_min <= self.x <= x_safe_max):
                         acc_1 = 2 * (x_safe_max - self.x - self.v * adapt_time) / adapt_time ** 2
                         acc_2 = 2 * (x_safe_min - self.x - self.v * adapt_time) / adapt_time ** 2
                         # 若(acc_1, acc_2)与[self.acc_max, - self.dec_max]的交集不为空，
                         # 则选择加速度绝对值最小的加速度作为调整加速度
-                        acc = np.array([acc_2, acc_1])
-                        acc = interval_intersection(acc, (- self.dec_max, self.acc_max))
+                        acc_ = np.array([acc_2, acc_1])
+                        acc = interval_intersection(acc_, (- self.dec_max, self.acc_max))
                         if acc is None or acc[0] == acc[1]:
+                            # print(f"{lc_direction}_{adapt_time}_{gap}，acc={acc_}，不换道")
                             continue
                         if acc[0] <= 0 <= acc[1]:
                             target_acc = 0
@@ -416,9 +435,9 @@ class Game_Vehicle(Vehicle):
             candidate_gap.sort(key=lambda x: x[1], reverse=True)
             gap_res, lc_prob = candidate_gap[0]
             self.lc_direction = gap_res.lc_direction
+            self.opti_gap = gap_res
 
             if isinstance(self, Game_H_Vehicle):
-                self.opti_gap = gap_res
                 self.lane_changing = True
 
     def _no_car_correction(self, gap, lc_direction):
@@ -561,6 +580,8 @@ class Game_A_Vehicle(Game_Vehicle):
         if self.is_gaming and self.is_game_leader and self.last_cal_step == 1 and self.lane is not None:
             self.update_rho_hat()
         self.state = self.get_state_for_traj()
+        if self.lane == self.target_lane and self.lane_changing:
+            self.lc_direction = 0
         if self.lane_changing or self.lc_direction != 0:
             # LC轨迹优化，如果博弈选择不换道，需要重新更新self.lane_changing，is_gaming以及target_lane
             if self.lane_changing:
@@ -603,6 +624,7 @@ class Game_A_Vehicle(Game_Vehicle):
             if isinstance(self.opti_game_res.TF, Game_A_Vehicle):
                 self.opti_game_res.TF.clear_game_stra()
         self.is_gaming = False
+        self.game_factor = 1
         self.lane_changing = False
         if remove_lc_direction:
             self.lc_direction = 0
@@ -610,6 +632,7 @@ class Game_A_Vehicle(Game_Vehicle):
         self.opti_game_res = None
         self.mpc_solver = None
         self.lc_conti_time = 0
+        self.last_cal_step = 0
 
     def update_rho_hat(self):
         """求解rho的范围，入股TR的rho_hat不在范围内，更新TR的rho_hat"""
@@ -624,38 +647,46 @@ class Game_A_Vehicle(Game_Vehicle):
             rho_real = sp.symbols("rho_real")
             # 定义不等式
             inequality = sp.Le(TR_real_lambda(rho_real), TR_esti_lambda(rho_real))  # f(x) <= g(x)
+            # print("inequality: ", inequality)
             # 求解不等式
             solution = sp.solve_univariate_inequality(
                 inequality, rho_real, relational=False, domain=Interval(0, 1))
 
-            print("ori rho_hat", self.rho_hat_s[TR.ID], end=" ")
-
             # 获取区间的上下限
-            lower_bound = float(solution.start)
-            upper_bound = float(solution.end)
+            try:
+                lower_bound = float(solution.start)
+                upper_bound = float(solution.end)
+            except:
+                lower_bound = 0
+                upper_bound = 1
+            print("cal rho_hat", lower_bound, upper_bound)
             # 更新TR的rho_hat
             rho_hat_range_before = self.rho_hat_s[TR.ID]
             # 取交集
             rho_hat_range = interval_intersection(
-                rho_hat_range_before, (lower_bound, upper_bound), print_flag=True
+                rho_hat_range_before,
+                (lower_bound, upper_bound), print_flag=True
             )
-            # if rho_hat_range is None:
-            #     rho_hat_range = (lower_bound, upper_bound)
-            self.rho_hat_s[TR.ID] = rho_hat_range
+            if rho_hat_range is not None:
+                self.rho_hat_s[TR.ID] = rho_hat_range
 
-            print("new rho_hat", self.rho_hat_s[TR.ID])
+            # print(
+            #     "solution: ", solution,
+            #     "ori rho_hat", self.rho_hat_s[TR.ID],
+            #     "new rho_hat", self.rho_hat_s[TR.ID]
+            # )
 
     def stackel_berg(self):
         """基于stackelberg主从博弈理论的换道策略，计算得到参考轨迹（无论是否换道）"""
         # 计算不同策略（换道时间）的最优轨迹和对应效用值
         # cal_game_matrix需要更新周边车辆的策略，stackel_berg函数只更新自身的策略
         self.game_res_list = self.cal_game_matrix()
-        if len(self.game_res_list) == 0:
+        game_cost_list = [res.EV_cost for res in self.game_res_list if res.EV_cost != np.inf]
+        if len(game_cost_list) == 0:
             self.reset_lc_game()
             print("没有可行的博弈策略")
             return
         # 获取最优策略
-        game_cost_list = [res.EV_cost for res in self.game_res_list]
         # 选择效用值最小的策略
         min_cost_idx = np.argmin(game_cost_list)
         opti_game_res = self.game_res_list[min_cost_idx]
@@ -668,16 +699,20 @@ class Game_A_Vehicle(Game_Vehicle):
         x_opt = opti_df.iloc[: 12].to_numpy().astype(float)
         T_opt, is_lc = opti_df.iloc[14]
 
-        if is_lc == 0 and abs(self.y_c - self.lane.y_center) < 0.5:
+        if (is_lc == 0 and abs(self.y_c - self.lane.y_center) < 0.5
+                and abs(self.yaw) < 1 / 180 * np.pi):
             self.reset_lc_game()
             return
-
-        self.last_cal_step = 0
 
         self.reset_lc_game(remove_lc_direction=False)
 
         self.opti_game_res: GameRes = opti_game_res
-        self.opti_game_res.TR.set_game_stra(self.opti_game_res.TR_stra, self)
+        TR_stra = self.opti_game_res.TR_stra
+        # if isinstance(self.opti_game_res.TR, Game_H_Vehicle):
+        #     # 只要TR想让EV换道，就不能选择小于1的紧随策略
+        #     if self.opti_game_res.TR_real_EV_stra[1] == 1:
+        #         TR_stra = np.clip(TR_stra, 1, 10)
+        self.opti_game_res.TR.set_game_stra(TR_stra, self)
         if isinstance(self.opti_game_res.TF, Game_A_Vehicle):
             self.opti_game_res.TF.set_game_stra(self.opti_game_res.TF_stra, self)
         self.opti_game_res.EV_lc_step = np.round(T_opt / self.dt).astype(int)
@@ -685,6 +720,7 @@ class Game_A_Vehicle(Game_Vehicle):
 
         self.lane_changing = True
         self.is_gaming = True
+        self.game_factor = 1
         if self.lc_direction == -1:
             self.target_lane = self.left_lane
         elif self.lc_direction == 1:
@@ -740,6 +776,7 @@ class Game_A_Vehicle(Game_Vehicle):
             TR_real_stra, TF_stra, EV_stra, CP_stra, CR_stra = np.nan, np.nan, np.nan, np.nan, np.nan
             TR_real_cost, TF_cost, EV_cost, CP_cost, CR_cost = np.nan, np.nan, np.nan, np.nan, np.nan
             TR_esti_lambda = TR_real_lambda = None
+            TR_real_EV_stra = np.nan
             if isinstance(TR, Game_H_Vehicle) and isinstance(TF, Game_H_Vehicle):
                 # ego与TR的博弈
                 TR_strategy = TR.get_strategies(is_lc=False, single_stra=single_stra)
@@ -760,9 +797,9 @@ class Game_A_Vehicle(Game_Vehicle):
                 # cost_df_temp = cost_df[
                 #     (cost_df["ego_cost"] != np.inf) & (cost_df["ego_stra"].apply(lambda x: x[1]))]
                 # cost_df_temp = cost_df[cost_df["ego_cost"] != np.inf]
-                # if len(cost_df_temp) == 0:
-                #     continue
                 cost_df_temp = cost_df
+                if len(cost_df_temp) == 0:
+                    continue
                 min_TR_cost_idx = cost_df_temp.groupby('ego_stra')['TR_cost_hat'].idxmin()  # 找到最小的TR_cost值
                 min_cost_idx = cost_df_temp.loc[min_TR_cost_idx]["ego_cost"].idxmin()  # 找到最小的cost值
                 EV_stra = cost_df_temp.loc[min_cost_idx]["ego_stra"]
@@ -775,6 +812,7 @@ class Game_A_Vehicle(Game_Vehicle):
                 min_cost_idx_real = cost_df_temp.loc[min_TR_cost_idx_real]["ego_cost"].idxmin()  # 找到最小的cost值
                 TR_real_stra = cost_df_temp.loc[min_cost_idx_real]["TR_stra"]
                 TR_real_cost = cost_df_temp.loc[min_cost_idx_real]["TR_cost_real"]
+                TR_real_EV_stra = cost_df_temp.loc[min_cost_idx_real]["ego_stra"]
 
                 TR_index = cost_df_temp[
                     (cost_df_temp["ego_stra"] == EV_stra) & (cost_df_temp["TR_stra"] == TR_real_stra)
@@ -783,10 +821,18 @@ class Game_A_Vehicle(Game_Vehicle):
                 TR_esti_lambda = traj_data_opti.TR_cost_lambda
                 TR_real_lambda = traj_data_real.TR_cost_lambda
 
-                print(
-                    "TR_cost_hat: ", EV_opti_series["TR_cost_hat"],
-                    "TR_real_cost: ", TR_real_cost
-                )
+                # u_hat = TR_esti_lambda(TR.rho)
+                # u_real = TR_real_lambda(TR.rho)
+                # print(
+                #     "TR_cost_hat: ", u_hat,
+                #     "TR_cost_real: ", u_real
+                # )
+                # assert u_hat >= u_real
+
+                # print(
+                #     "TR_cost_hat: ", EV_opti_series["TR_cost_hat"],
+                #     "TR_real_cost: ", TR_real_cost
+                # )
 
                 # print(cost_df[["ego_stra", "ego_cost"]])
             elif isinstance(TR, Game_H_Vehicle) and isinstance(TF, Game_A_Vehicle):
@@ -804,10 +850,10 @@ class Game_A_Vehicle(Game_Vehicle):
                 )
 
                 cost_df["total_cost"] = cost_df["ego_cost"] + TF.game_co * cost_df["TF_cost_real"]  # 合作效用
-                # cost_df_temp = cost_df[cost_df["total_cost"] != np.inf]
-                # if len(cost_df_temp) == 0:
-                #     continue
                 cost_df_temp = cost_df
+                # cost_df_temp = cost_df[cost_df["total_cost"] != np.inf]
+                if len(cost_df_temp) == 0:
+                    continue
                 # 找到最小的TR_cost值
                 min_TR_cost_idx = cost_df_temp.groupby(by=["ego_stra", "TF_stra"])['TR_cost_hat'].idxmin()
                 min_cost_idx = cost_df_temp.loc[min_TR_cost_idx]["total_cost"].idxmin()  # 找到最小的cost值
@@ -824,10 +870,11 @@ class Game_A_Vehicle(Game_Vehicle):
                 min_cost_idx_real = cost_df_temp.loc[min_TR_cost_idx_real]["total_cost"].idxmin()
                 TR_real_stra = cost_df_temp.loc[min_cost_idx_real]["TR_stra"]
                 TR_real_cost = cost_df_temp.loc[min_cost_idx_real]["TR_cost_real"]
+                TR_real_EV_stra = cost_df_temp.loc[min_cost_idx_real]["ego_stra"]
 
                 TR_index = cost_df_temp[
                     (cost_df_temp["ego_stra"] == EV_stra) & (cost_df_temp["TR_stra"] == TR_real_stra)
-                    & (cost_df_temp["ego_stra"] == TF_stra)
+                    & (cost_df_temp["TF_stra"] == TF_stra)
                     ]["index"].values[0]
                 traj_data_real = traj_data[TR_index]
                 TR_esti_lambda = traj_data_opti.TR_cost_lambda
@@ -907,9 +954,10 @@ class Game_A_Vehicle(Game_Vehicle):
             game_res_list.append(GameRes(
                 self.lane.step_,
                 cost_df, self, TF, TR, PC, CR,
-                EV_stra, TF_stra, TR_real_stra, CR_stra, CP_stra,
-                EV_cost, TF_cost, TR_real_cost, CR_cost, CP_cost,
-                EV_opti_series, traj_data_opti,
+                EV_stra=EV_stra, TF_stra=TF_stra, TR_stra=TR_real_stra, CR_stra=CR_stra, CP_stra=CP_stra,
+                EV_cost=EV_cost, TF_cost=TF_cost, TR_cost=TR_real_cost, CR_cost=CR_cost, CP_cost=CP_cost,
+                TR_real_EV_stra=TR_real_EV_stra,
+                EV_opti_series=EV_opti_series, traj_data=traj_data_opti,
                 EV_safe_cost=EV_opti_series.safe_cost,
                 EV_com_cost=EV_opti_series.com_cost,
                 EV_eff_cost=EV_opti_series.eff_cost,
@@ -987,10 +1035,10 @@ class Game_A_Vehicle(Game_Vehicle):
         else:
             EV_traj = None
 
-        TF_rho_hat = TF.rho if isinstance(TF, Game_A_Vehicle) else self._get_rho_hat_s([TF])[0]
-        TR_rho_hat = TR.rho if isinstance(TR, Game_A_Vehicle) else self._get_rho_hat_s([TR])[0]
-        CP_rho_hat = PC.rho if isinstance(PC, Game_A_Vehicle) else self._get_rho_hat_s([PC])[0]
-        CR_rho_hat = CR.rho if isinstance(CR, Game_A_Vehicle) else self._get_rho_hat_s([CR])[0]
+        TF_rho_hat = TF.rho if isinstance(TF, Game_A_Vehicle) else self.get_rho_hat_s([TF])[0]
+        TR_rho_hat = TR.rho if isinstance(TR, Game_A_Vehicle) else self.get_rho_hat_s([TR])[0]
+        CP_rho_hat = PC.rho if isinstance(PC, Game_A_Vehicle) else self.get_rho_hat_s([PC])[0]
+        CR_rho_hat = CR.rho if isinstance(CR, Game_A_Vehicle) else self.get_rho_hat_s([CR])[0]
 
         # TF
         TF_cost_hat, TF_real_cost, TF_cost_lambda = cal_other_cost(
@@ -1006,7 +1054,8 @@ class Game_A_Vehicle(Game_Vehicle):
             # TR
             TR_cost_hat, TR_real_cost, TR_cost_lambda = cal_other_cost(
                 TR, cal_TR_cost, TR_rho_hat, TR_traj,
-                [EV_traj, TF_traj], v_length_s=[self.length, TF.length]
+                [EV_traj, TF_traj], v_length_s=[self.length, TF.length],
+                route_cost=route_cost if EV_traj is not None else 0, print_cost=False
             )
             CR_cost_hat, CR_real_cost, CR_cost_lambda = cal_other_cost(
                 CR, cal_CR_cost, CR_rho_hat, CR_traj,
@@ -1015,7 +1064,8 @@ class Game_A_Vehicle(Game_Vehicle):
         else:
             TR_cost_hat, TR_real_cost, TR_cost_lambda = cal_other_cost(
                 TR, cal_TR_cost, TR_rho_hat, TR_traj,
-                [TR_PC_traj], v_length_s=[TF.length]
+                [TR_PC_traj], v_length_s=[TF.length],
+                print_cost=False
             )
             CR_cost_hat, CR_real_cost, CR_cost_lambda = cal_other_cost(
                 CR, cal_CR_cost, CR_rho_hat, CR_traj,
@@ -1097,7 +1147,7 @@ class Game_A_Vehicle(Game_Vehicle):
             [0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps
         ])
         b_ineq3 = np.array([3] * len(A_ineq3))
-        b_ineq4 = np.array([self.vel_desire * 1.5] * len(A_ineq3))
+        b_ineq4 = np.array([self.vel_desire + 5] * len(A_ineq3))
         constraints += [A_ineq3 @ x[: 6] >= b_ineq3]
         constraints += [A_ineq3 @ x[: 6] <= b_ineq4]
 
@@ -1120,13 +1170,15 @@ class Game_A_Vehicle(Game_Vehicle):
             self.pred_traj_s(
                 T,
                 vehicles,
-                stra_s=[TF_stra, TR_stra, CP_stra, CR_stra]
+                stra_s=[TF_stra, TR_stra, CP_stra, CR_stra],
             )
 
         xt_TF, dxt_TF = TF_traj[:, 0], TF_traj[:, 1]
         xt_TR, dxt_TR = TR_traj[:, 0], TR_traj[:, 1]
         xt_PC, dxt_PC = PC_traj[:, 0], PC_traj[:, 1]
         xt_CR, dxt_CR = CR_traj[:, 0], CR_traj[:, 1]
+
+        scale = 0.5
 
         if lc_direction == 0:
             # PC
@@ -1136,23 +1188,30 @@ class Game_A_Vehicle(Game_Vehicle):
             x_pos = A_ineq_7 @ x[: 6]  # 纵向位置
             v = dxt @ x[:6]
             PC_rear_x = xt_PC - l_PC
-            b_ineq_7_part1 = PC_rear_x - v * self.time_safe
+            b_ineq_7_part1 = PC_rear_x - v * self.time_safe * scale
             constraints += [x_pos <= b_ineq_7_part1]
             b_ineq_7_part2 = PC_rear_x - v * self.time_wanted
-            constraints += [x[12] >= x_pos - b_ineq_7_part2]
+            constraints += [x[12] >= (x_pos - b_ineq_7_part2) / (self.state[1] * self.time_wanted)]
 
             # CR
             CR_rear_x = xt_CR + l_CR
-            b_ineq_8_part1 = CR_rear_x + self.time_safe * dxt_CR
+            b_ineq_8_part1 = CR_rear_x + CR.time_safe * dxt_CR * scale
             constraints += [x_pos >= b_ineq_8_part1]
-            b_ineq_8_part2 = CR_rear_x + self.time_wanted * dxt_CR
-            constraints += [x[13] >= b_ineq_8_part2 - x_pos]
+            b_ineq_8_part2 = CR_rear_x + CR.time_wanted * dxt_CR
+            constraints += [x[13] >= (b_ineq_8_part2 - x_pos) / (dxt_CR[0] * CR.time_wanted)]
 
             # 安全性
             constraints += [x[14] == 0]
             constraints += [x[15] == 0]
             # safe_cost = x[12] + cvxpy.abs(v[-1] - dxt_PC[-1]) + cvxpy.abs(v[-1] - dxt_CR[-1])
-            safe_cost = cvxpy.max(cvxpy.hstack([[0], x[12: 14]]))
+            safe_cost = cvxpy.max(cvxpy.hstack([[-1], x[12: 14]]))
+
+            # 终端平顺性
+            # ddx1为0
+            A_ = np.array([
+                0, 0, 2, 6 * T, 12 * T ** 2, 20 * T ** 3  # ddx1
+            ])
+            end_cost = (A_ @ x[: 6] - dxt_PC[-1]) / 10
 
             step = np.nan
         else:
@@ -1179,54 +1238,67 @@ class Game_A_Vehicle(Game_Vehicle):
             dxt_before = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in lc_before_times])
             v_before = dxt_before @ x[:6]
             PC_rear_x = xt_PC[:step] - l_PC
-            b_ineq_7_part1 = PC_rear_x - v_before * self.time_safe
+            b_ineq_7_part1 = PC_rear_x - v_before * self.time_safe * scale
             constraints += [x_pos_before <= b_ineq_7_part1]
             b_ineq_7_part2 = PC_rear_x - v_before * self.time_wanted
-            constraints += [x[12] >= x_pos_before - b_ineq_7_part2]
+            constraints += [x[12] >= (x_pos_before - b_ineq_7_part2) / (self.state[1] * self.time_wanted)]
 
             # CR
             CR_head_x = xt_CR[:step] + l_CR
             CR_v = dxt_CR[:step]
-            b_ineq_10_part1 = CR_head_x + self.time_safe * CR_v
+            b_ineq_10_part1 = CR_head_x + CR.time_safe * CR_v * scale
             constraints += [x_pos_before >= b_ineq_10_part1]
-            b_ineq_10_part2 = CR_head_x + self.time_wanted * CR_v
-            constraints += [x[13] >= b_ineq_10_part2 - x_pos_before]
+            b_ineq_10_part2 = CR_head_x + CR.time_wanted * CR_v
+            constraints += [x[13] >= (b_ineq_10_part2 - x_pos_before) / (CR_v[0] * CR.time_wanted)]
 
             # TF
             dxt_after = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in lc_after_times])
             v_after = dxt_after @ x[:6]
             TF_rear_x = xt_TF[step:] - l_TF
-            b_ineq_8_part1 = TF_rear_x - v_after * self.time_safe
+            b_ineq_8_part1 = TF_rear_x - v_after * self.time_safe * scale
             constraints += [x_pos_after <= b_ineq_8_part1]
             b_ineq_8_part2 = TF_rear_x - v_after * self.time_wanted
-            constraints += [x[14] >= x_pos_after - b_ineq_8_part2]
+            constraints += [x[14] >= (x_pos_after - b_ineq_8_part2) / (self.state[1] * self.time_wanted)]
 
             # TR
             TR_head_x = xt_TR[step:] + l_TR
             TR_v = dxt_TR[step:]
-            b_ineq_9_part1 = TR_head_x + self.time_safe * TR_v
+            b_ineq_9_part1 = TR_head_x + TR.time_safe * TR_v * scale
             constraints += [x_pos_after >= b_ineq_9_part1]
-            b_ineq_9_part2 = TR_head_x + self.time_wanted * TR_v
-            constraints += [x[15] >= b_ineq_9_part2 - x_pos_after]
+            b_ineq_9_part2 = TR_head_x + TR.time_wanted * TR_v
+            constraints += [x[15] >= (b_ineq_9_part2 - x_pos_after) / (TR_v[0] * TR.time_wanted)]
 
             # 安全性
-            safe_cost = cvxpy.max(cvxpy.hstack([[0], x[12: 16]]))
+            safe_cost = cvxpy.max(cvxpy.hstack([[-1], x[12: 16]]))
+
+            # 终端平顺性
+            # ddx1为0
+            A_ = np.array([
+                0, 0, 2, 6 * T, 12 * T ** 2, 20 * T ** 3  # ddx1
+            ])
+            end_cost = (A_ @ x[: 6] - dxt_TF[-1]) / 10
+
+        # 终止ax
+        A3 = np.array([
+            0, 0, 2, 6 * T, 12 * T ** 2, 20 * T ** 3,  # ddx1
+        ])
+        end_cost += (A3 @ x[: 6]) / self.acc_max
 
         # 舒适性：横纵向jerk目标
-        k_c = 0.5
-        A_xy_acc = np.array([
-            [0, 0, 2, 6 * t, 12 * t ** 2, 20 * t ** 3] for t in time_steps
+        A_xy_jerk = np.array([
+            [0, 0, 0, 6, 24 * t, 60 * t ** 2] for t in time_steps
         ])
         # com_cost = 0
-        com_cost = k_c * cvxpy.max(cvxpy.abs(A_xy_acc @ x[:6]))
-        com_cost += k_c * cvxpy.max(cvxpy.abs(A_xy_acc @ x[6:12]))
+        com_cost = 0.5 * cvxpy.max(cvxpy.abs(A_xy_jerk @ x[:6]))
+        com_cost += 0.5 * cvxpy.max(cvxpy.abs(A_xy_jerk @ x[6:12]))
+        com_cost = com_cost / self.JERK_MAX + end_cost
 
         # 效率
         A_dxy = np.array([
             [0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps
         ])
         vx = A_dxy @ x[:6]
-        eff_cost = (vx[0] - cvxpy.mean(vx))
+        eff_cost = (vx[0] - cvxpy.mean(vx)) / 10
 
         _, route_cost = self.cal_route_cost(self.lane.index + lc_direction, self.x)
         _, route_ori = self.cal_route_cost(self.lane.index, self.x)
@@ -1237,9 +1309,14 @@ class Game_A_Vehicle(Game_Vehicle):
         # route_cost += (x_pos[-1] - x_pos[0]) / (10 * self.state[1])
         # route_cost = route_cost * 4
 
+        safe_cost = self.k_s * safe_cost
+        com_cost = self.k_c * com_cost
+        eff_cost = self.k_e * eff_cost
+        route_cost = self.k_r * route_cost
+
         cost = ((1 - self.rho) * (
-                self.k_s * safe_cost + self.k_c * com_cost
-        ) + self.rho * (self.k_e * eff_cost) + route_cost * self.k_r)
+                safe_cost + com_cost
+        ) + self.rho * eff_cost + route_cost)
 
         result = np.hstack([[np.inf], np.tile(np.nan, 12), [np.nan, y1]])
         prob = cvxpy.Problem(cvxpy.Minimize(cost), constraints)
@@ -1275,7 +1352,7 @@ class Game_A_Vehicle(Game_Vehicle):
                 pred_traj_s.append((None, None, None))
                 continue
             l = v.length
-            traj, PC_traj = v.pred_self_traj(T, stra, to_ndarray=True)  # ATTENTION
+            traj, PC_traj = v.pred_self_traj(T, stra, to_ndarray=True, ache=True)  # ATTENTION
             traj: np.ndarray = traj
             PC_traj: np.ndarray = PC_traj
             pred_traj_s.append((traj, l, PC_traj))
@@ -1344,7 +1421,7 @@ class Game_O_Vehicle(Game_H_Vehicle):
 
     def pred_self_traj(self, time_len, stra=None,
                        target_lane: "LaneAbstract" = None,
-                       PC_traj=None, to_ndarray=True):
+                       PC_traj=None, to_ndarray=True, ache=False):
         step_num = round(time_len / self.dt) + 1
         if to_ndarray:
             traj_list = [self.get_traj_point().to_ndarray()] * step_num

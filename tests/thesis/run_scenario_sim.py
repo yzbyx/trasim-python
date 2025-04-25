@@ -88,6 +88,7 @@ def run_road(road: Road):
         lanes[i].data_container.config(save_info=save_info, basic_info=False)
 
     dhw = cf_IDM_equilibrium_jit(s0=2, s1=0, v0=15, T=1.6, delta=4, v=10) + v_length
+    dhw += 5
 
     x_base = upstream_end + 50
 
@@ -108,6 +109,7 @@ def run_road(road: Road):
     )
     veh_TR.no_lc = True
     veh_TR.rho = 0.9
+    # veh_TR.game_co = 0
 
     veh_TF: Game_Vehicle = lanes[0].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
@@ -119,16 +121,16 @@ def run_road(road: Road):
 
     veh_EV: Game_A_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_AV,
-        x_base - dhw - 10, 10, 0,
+        x_base - dhw, 10, 0,
         CFM.TPACC, {"v0": 10}, {"color": COLOR.green},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.merge
     )
     # veh_EV.no_lc = True
-    veh_EV.rho = 0.7
+    veh_EV.rho = 0.5
 
     veh_PC: Game_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-        x_base - 5, 10, 0,
+        x_base, 10, 0,
         CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[1], route_type=RouteType.auxiliary
     )
@@ -144,7 +146,12 @@ def run_road(road: Road):
     TR_stra_dict = {}
     for step, stage in sim.run(data_save=True, has_ui=has_ui, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+        # if stage == 2:
+        #     veh_TR.is_gaming = True
+        #     veh_TR.game_factor = 1 / 3
+
         if stage == 4:
+            print(veh_TR.ID, veh_TR.is_gaming, veh_TR.game_factor)
             sim.ui.focus_on(veh_EV)
             sim.ui.plot_pred_traj()
             sim.ui.plot_hist_traj()
@@ -169,16 +176,17 @@ def run_road(road: Road):
             if veh_EV.opti_game_res is not None:
                 print("-" * 10 + "opti_game_res" + "-" * 10)
                 print(veh_EV.opti_game_res)
-
-            print(veh_EV.lc_conti_time)
-
-            if veh_EV.opti_game_res is not None:
-                print("-" * 10 + "opti_game_res" + "-" * 10)
-                print(veh_EV.opti_game_res)
+                print(veh_EV.rho_hat_s)
                 if veh_EV.opti_game_res.TR_stra is not None:
                     tr_id = veh_EV.opti_game_res.TR.ID
+                    if isinstance(veh_EV.opti_game_res.TR, Game_A_Vehicle):
+                        rho = veh_EV.opti_game_res.TR.rho
+                    else:
+                        rho = np.mean(veh_EV.rho_hat_s[tr_id])
                     TR_stra_dict[step] = \
-                        (tr_id, veh_EV.opti_game_res.TR_stra, np.mean(veh_EV.rho_hat_s[tr_id]))
+                        (tr_id, veh_EV.opti_game_res.TR_stra, rho)
+
+            print(veh_EV.lc_conti_time)
 
     # 绘制激进度估计与TR策略变化曲线
     tr_id_s = []
@@ -203,7 +211,7 @@ def run_road(road: Road):
         # 设置坐标轴范围
         mm = 1 / 25.4  # mm转inch
         _width = 70 * mm * 2  # 图片宽度英寸
-        _ratio = 5 / 14  # 图片长宽比
+        _ratio = 3 / 14  # 图片长宽比
         figsize = (_width, _width * _ratio)
 
         fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -227,8 +235,10 @@ def run_road(road: Road):
         ax.set_ylabel("数值")
         ax.legend(fontsize=9)
 
-        plt.ioff()
-        plt.show()
+        fig.savefig(
+            fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\merging_HV_HV_TR_stra.png",
+            dpi=300, bbox_inches='tight'
+        )
 
     df = sim.data_to_df()
 

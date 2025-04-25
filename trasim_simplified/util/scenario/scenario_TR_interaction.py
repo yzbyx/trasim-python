@@ -60,6 +60,9 @@ class ScenarioTRInteraction(Scenario):
 
         self.get_save_file_name(self.ev_rho)
 
+        # lane_end_ori = self.traj_data.EV_traj["laneId"].values[-1]
+        # ev = self.surr_ids[self.ev_id][0].la
+
         TR_stra_dict = {}
         for step, stage in self.road.run(
                 data_save=True, has_ui=has_ui, frame_rate=-1, warm_up_step=0,
@@ -82,9 +85,12 @@ class ScenarioTRInteraction(Scenario):
 
                 print("-" * 10 + "basic_info" + "-" * 10)
                 print("step:", step, ev)
-                print("-" * 10 + "gap_res_list" + "-" * 10)
-                for res in ev.gap_res_list:
-                    print(res)
+
+                if ev.gap_res_list is not None:
+                    print("-" * 10 + "gap_res_list" + "-" * 10)
+                    for res in ev.gap_res_list:
+                        print(res)
+
                 if ev.opti_gap is not None:
                     print("-" * 10 + "opti_gap_res" + "-" * 10)
                     print(ev.opti_gap)
@@ -135,7 +141,7 @@ class ScenarioTRInteraction(Scenario):
 
         self.save_file_name = \
             (fr"{self.dataset_name}_{self.pattern_name}_{self.traj_data.track_id}_"
-             fr"{self.mode}_HV-{self.ev_rho}_TR-{self.tr_rho}")
+             fr"{self.mode}_EV-{self.ev_rho}_TR-{self.tr_rho}")
         return self.save_file_name
 
     def _load_stra_data(self):
@@ -180,8 +186,8 @@ class ScenarioTRInteraction(Scenario):
 
             # 设置坐标轴范围
             mm = 1 / 25.4  # mm转inch
-            _width = 70 * mm * 2  # 图片宽度英寸
-            _ratio = 5 / 14  # 图片长宽比
+            _width = 70 * mm  # 图片宽度英寸
+            _ratio = 5 / 7  # 图片长宽比
             figsize = (_width, _width * _ratio)
 
             fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -212,7 +218,7 @@ class ScenarioTRInteraction(Scenario):
 
         plot_scenario_twin(
             traj_s, traj_names=traj_name, road=self.road,
-            fig_name=self.save_file_name
+            fig_name=self.save_file_name, mode=self.mode
         )
 
 
@@ -226,13 +232,18 @@ if __name__ == '__main__':
             name = f"{pattern_traj.dataset_name}_{pattern_name}_{pattern_traj.track_id}"
             if name in [
                 "CitySim_驶入_959", "CitySim_驶入_1353", "CitySim_驶入_2648", "CitySim_驶入_5053",
-                "CitySim_驶入_6218", "NGSIM_预期行为_464"
+                "CitySim_驶入_6218", "NGSIM_预期行为_464", "NGSIM_预期行为_243"
             ]:
                 continue
-            if name not in ["NGSIM_预期行为_243"]:
-                continue
+            # if name not in ["NGSIM_预期行为_243"]:
+            #     continue
             # if pattern_traj.dataset_name == "NGSIM":
             #     continue
+            if pattern_traj.TR_traj is None:
+                continue
+            if (pattern_traj.EV_traj["myLocalLon"].values[0] -
+                pattern_traj.TR_traj["myLocalLon"].values[0] > 0):
+                continue
             print(name)
             base_path = r"E:\BaiduSyncdisk\car-following-model\tests\thesis\data"
             sce = ScenarioTRInteraction(
@@ -250,6 +261,7 @@ if __name__ == '__main__':
             cf_params = load_from_pickle(fr"{base_path}\{name}_cf_params.pkl")
             print(cf_params)
 
+            car_params = {}
             if not os.path.exists(fr"{base_path}\{name}_car_params.pkl"):
                 car_params = sce.opti_ade(cf_params)
                 save_to_pickle(
@@ -260,7 +272,7 @@ if __name__ == '__main__':
             print(car_params)
 
             ev_rho = 0.5
-            for tr_rho in [0.5, 0.1, 0.9]:
+            for tr_rho in [0.1, 0.5, 0.9]:
                 save_file_name = sce.get_save_file_name(ev_rho=ev_rho, tr_rho=tr_rho)
                 print(save_file_name)
                 if not os.path.exists(fr"{base_path}\{save_file_name}.pkl"):

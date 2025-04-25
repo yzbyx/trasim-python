@@ -5,6 +5,8 @@
 # Software: PyCharm
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
+
 if TYPE_CHECKING:
     from trasim_simplified.core.agent.vehicle import Vehicle
 
@@ -58,13 +60,19 @@ class CFModel_TPACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        return self._v0
+        vf_change = 0
+        if self.veh_surr.ev.is_gaming:
+            game_factor = self.veh_surr.ev.game_factor
+            if game_factor < 1:
+                game_factor = 1 / game_factor
+                vf_change = ((game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor))
+        return self._v0 + vf_change
 
     def get_max_dec(self):
         return 8
 
     def get_max_acc(self):
-        return 5
+        return 8
 
     def get_com_acc(self):
         return self._a
@@ -76,14 +84,16 @@ class CFModel_TPACC(CFModel):
         return self._s0
 
     def get_time_safe(self):
-        return self._safe_tau
+        return self._safe_tau * self.scale
 
     def get_time_wanted(self):
-        return self._thw
+        return self._thw * self.scale
 
     def _update_dynamic(self):
-        self.scale = self.veh_surr.ev.game_factor if self.veh_surr.ev.is_gaming else 1
-        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length - self.get_safe_s0() * self.scale
+        self.scale = self.veh_surr.ev.game_factor \
+            if (self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader) else 1
+        self.gap = (self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
+                    - self.get_safe_s0() * self.scale)
         self.dt = self.veh_surr.ev.lane.dt
         self._update_v_safe()
 
@@ -131,6 +141,13 @@ class CFModel_TPACC(CFModel):
 
         is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
         v_c = v + dt * max(- dec_, min(acc, acc_))
+
+        if self.veh_surr.ev.is_gaming:
+            game_factor = self.veh_surr.ev.game_factor
+            if game_factor < 1:
+                game_factor = 1 / game_factor
+                v_c += ((game_factor * 8 * self.dt) *
+                        np.sign(1 - self.veh_surr.ev.game_factor))
 
         v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
         # # v_safe = v_free

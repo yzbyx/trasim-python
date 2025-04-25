@@ -268,9 +268,12 @@ class Scenario:
 
                 print("-" * 10 + "basic_info" + "-" * 10)
                 print("step:", step, ev)
-                print("-" * 10 + "gap_res_list" + "-" * 10)
-                for res in ev.gap_res_list:
-                    print(res)
+
+                if ev.gap_res_list is not None:
+                    print("-" * 10 + "gap_res_list" + "-" * 10)
+                    for res in ev.gap_res_list:
+                        print(res)
+
                 if ev.opti_gap is not None:
                     print("-" * 10 + "opti_gap_res" + "-" * 10)
                     print(ev.opti_gap)

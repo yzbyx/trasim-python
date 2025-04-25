@@ -183,7 +183,8 @@ def plot_scenario(traj_s, traj_names, road: 'Road', fig_name):
     # ax.plot(EV_traj["frame"].values * dt, EV_traj["speed"].values, color=colors[1], label="EV")
 
 
-def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=ScenarioMode.NO_INTERACTION):
+def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name,
+                       mode=ScenarioMode.NO_INTERACTION):
     min_x_list = []
     min_y_list = []
     max_x_list = []
@@ -228,7 +229,7 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=Scenario
     for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
         if traj_ is None or len(traj_) == 0:
             continue
-        alpha = 1 if name == "EV" else 0.2
+        alpha = 1 if name in ["EV", "TR"] else 0.2
         # 计算纵向行为模式
         res = lon_model.predict(traj_[TI.localLonAcc].fillna(0).values.reshape(-1, 1))
         # 绘制纵向行为模式
@@ -247,7 +248,7 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=Scenario
                 color="k", alpha=alpha, linewidth=0.5)
 
         # 绘制ori轨迹
-        if name == "EV":
+        if name in ["EV", "TR"]:
             ax.plot(traj_[TI.xCenterGlobal + "_ori"].values,
                     traj_[TI.yCenterGlobal + "_ori"].values,
                     color="r", alpha=1, linewidth=0.5)
@@ -279,12 +280,14 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=Scenario
         # 行列间距缩小
         labelspacing=0.1,    # 标签间垂直间距
         handletextpad=0.1,   # 符号与标签水平间距
-        # borderpad=1.0,       # 边框内边距
         columnspacing=0.1,   # 多列图例的列间距（若有多列）
     )
 
+    # 去除第二个__之间的文字
+    text_name_list = fig_name.split("_")
+    text_name = "-".join([text_name_list[0]] + text_name_list[2:])
     ax.text(
-        0.95, 0.95, fig_name.replace("_", "-"),
+        0.95, 0.95, text_name,
         fontsize=fontsize, color="black", ha='right', va='top',
         transform=ax.transAxes
     )
@@ -295,9 +298,12 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=Scenario
         fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_2d_traj.tif",
         dpi=300, pil_kwargs={"compression": "tiff_lzw"})
 
-    plot_xy_info(traj_s, traj_names, colors, fig_name, TI.speed)
-    # plot_xy_info(traj_s, traj_names, colors, fig_name, TI.acc)
+    plot_ttc(traj_s, traj_names, fig_name)
+    plot_xy_info(traj_s, traj_names, fig_name, mode=mode)
 
+
+def plot_ttc(traj_s, traj_names, fig_name):
+    colors = sns.color_palette('tab20', n_colors=len(traj_s))
     fig, ax = get_fig_ax(scale=1)
     # 绘制TTC曲线
     for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
@@ -336,87 +342,62 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name, mode=Scenario
         dpi=300, pil_kwargs={"compression": "tiff_lzw"}
     )
 
-    # 绘制EV横摆角
-    fig, ax = get_fig_ax(scale=1)
-    for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
-        if name == "EV":
-            ax.plot(traj_[TI.time].values, traj_[TI.yaw].values,
-                    color=colors[i], label=name)
-            ax.plot(traj_[TI.time].values, traj_[TI.yaw + "_ori"].values,
-                    color=colors[i], label=name + "$_{ori}$",
-                    linestyle="--", alpha=0.5)
-    ax.legend(fontsize=fontsize, frameon=False)
-    ax.set_xlabel("时间 (s)")
-    ax.set_ylabel("横摆角 (rad)")
-    fig.savefig(
-        fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_yaw.tif",
-        dpi=300, pil_kwargs={"compression": "tiff_lzw"}
-    )
 
+def plot_xy_info(traj_s, traj_names, fig_name, mode=None, surr_name=None):
+    if surr_name is None:
+        surr_name = ["EV", "TR", "TP", "CP", "CR"]
 
-def plot_xy_info(traj_s, traj_names, colors, fig_name, info_name):
-    fig, ax = get_fig_ax(scale=1)
-    # 绘制各车辆的速度曲线
-    for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
-        traj_: pd.DataFrame = traj_
-        if traj_ is None or len(traj_) == 0 or name not in ["EV", "TR", "TP", "CP", "CR"]:
-            continue
-        z_order = 10 if name == "EV" else 1
-        ax.plot(traj_[TI.time].values,
-                traj_[info_name].values * np.cos(traj_[TI.yaw]),
-                color=colors[i],
-                label=name, zorder=z_order)
-        if name == "EV":
-            # 绘制ev的真实速度曲线
-            ax.plot(traj_[TI.time].values,
-                    traj_[info_name + "_ori"].values * np.cos(traj_[TI.yaw + "_ori"].values),
-                    color=colors[i], label="EV$_{ori}$",
-                    linestyle="--", linewidth=1, zorder=0, alpha=0.5)
-    ax.legend(
-        fontsize=fontsize, frameon=False,
-        ncol=4, loc='lower center',
-        bbox_to_anchor=(0.5, 1.01),
-        # 行列间距缩小
-        labelspacing=0.1,    # 标签间垂直间距
-        handletextpad=0.1,   # 符号与标签水平间距
-        # borderpad=1.0,       # 边框内边距
-        columnspacing=0.1,   # 多列图例的列间距（若有多列）
-    )
-    ax.set_xlabel("时间 (s)")
-    ax.set_ylabel("纵向速度 (m/s)")
-    fig.savefig(
-        fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_{info_name}_x.tif",
-        dpi=300, pil_kwargs={"compression": "tiff_lzw"})
+    colors = sns.color_palette('tab20', n_colors=len(traj_names))
 
-    # 绘制各车辆的速度曲线
-    fig, ax = get_fig_ax(scale=1)
-    for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
-        traj_: pd.DataFrame = traj_
-        if traj_ is None or len(traj_) == 0 or name not in ["EV", "TR", "TP", "CP", "CR"]:
-            continue
-        z_order = 10 if name == "EV" else 1
-        ax.plot(traj_[TI.time].values, traj_[info_name].values * np.sin(traj_[TI.yaw]),
-                color=colors[i],
-                label=name, zorder=z_order)
-        if name == "EV":
-            # 绘制ev的真实速度曲线
-            ax.plot(traj_[TI.time].values,
-                    traj_[info_name + "_ori"].values * np.sin(traj_[TI.yaw + "_ori"].values),
-                    color=colors[i], label="EV$_{ori}$",
-                    linestyle="--", linewidth=1, zorder=0, alpha=0.5)
-    ax.legend(
-        fontsize=fontsize, frameon=False,
-        ncol=4, loc='lower center',
-        bbox_to_anchor=(0.5, 1.01),
-        # 行列间距缩小
-        labelspacing=0.1,    # 标签间垂直间距
-        handletextpad=0.1,   # 符号与标签水平间距
-        # borderpad=1.0,       # 边框内边距
-        columnspacing=0.1,   # 多列图例的列间距（若有多列）
-    )
-    ax.set_xlabel("时间 (s)")
-    ax.set_ylabel("横向速度 (m/s)")
-    fig.savefig(
-        fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_{info_name}_y.tif",
-        dpi=300, pil_kwargs={"compression": "tiff_lzw"}
-    )
+    def plot_y_info(info_name, func, addi, y_name, suffix):
+        # 绘制各车辆的速度曲线
+        fig, ax = get_fig_ax(scale=1)
+        for i, (traj_, name) in enumerate(zip(traj_s, traj_names)):
+            traj_: pd.DataFrame = traj_
+            if traj_ is None or len(traj_) == 0 or name not in surr_name:
+                continue
+            z_order = 10 if name == "EV" else 1
+            track_id = int(traj_[TI.trackId].values[0])
+            if func is None:
+                y = traj_[info_name].values
+                y_ori = traj_[info_name + "_ori"].values
+            else:
+                y = traj_[info_name].values * func(traj_[addi])
+                y_ori = traj_[info_name + "_ori"].values * func(traj_[TI.yaw + "_ori"].values)
+            ax.plot(traj_[TI.time].values, y,
+                    color=colors[i], label=name + f" {track_id}", zorder=z_order)
+            if mode == ScenarioMode.INTERACTION_TR_HV_TP_HV:
+                need_ori_name = ["EV", "TR"]
+            elif mode == ScenarioMode.INTERACTION_TR_AV_TP_HV:
+                need_ori_name = ["EV", "TR"]
+            elif mode in [ScenarioMode.INTERACTION_TR_HV_TP_AV, ScenarioMode.INTERACTION_TR_AV_TP_AV]:
+                need_ori_name = ["EV", "TR", "TP"]
+            elif mode == ScenarioMode.NO_INTERACTION:
+                need_ori_name = ["EV"]
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
+            if name in need_ori_name:
+                # 绘制ev的真实速度曲线
+                ax.plot(traj_[TI.time].values, y_ori,
+                        color=colors[i], label=f"{name}" + "$_{ori}$" + f" {track_id}",
+                        linestyle="--", linewidth=1, zorder=0, alpha=1)
+        ax.legend(
+            fontsize=fontsize - 2, frameon=False,
+            ncol=4, loc='lower center',
+            bbox_to_anchor=(0.5, 1.01),
+            labelspacing=0.1,    # 标签间垂直间距
+            handletextpad=0.1,   # 符号与标签水平间距
+            columnspacing=0.1,   # 多列图例的列间距（若有多列）
+        )
+        ax.set_xlabel("时间 (s)")
+        ax.set_ylabel(y_name)
+        fig.savefig(
+            fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_{info_name}_{suffix}.tif",
+            dpi=300, pil_kwargs={"compression": "tiff_lzw"}
+        )
+    func_and_name = (TI.speed, np.sin, TI.yaw, "横向速度 (m/s)", "y")
+    plot_y_info(*func_and_name)
+    func_and_name = (TI.speed, np.cos, TI.yaw, "纵向速度 (m/s)", "x")
+    plot_y_info(*func_and_name)
+    func_and_name = (TI.speed, None, TI.yaw, "横摆角 (rad)", "yaw")
+    plot_y_info(*func_and_name)
