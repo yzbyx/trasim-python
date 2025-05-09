@@ -93,7 +93,7 @@ class CFModel_TPACC(CFModel):
         self.scale = self.veh_surr.ev.game_factor \
             if (self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader) else 1
         self.gap = (self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
-                    - self.get_safe_s0() * self.scale)
+                    - self.get_safe_s0())
         self.dt = self.veh_surr.ev.lane.dt
         self._update_v_safe()
 
@@ -105,16 +105,16 @@ class CFModel_TPACC(CFModel):
         self.veh_surr = veh_surr
         if self.veh_surr.ev is None:
             return None
-        if self.veh_surr.ev.leader is None:
+        if self.veh_surr.cp is None:
             speed = max(0., min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt))
             return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
-        f_params = [self._kdv, self._k1, self._k2, self._thw * self.scale,
-                    self._g_tau * self.scale, self._a, self._b, self._v_safe_dispersed]
+        f_params = [self._kdv, self._k1, self._k2, self._thw,
+                    self._g_tau, self._a, self._b, self._v_safe_dispersed]
         leader_is_dummy = True if self.veh_surr.cp.type == V_TYPE.OBSTACLE else False
         result = self.calculate(
             *f_params, self.dt, self.gap, self.veh_surr.ev.v, self.veh_surr.cp.v, self.get_expect_speed(),
-            leader_is_dummy, self.l_v_a, self._safe_tau * self.scale
+            leader_is_dummy, self.l_v_a, self._safe_tau
         )
         if self.record_cf_info:
             self.cf_info.step.append(self.veh_surr.ev.lane.step_)
@@ -129,31 +129,32 @@ class CFModel_TPACC(CFModel):
 
     def calculate(self, kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
                   dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a, tau):
-        if gap > v * g_tau_:
-            acc = k1_ * (gap - thw_ * v) + k2_ * (l_v - v)
+        if gap > v * g_tau_ or (self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader):
+            acc = k1_ * (gap - thw_ * self.scale * v) + k2_ * (l_v - v)
             is_speed_adaptive = 0
         else:
             acc = kdv_ * (l_v - v)
             is_speed_adaptive = 1
 
-        if self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader:
-            acc += self.veh_surr.ev.game_factor * 1
+        # if self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader:
+        #     acc += self.veh_surr.ev.game_factor * 1
 
         is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
         v_c = v + dt * max(- dec_, min(acc, acc_))
 
-        if self.veh_surr.ev.is_gaming:
-            game_factor = self.veh_surr.ev.game_factor
-            if game_factor < 1:
-                game_factor = 1 / game_factor
-                v_c += ((game_factor * 8 * self.dt) *
-                        np.sign(1 - self.veh_surr.ev.game_factor))
+        # if self.veh_surr.ev.is_gaming:
+        #     game_factor = self.veh_surr.ev.game_factor
+        #     if game_factor < 1:
+        #         game_factor = 1 / game_factor
+        #         v_c += ((game_factor * 8 * self.dt) *
+        #                 np.sign(1 - self.veh_surr.ev.game_factor))
 
-        v_safe = cal_v_safe(v_safe_dispersed_, tau, l_v, gap, dec_, dec_)
+        v_safe = cal_v_safe(v_safe_dispersed_, tau * (self.scale if self.scale < 1 else 1),
+                            l_v, gap, dec_, dec_ * (self.scale if self.scale < 1 else 1))
         # # v_safe = v_free
         is_thw_constraint = 0
         if not leader_is_dummy:
-            temp = (gap / tau) + l_v_a
+            temp = (gap / (tau * self.scale)) + l_v_a
             is_thw_constraint = 1 if v_safe > temp else 0
             v_safe = min(v_safe, temp)
         # v_safe = 100
@@ -166,8 +167,9 @@ class CFModel_TPACC(CFModel):
 
         # print("v_safe:", v_safe, "v_c:", v_c, "v_free:", v_free, "a_final:", a_final)
 
-        return a_final, \
-            is_speed_adaptive, is_acc_constraint, is_thw_constraint, is_v_free_constraint, is_v_safe_constraint
+        return (a_final,
+                is_speed_adaptive, is_acc_constraint, is_thw_constraint,
+                is_v_free_constraint, is_v_safe_constraint)
 
 
 def cf_TPACC_acc(kdv, k1, k2, thw, g_tau, a, b, v_safe_dispersed,

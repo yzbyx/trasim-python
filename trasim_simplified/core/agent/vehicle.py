@@ -17,6 +17,7 @@ from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
+    from trasim_simplified.core.agent.game_agent import Game_A_Vehicle
 
 
 class Vehicle(Obstacle):
@@ -93,10 +94,13 @@ class Vehicle(Obstacle):
         self.lane_can_lc = None  # 可以换道的车道编号
         self.lc_direction = 0  # 换道方向，-1为左，1为右
         self.lane_changing = False  # 是否处于换道状态
+        self.lc_cross = False  # 是否通过过线点
         self.target_lane = lane  # 目标车道
         self.lc_conti_time = 0  # 换道持续时间
 
-        # 换道意图相关
+        # 换道决策相关
+        self.decision_frequency = 1  # 决策频率[Hz]
+        self.lc_hold_time = 0  # 跳过决策的累计时间
         self.risk_2d = None
         self.lc_ttc_risk = None
         self.lc_acc_benefit = None
@@ -108,16 +112,19 @@ class Vehicle(Obstacle):
         self.is_gaming = False  # 是否处于博弈状态
         self.game_factor = None  # 博弈策略（期望时距）
         self.is_game_leader = False
-        self.game_leader = None
+        self.game_leader: Optional[Vehicle] = None
         self.opti_game_res: Optional[GameRes] = None
         self.game_res_list: Optional[list[GameRes]] = None
         self.rho_hat_s = {}  # 储存车辆id_对应的rho_hat范围
         self.rho = 0.5
         self.game_co = 1  # 自动驾驶的公平协作程度 [0, 1]
-        """激进系数"""
+
+        self.platoon_incentive = 0  # 队列换道激励系数
+        self.weaving_incentive = 0.5  # 交织换道激励系数
+        self.incentive_range = 50  # 前向激励范围
 
         # 横向控制参数
-        self.PREVIEW_TIME = 2
+        self.PREVIEW_TIME = 3
         self.MIN_PREVIEW_S = 10
 
         # 轨迹预测相关
@@ -127,7 +134,7 @@ class Vehicle(Obstacle):
         """包含当前时间步的轨迹点"""
 
         self.k_s = 1
-        self.k_c = 2
+        self.k_c = 1
         self.k_r = 10
         self.k_e = 1
 
@@ -177,12 +184,14 @@ class Vehicle(Obstacle):
         self.f = self.leader
         self.r = self.follower
         self.lr, self.lf, self.rr, self.rf = self.lane.road.get_neighbour_vehicles(self, "all")
-        self.left_lane, self.right_lane = (
-            self.lane.road.get_available_adjacent_lane(self.lane, self.x)
-        )
+
+        self.left_lane, self.right_lane = self.lane.road.get_available_adjacent_lane(self.lane, self.x)
+
         self.game_traj_ache = None
-        self.gap_res_list = None
+        self.gap_res_list: Optional[list[GapJudge]] = None
         self.game_res_list = None
+
+        self.lc_cross = self.target_lane.index == self.lane.index
 
         if len(self.hist_traj) in [0, 1]:
             hist_traj = []
@@ -194,6 +203,15 @@ class Vehicle(Obstacle):
                 current_traj_point.y -= current_traj_point.vy * self.dt
                 hist_traj.append(current_traj_point.copy())
             self.hist_traj = hist_traj[::-1]
+
+    def reset_lc_state(self):
+        """重置换道状态"""
+        self.lane_changing = False
+        self.lc_cross = False
+        self.target_lane = self.lane
+        self.lc_conti_time = 0
+        self.lc_direction = 0
+        self.opti_gap = None
 
     def cal_traj_pred(self):
         self.pred_traj = None
@@ -248,7 +266,7 @@ class Vehicle(Obstacle):
 
     def pred_self_traj(self, time_len, stra=None,
                        target_lane: "LaneAbstract" = None,
-                       PC_traj=None, to_ndarray=True, ache=False):
+                       PC_traj=None, to_ndarray=True, ache=False, PC: 'Vehicle' = None):
         """在策略下预测自车轨迹（包含初始状态）
         :param time_len: 预测时间长度
         :param stra: 期望时距
@@ -272,7 +290,7 @@ class Vehicle(Obstacle):
             veh.game_factor = None
             veh.is_gaming = False
 
-        if self.f is None and PC_traj is None:
+        if self.f is None and PC_traj is None and PC is None:
             traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
             # 估计轨迹
             leader.x = veh.x + 1e6
@@ -293,7 +311,10 @@ class Vehicle(Obstacle):
 
         else:
             if PC_traj is None:
-                PC_traj = self.f.pred_traj[:step_num]
+                if PC is None:
+                    PC_traj = self.f.pred_traj[:step_num]
+                else:
+                    PC_traj = PC.pred_traj[:step_num]
             traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
 
             for step in range(round(step_num) - 1):
@@ -419,9 +440,9 @@ class Vehicle(Obstacle):
             return self.acc_list
         elif C_Info.speed == info:
             return self.speed_list
-        elif C_Info.x == info:
+        elif C_Info.xFrontGlobal == info:
             return self.x_list
-        elif C_Info.localLat == info:
+        elif C_Info.yFrontGlobal == info:
             return self.y_list
         elif C_Info.xCenterGlobal == info:
             return self.x_center_global_list
@@ -474,10 +495,10 @@ class Vehicle(Obstacle):
                 self.acc_list.append(self.acc)
             elif C_Info.speed == info:
                 self.speed_list.append(self.speed)
-            elif C_Info.localLon == info:
+            elif C_Info.xFrontGlobal == info:
                 self.x_list.append(self.x)
-            elif C_Info.localLat == info:
-                self.y_list.append(self.y - self.lane.y_center)
+            elif C_Info.yFrontGlobal == info:
+                self.y_list.append(self.y)
             elif C_Info.xCenterGlobal == info:
                 self.x_center_global_list.append(self.x_c)
             elif C_Info.yCenterGlobal == info:

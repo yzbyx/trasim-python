@@ -90,24 +90,24 @@ class CFModel_KK(CFModel):
             game_factor = self.veh_surr.ev.game_factor
             if game_factor < 1:
                 game_factor = 1 / game_factor
-                vf_change = ((game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor))
+                vf_change = (game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor)
 
         self.dt = self.veh_surr.ev.dt
         self._vf = self.get_expect_speed() + vf_change
 
         self.v = self.veh_surr.ev.v
         self.l_length = self.veh_surr.cp.length
-        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._s0 * self.scale
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._s0
         self.l_v = self.veh_surr.cp.v
         self.l_v_a = self.veh_surr.cp.a
 
         self.v_safe = cal_v_safe(
             self.v_safe_dispersed,
-            self._tau * self.scale,
+            self._tau * (self.scale if self.scale < 1 else 1),
             self.veh_surr.cp.v,
             self.gap,
             self.get_expect_dec(),
-            self.get_expect_dec()  # 前车期望减速度取当前车的期望减速度，下同
+            self.get_expect_dec() * (self.scale if self.scale < 1 else 1)  # 前车期望减速度取当前车的期望减速度，下同
         )
 
     @property
@@ -190,18 +190,19 @@ class CFModel_KK(CFModel):
         a_n, b_n = self.cal_an_bn()
 
         # ----G计算---- #
-        factor = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
-        self.G = cal_G(self._k, self._tau * factor, self._a, self.v, self.l_v)
+        self.G = cal_G(self._k, self._tau * self.scale, self._a, self.v, self.l_v)
 
         # ----v_c计算---- #
         v_c = self._cal_v_c(self.G, a_n, b_n)
 
-        if self.veh_surr.ev.is_gaming:
-            game_factor = self.veh_surr.ev.game_factor
-            if game_factor < 1:
-                game_factor = 1 / game_factor
-                v_c += ((game_factor * 8 * self.dt) *
-                        np.sign(1 - self.veh_surr.ev.game_factor))
+        # if self.veh_surr.ev.is_gaming:
+        #     game_factor = self.veh_surr.ev.game_factor
+        #     if game_factor < 1:
+        #         game_factor = 1 / game_factor
+        #         v_c += (
+        #                 (game_factor * 8 * self.dt) *
+        #                 np.sign(1 - self.veh_surr.ev.game_factor)
+        #         )
 
         # ----v_s计算---- #
         v_s = self._cal_v_s()
@@ -221,8 +222,7 @@ class CFModel_KK(CFModel):
         return final_acc, status
 
     def _cal_v_s(self):
-        factor = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
-        v_s = min(self.v_safe, self.gap / (self._tau * factor) + self.l_v_a)
+        v_s = min(self.v_safe, self.gap / (self._tau * self.scale) + self.l_v_a)
         return v_s
 
     @staticmethod
@@ -256,7 +256,7 @@ class CFModel_KK(CFModel):
         return 8
 
     def get_time_wanted(self):
-        return (self._tau * self.scale) * (self._k * self.scale) / 2
+        return self._tau * self.scale * 1.3
 
     def get_time_safe(self):
         return self._tau * self.scale
@@ -280,11 +280,15 @@ class CFModel_KK(CFModel):
         return a_n, b_n
 
     def _cal_v_c(self, G, a_n, b_n):
-        if self.gap <= G:
-            delta = max(-b_n * self.dt, min(a_n * self.dt, self.l_v - self.v))
-            v_c = self.v + delta
+        if not self.veh_surr.ev.is_gaming:
+            if self.gap <= G:
+                delta = max(-b_n * self.dt, min(a_n * self.dt, self.l_v - self.v))
+                v_c = self.v + delta
+            else:
+                v_c = self.v + a_n * self.dt
         else:
-            v_c = self.v + a_n * self.dt
+            a_c = 0.3 * (self.gap - self.get_time_wanted() * self.v) + 0.3 * (self.l_v - self.v)
+            v_c = self.v + a_c * self.dt
         return v_c
 
     def _cal_v_c_on_ramp(self, G, a_n, b_n, v_hat_leader, _l: 'Vehicle', gap):

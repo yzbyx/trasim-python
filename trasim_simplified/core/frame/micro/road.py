@@ -332,14 +332,15 @@ class Road:
                     car.cf_acc = acc_values
                     car.lc_result = lc_result
 
-    def draw(self, ax: plt.Axes):
+    def draw(self, ax: plt.Axes, fill=True):
         """绘制车道线"""
         static_lines = []
         for i, lane in enumerate(self.lane_list):
             x = np.linspace(0, self.lane_length, 2)
             # y = np.ones_like(x) * lane.y_center
             # ax.plot(x, y, color="white", linewidth=0.5)
-            ax.fill_between(x, lane.y_left, lane.y_right, color="gray", alpha=0.5)
+            if fill:
+                ax.fill_between(x, lane.y_left, lane.y_right, color="gray", alpha=0.5)
 
             if lane.marking_type is not None:
                 for j in range(len(lane.marking_type[0]) - 1):
@@ -354,9 +355,17 @@ class Road:
                             y = np.ones_like(x) * lane.y_right
 
                         if y_marking == MARKING_TYPE.SOLID:
-                            line = ax.plot(x, y, color="yellow", linewidth=1)[-1]
+                            if fill:
+                                color = "yellow"
+                            else:
+                                color = "orange"
+                            line = ax.plot(x, y, color=color, linewidth=1)[-1]
                         elif y_marking == MARKING_TYPE.DASHED:
-                            line = ax.plot(x, y, color="white", linestyle="--", linewidth=1)[-1]
+                            if fill:
+                                color = "white"
+                            else:
+                                color = "black"
+                            line = ax.plot(x, y, color=color, linestyle="--", linewidth=1)[-1]
                         else:
                             raise ValueError(f"Unknown marking type: {y_marking}")
 

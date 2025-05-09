@@ -53,11 +53,12 @@ cf_param_ranges = {
         "k1": [0, 1], "k2": [0, 1], "thw": [0, 10], "s0": [0, 10]
     },
     CFM.KK: {
-        "tau": [0.1, 2], "v0": [5, 30], "k": [1, 5], "a": [0, 5], "s0": [0, 5]
+        "tau": [0.5, 2], "v0": [20, 30], "k": [1, 5], "a": [0.1, 5],
+        "s0": [1, 5], "b": [0.5, 5]
     },
     CFM.TPACC: {
-        "v0": [5, 30], "safe_tau": [0.1, 2], "thw": [0.1, 5], "g_tau": [0.1, 5], "s0": [0, 5],
-        "kdv": [0, 1], "k1": [0, 1], "k2": [0, 1], "a": [0, 5], "b": [0, 5],
+        "v0": [20, 30], "safe_tau": [0.5, 2], "g_tau": [0.1, 5], "s0": [1, 5],
+        "kdv": [0.1, 1], "k1": [0.1, 1], "k2": [0.1, 1], "a": [0.1, 5], "b": [0.5, 5],
     }
 }
 cf_param_types = {
@@ -68,8 +69,8 @@ cf_param_types = {
                        "CC9": 0, "vDesire": 0},
     CFM.OPTIMAL_VELOCITY: {"a": 0, "V0": 0, "m": 0, "bf": 0, "bc": 0},
     CFM.ACC: {"k1": 0, "k2": 0, "thw": 0, "s0": 0},
-    CFM.KK: {"tau": 0, "v0": 0, "k": 0, "a": 0, "s0": 0},
-    CFM.TPACC: {"v0": 0, "safe_tau": 0, "thw": 0, "g_tau": 0, "s0": 0,
+    CFM.KK: {"tau": 0, "v0": 0, "k": 0, "a": 0, "s0": 0, "b": 0},
+    CFM.TPACC: {"v0": 0, "safe_tau": 0, "g_tau": 0, "s0": 0,
                 "kdv": 0, "k1": 0, "k2": 0, "a": 0, "b": 0}
 }
 cf_param_ins = {
@@ -94,10 +95,10 @@ cf_param_ins = {
         "k1": [1, 1], "k2": [1, 1], "thw": [1, 1], "s0": [1, 1]
     },
     CFM.KK: {
-        "tau": [1, 1], "v0": [1, 1], "k": [1, 1], "a": [1, 1], "s0": [1, 1]
+        "tau": [1, 1], "v0": [1, 1], "k": [1, 1], "a": [1, 1], "s0": [1, 1], "b": [1, 1]
     },
     CFM.TPACC: {
-        "v0": [1, 1], "safe_tau": [1, 1], "thw": [1, 1], "g_tau": [1, 1], "s0": [1, 1],
+        "v0": [1, 1], "safe_tau": [1, 1], "g_tau": [1, 1], "s0": [1, 1],
         "kdv": [1, 1], "k1": [1, 1], "k2": [1, 1], "a": [1, 1], "b": [1, 1]
     }
 }
@@ -150,10 +151,13 @@ def ga_cal(cf_func, obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la,
         @ea.Problem.single
         def eval_vars(params):  # 定义目标函数（含约束）
             param = {k: v for k, v in zip(ranges.keys(), params)}
-            x, v, _, _ = simulation(
-                cf_func=cf_func, init_x=init_x, init_v=init_v, init_a=init_a,
-                obs_lx=obs_lx, obs_lv=obs_lv, obs_la=obs_la,
-                cf_param=param, leaderL=leaderL, dt=dt, update_method="Euler")
+            try:
+                x, v, _, _ = simulation(
+                    cf_func=cf_func, init_x=init_x, init_v=init_v, init_a=init_a,
+                    obs_lx=obs_lx, obs_lv=obs_lv, obs_la=obs_la,
+                    cf_param=param, leaderL=leaderL, dt=dt, update_method="Euler")
+            except:
+                return 1e10
             return RMSE(sim_x=x, sim_v=v, obs_x=obs_x, obs_v=obs_v, obs_lx=obs_lx, eval_params=["dhw"])
 
         problem = ea.Problem(name='test',

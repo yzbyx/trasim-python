@@ -169,3 +169,18 @@ def interval_intersection(interval1, interval2, print_flag=False):
             print(f"intersection none: {interval1}, {interval2}")
             # raise ValueError("没有交集")
         return None  # 没有交集
+
+
+# def opti_traj_to_points(traj):
+#     """
+#     将轨迹转换为点列表
+#     :param traj: 轨迹
+#     :param dt: 时间间隔
+#     :return: 点列表
+#     """
+#     points = []
+#     speed = np.sqrt(traj[:, 1] ** 2 + traj[:, 4] ** 2)
+#     for x, y, v in zip(traj[:, 0], traj[:, 3], speed):
+#         point = traj[]
+#         points.append(point)
+#     return points

@@ -13,6 +13,7 @@ import sympy as sp
 from sympy import Interval, And, Intersection
 
 from trasim_simplified.core.agent import Vehicle
+from trasim_simplified.core.agent.base_agent import Base_Agent
 from trasim_simplified.core.agent.collision_risk import calculate_collision_risk
 from trasim_simplified.core.agent.fuzzy_logic import FuzzyLogic
 from trasim_simplified.core.agent.mpc_solver import MPC_Solver
@@ -42,11 +43,33 @@ def cal_other_cost(veh, cal_cost, rho_hat, traj, other_traj_s,
     return cost_hat, real_cost, cost_lambda
 
 
-class Game_Vehicle(Vehicle):
-    fuzzy_logic = FuzzyLogic()
-
+class Game_Vehicle(Base_Agent):
     def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
+        self.scale = 0.4
+
+    def get_rho_hat_s(self, vehicles):
+        rho_hat_s = []
+        for v in vehicles:
+            if v is not None:
+                if v.ID not in self.rho_hat_s:
+                    self.rho_hat_s[v.ID] = [0, 1]
+                rho_hat_s.append(np.mean(self.rho_hat_s[v.ID]))
+            else:
+                rho_hat_s.append(None)
+        return rho_hat_s
+
+    def set_game_stra(self, stra, leader):
+        """设置策略"""
+        self.is_gaming = True
+        self.game_factor = stra
+        self.game_leader = leader
+
+    def clear_game_stra(self):
+        """清除策略"""
+        self.is_gaming = False
+        self.game_factor = None
+        self.game_leader = None
 
     def cal_safe_cost(self, traj, other_traj, v_length, current_gap):
         """计算与其他轨迹的安全成本"""
@@ -89,29 +112,6 @@ class Game_Vehicle(Vehicle):
         safe_cost = max(safe_cost_list)
         return safe_cost
 
-    def get_rho_hat_s(self, vehicles):
-        rho_hat_s = []
-        for v in vehicles:
-            if v is not None:
-                if v.ID not in self.rho_hat_s:
-                    self.rho_hat_s[v.ID] = [0, 1]
-                rho_hat_s.append(np.mean(self.rho_hat_s[v.ID]))
-            else:
-                rho_hat_s.append(None)
-        return rho_hat_s
-
-    def set_game_stra(self, stra, leader):
-        """设置策略"""
-        self.is_gaming = True
-        self.game_factor = stra
-        self.game_leader = leader
-
-    def clear_game_stra(self):
-        """清除策略"""
-        self.is_gaming = False
-        self.game_factor = None
-        self.game_leader = None
-
     def cal_cost_by_traj(self, traj, other_traj_s, v_length_s,
                          rho=None, return_lambda=False,
                          route_cost=0, return_sub_cost=False, print_cost=False):
@@ -126,7 +126,7 @@ class Game_Vehicle(Vehicle):
         """
         # 计算安全成本
         safe_cost_list = []
-        current_gap = self.gap if not np.isnan(self.gap) else self.v * self.time_wanted
+        current_gap = self.v * self.time_wanted
         for other_traj, v_length in zip(other_traj_s, v_length_s):
             if other_traj is None:
                 continue
@@ -135,13 +135,13 @@ class Game_Vehicle(Vehicle):
         if len(safe_cost_list) == 0:
             safe_cost = 0
         else:
-            # safe_cost = self.k_s * max(max(safe_cost_list), -2)
-            safe_cost = self.k_s * max(safe_cost_list)
+            safe_cost = self.k_s * max(max(safe_cost_list), -1)
+            # safe_cost = self.k_s * max(safe_cost_list)
         # 舒适性计算 横纵向最大加速度、横摆角速度
-        ddx_max = max(abs(traj[:, 2]))
-        ddy_max = max(abs(traj[:, 5]))
+        ddx_max = max(abs(np.diff(traj[:, 2])))
+        ddy_max = max(abs(np.diff(traj[:, 5])))
 
-        com_cost = self.k_c * (0.5 * ddx_max + 0.5 * ddy_max) / self.acc_max  # 舒适性计算
+        com_cost = self.k_c * (0.5 * ddx_max + 0.5 * ddy_max) / self.JERK_MAX  # 舒适性计算
         # # 效率计算 单位时间内的平均速度-初始速度
         vx = traj[:, 1]
         eff_cost = self.k_e * (vx[0] - np.mean(vx)) / 10  # 效率计算
@@ -153,7 +153,7 @@ class Game_Vehicle(Vehicle):
 
         def cost(rho_, is_print=False):
             total_cost = (
-                    (1 - rho_) * (safe_cost + route_cost) +
+                    (1 - rho_) * (safe_cost + com_cost + route_cost) +
                     rho_ * eff_cost
             )
             if is_print:
@@ -179,352 +179,16 @@ class Game_Vehicle(Vehicle):
                     strategy = itertools.product(np.arange(1, 10.1, 2), (1, 0))
             else:
                 # strategy = [1 / 3, 1 / 2.5, 1 / 2, 1 / 1.5, 1, 1.5, 2, 2.5, 3]
-                strategy = [1 / 3, 1 / 2, 1, 2, 3]
+                strategy = [0.6, 0.8, 1, 1.2, 1.4]
         return strategy
 
-    def pred_lc_risk(self, time_len=3., lc_direction=None):
-        """车辆当前时刻换道的风险/不换道的风险TTC"""
-        if lc_direction == -1:
-            if self.left_lane is None:
-                return -np.inf
-            traj_cp, traj_lp, traj_lr = [
-                self.pred_net.pred_traj(veh.pack_veh_surr(), type_="net", time_len=time_len)
-                if veh is not None else None
-                for veh in [self.leader, self.lf, self.lr]
-            ]
-            if ((traj_lp is not None and abs(traj_lp[0].x - self.x) < self.length) or
-                    traj_lr is not None and abs(traj_lr[0].x - self.x) < self.length):
-                min_ttc_2d_left = -np.inf
-            else:
-                traj_ev_left, _ = self.pred_self_traj(
-                    target_lane=self.left_lane, PC_traj=traj_lp, time_len=time_len, to_ndarray=False
-                )
-                ev_lp_ttc_2d = calculate_collision_risk(traj_ev_left, traj_lp) if traj_lp is not None else np.inf
-                ev_lr_ttc_2d = calculate_collision_risk(traj_ev_left, traj_lr) if traj_lr is not None else np.inf
-                ev_cp_ttc_2d = calculate_collision_risk(traj_ev_left, traj_cp) if traj_cp is not None else np.inf
-                min_ttc_2d_left = min(np.min(ev_lp_ttc_2d), np.min(ev_lr_ttc_2d), np.min(ev_cp_ttc_2d))
-
-            return min_ttc_2d_left
-
-        if lc_direction == 1:
-            if self.right_lane is None:
-                return -np.inf
-            traj_cp, traj_rp, traj_rr = [
-                self.pred_net.pred_traj(veh.pack_veh_surr(), type_="net", time_len=time_len)
-                if veh is not None else None
-                for veh in [self.leader, self.rf, self.rr]
-            ]
-            if ((traj_rp is not None and abs(traj_rp[0].x - self.x) < self.length) or
-                    (traj_rr is not None and abs(traj_rr[0].x - self.x) < self.length)):
-                min_ttc_2d_right = -np.inf
-            else:
-                traj_ev_right, _ = self.pred_self_traj(
-                    target_lane=self.right_lane, PC_traj=traj_rp, time_len=time_len, to_ndarray=False
-                )
-                ev_rp_ttc_2d = calculate_collision_risk(traj_ev_right, traj_rp) if traj_rp is not None else np.inf
-                ev_rr_ttc_2d = calculate_collision_risk(traj_ev_right, traj_rr) if traj_rr is not None else np.inf
-                ev_cp_ttc_2d = calculate_collision_risk(traj_ev_right, traj_cp) if traj_cp is not None else np.inf
-                min_ttc_2d_right = min(np.min(ev_rp_ttc_2d), np.min(ev_rr_ttc_2d), np.min(ev_cp_ttc_2d))
-
-            return min_ttc_2d_right
-
-        if lc_direction == 0:
-            traj_cp = self.pred_net.pred_traj(self.leader.pack_veh_surr(), type_="net", time_len=time_len) \
-                if self.leader is not None else None
-            traj_ev_stay, _ = self.pred_self_traj(
-                target_lane=self.lane, PC_traj=traj_cp, time_len=time_len, to_ndarray=False
-            )
-            ev_cp_ttc_2d = calculate_collision_risk(traj_ev_stay, traj_cp) if traj_cp is not None else np.inf
-            min_ev_cp_ttc_2d = np.min(ev_cp_ttc_2d)
-            return min_ev_cp_ttc_2d
-        return None
-        # return min(min_ttc_2d_left, min_ttc_2d_right, min_ev_cp_ttc_2d)
-
-        # raise ValueError("lc_direction should be -1, 0 or 1, please check the code.")
-
-    def cal_route_cost(self, lane_index, x):
-        # 目标路径
-        target_direction = 0
-        weaving_length = self.lane.road.end_weaving_pos - self.lane.road.start_weaving_pos
-        d_r = self.lane.road.end_weaving_pos - x
-        t_r = d_r / self.v
-        if self.route_type == RouteType.diverge and lane_index not in self.destination_lane_indexes:
-            current_lane_index = lane_index
-            least_lane_index = min(self.destination_lane_indexes)
-            n_need_lc = least_lane_index - current_lane_index
-            e_r = max([0, 1 - d_r / (n_need_lc * weaving_length), 1 - t_r / (n_need_lc * 10)])
-            target_direction = 1
-        elif self.route_type == RouteType.merge and lane_index not in self.destination_lane_indexes:
-            current_lane_index = lane_index
-            max_lane_index = max(self.destination_lane_indexes)
-            n_need_lc = current_lane_index - max_lane_index
-            e_r = max([0, 1 - d_r / (n_need_lc * weaving_length), 1 - t_r / (n_need_lc * 10)])
-            target_direction = -1
-        else:
-            e_r = 0
-        return target_direction, min(e_r, 1)
-
-    def lc_intention_judge(self):
-        if self.no_lc:
-            return
-        self.risk_2d = self.pred_lc_risk(lc_direction=self.lc_direction, time_len=0)
-
-        if (self.opti_gap is not None
-                and abs(self.y_c - self.target_lane.y_center) < 0.1
-                and self.v_lat < 0.1 and abs(self.yaw) < 5 / 180 * np.pi):
-            self.lane_changing = False
-            self.lc_direction = 0
-            self.lc_conti_time = 0
-            self.opti_gap = None
-
-        if self.lane_changing and self.risk_2d >= self.ttc_star:
-            return
-
-        if self.lane_changing and self.risk_2d < self.ttc_star:
-            self.lane_changing = False
-            self.lc_direction = 0
-            self.opti_gap = None
-
-        judge_res = []
-        for adapt_time in np.arange(0, 3.1, 1):
-            for lc_direction in [-1, 1]:
-                for gap in [-1, 0, 1]:
-                    if self.right_lane is None and lc_direction == 1:
-                        continue
-                    if self.left_lane is None and lc_direction == -1:
-                        continue
-
-                    target_lane_index = self.lane.index + lc_direction
-                    if self.route_type == RouteType.mainline and target_lane_index not in self.destination_lane_indexes:
-                        continue
-                    if self.route_type == RouteType.merge and lc_direction != -1:
-                        continue
-                    if self.route_type == RouteType.diverge and lc_direction != 1:
-                        continue
-
-                    TR, TF, PC, CR = self._no_car_correction(gap, lc_direction)
-                    TR_traj = self.pred_net.pred_traj(TR.pack_veh_surr(), time_len=adapt_time)
-                    TF_traj = self.pred_net.pred_traj(TF.pack_veh_surr(), time_len=adapt_time)
-                    PC_traj = self.pred_net.pred_traj(PC.pack_veh_surr(), time_len=adapt_time)
-                    TR_end = TR_traj[-1]
-                    TF_end = TF_traj[-1]
-                    PC_end = PC_traj[-1]
-                    # 判断3s（速度调整时间）内能否以舒适的加减速度达到可行换道位置，用于MOBIL模型判断
-                    x_safe_min = TR_end.x + self.length + self.time_safe * TR_end.vx
-                    x_safe_max = TF_end.x - TF.length - self.time_safe * TF_end.vx
-                    # x_safe_min = TR_end.x + self.length
-                    # x_safe_max = TF_end.x - TF.length
-                    if x_safe_max < x_safe_min:
-                        # print(f"{lc_direction}_{adapt_time}_{gap}，x_safe_max={x_safe_max:.2f}，不换道")
-                        continue
-                    if not (x_safe_min <= self.x <= x_safe_max):
-                        acc_1 = 2 * (x_safe_max - self.x - self.v * adapt_time) / adapt_time ** 2
-                        acc_2 = 2 * (x_safe_min - self.x - self.v * adapt_time) / adapt_time ** 2
-                        # 若(acc_1, acc_2)与[self.acc_max, - self.dec_max]的交集不为空，
-                        # 则选择加速度绝对值最小的加速度作为调整加速度
-                        acc_ = np.array([acc_2, acc_1])
-                        acc = interval_intersection(acc_, (- self.dec_max, self.acc_max))
-                        if acc is None or acc[0] == acc[1]:
-                            # print(f"{lc_direction}_{adapt_time}_{gap}，acc={acc_}，不换道")
-                            continue
-                        if acc[0] <= 0 <= acc[1]:
-                            target_acc = 0
-                        elif acc[0] > 0:
-                            target_acc = acc[0]
-                        else:
-                            target_acc = acc[1]
-                    else:
-                        target_acc = 0
-
-                    # 与前车的安全性判断
-                    v_f = self.v + target_acc * adapt_time
-                    x_f = self.x + self.v * adapt_time + 0.5 * target_acc * adapt_time ** 2
-                    fut_gap = PC_end.x - PC.length - self.cf_model.get_safe_s0() - x_f
-                    if fut_gap < 0:
-                        # print(f"{lc_direction}_{adapt_time}_{gap}，fut_gap={fut_gap:.2f}，不换道")
-                        continue
-
-                    ego_f = self.clone()
-                    ego_f.x = x_f
-                    ego_f.speed = v_f
-                    PC_f = PC.clone()
-                    PC_f.x = PC_end.x
-                    PC_f.speed = PC_end.speed
-                    TF_f = TF.clone()
-                    TF_f.x = TF_end.x
-                    TF_f.speed = TF_end.speed
-                    TR_f = TR.clone()
-                    TR_f.x = TR_end.x
-                    TR_f.speed = TR_end.speed
-
-                    if lc_direction == 1:
-                        veh_surr = VehSurr(ego_f, cp=PC_f, rp=TF_f, rr=TR_f)
-                    else:
-                        veh_surr = VehSurr(ego_f, cp=PC_f, lp=TF_f, lr=TR_f)
-                    try:
-                        is_ok, acc_gain = LCModel_Mobil.mobil(
-                            lc_direction, veh_surr, return_acc_gain=True, POLITENESS=self.rho)
-                    except:
-                        is_ok, acc_gain = False, -np.inf
-
-                    ego_traj = [TrajPoint(
-                        x=self.x + self.v * t + 0.5 * target_acc * (t ** 2),
-                        y=self.y + self.v_lat * t, speed=self.v + target_acc * t,
-                        yaw=self.yaw, length=self.length, acc=target_acc,
-                        width=self.width
-                    ) for t in np.arange(0, adapt_time + self.dt / 2, self.dt)]
-                    risk_pc = float(np.min(np.array(calculate_collision_risk(ego_traj, PC_traj))))
-
-                    if risk_pc < self.ttc_star:
-                        # print(f"{lc_direction}_{adapt_time}_{gap}，risk_pc={risk_pc:.2f}，不换道")
-                        continue
-
-                    _, e_r_stay = self.cal_route_cost(self.lane.index, self.x)
-                    _, e_r_lc = self.cal_route_cost(self.lane.index + lc_direction, self.x)
-
-                    judge_res.append(GapJudge(
-                        self.lane.step_,
-                        lc_direction, target_acc, adapt_time,
-                        self, gap=gap, TF=TF, TR=TR, PC=PC,
-                        # acc_gain=acc_gain,
-                        acc_gain=1 / (1 + np.exp(-acc_gain)),
-                        # ttc_risk=risk_pc,
-                        ttc_risk=min(np.exp(self.ttc_star - risk_pc), 1),
-                        route_gain=e_r_stay - e_r_lc,
-                        adapt_end_time=self.lane.time_ + adapt_time,
-                        target_lane=self.left_lane if lc_direction == -1 else self.right_lane,
-                    ))
-
-        self.gap_res_list = judge_res
-
-    def lc_decision_making(self):
-        if self.no_lc or self.lane_changing:
-            return
-
-        candidate_gap = []
-        have_candidate_gap = False
-        for gap_res in self.gap_res_list:
-            if gap_res.target_acc is not None:
-                lc_acc_benefit = gap_res.acc_gain
-                lc_route_desire = gap_res.route_gain
-                lc_ttc_risk = gap_res.ttc_risk
-
-                decision = False
-                lc_prob = self.fuzzy_logic.compute(lc_acc_benefit, lc_ttc_risk, self.rho)
-                if lc_route_desire > 0.9:
-                    decision = True
-                lc_prob += lc_route_desire
-                if not decision:
-                    decision = lc_prob > np.random.uniform() and lc_prob > 0.5
-
-                if self.no_left_lc and gap_res.lc_direction == -1:
-                    decision = False
-                if self.no_right_lc and gap_res.lc_direction == 1:
-                    decision = False
-                if self.lane_can_lc is not None and gap_res.target_lane.index not in self.lane_can_lc:
-                    decision = False
-
-                if decision:
-                    gap_res.lc_prob = lc_prob
-                    have_candidate_gap = True
-                    candidate_gap.append((gap_res, lc_prob))
-                else:
-                    gap_res.lc_prob = 0
-
-        if have_candidate_gap:
-            candidate_gap.sort(key=lambda x: x[1], reverse=True)
-            gap_res, lc_prob = candidate_gap[0]
-            self.lc_direction = gap_res.lc_direction
-            self.opti_gap = gap_res
-
-            if isinstance(self, Game_H_Vehicle):
-                self.lane_changing = True
-
-    def _no_car_correction(self, gap, lc_direction):
-        """判别TR, TF, PC, CR是否存在，若不存在则设置为不影响换道博弈的虚拟车辆
-        :gap: 车辆间距
-        """
-        if lc_direction == -1 and self.left_lane is None:
-            raise ValueError("left lane is None, please check the code.")
-        if lc_direction == 1 and self.right_lane is None:
-            raise ValueError("right lane is None, please check the code.")
-        if lc_direction == 0:
-            TF = TR = None
-        else:
-            if gap == -1:  # 后向搜索
-                if lc_direction == 1:
-                    TF = self.rr
-                    TR = self.rr.r if self.rr is not None else None
-                else:
-                    TF = self.lr
-                    TR = self.lr.r if self.lr is not None else None
-            elif gap == 1:  # 前向搜索
-                if lc_direction == 1:
-                    TR = self.rf
-                    TF = self.rf.f if self.rf is not None else None
-                else:
-                    TR = self.lf
-                    TF = self.lf.f if self.lf is not None else None
-            elif gap == 0:  # 相邻搜索
-                if lc_direction == 1:
-                    TF = self.rf
-                    TR = self.rr
-                else:
-                    TF = self.lf
-                    TR = self.lr
-            else:
-                raise ValueError("gap should be -1, 0 or 1, please check the code.")
-
-        if lc_direction == -1:
-            lane = self.left_lane
-        elif lc_direction == 1:
-            lane = self.right_lane
-        else:
-            lane = self.lane
-
-        PC = self.f
-        CR = self.r
-        if TR is None:
-            position = self.position + np.array([-1e10, - lc_direction * self.lane.width])
-            TR = Game_O_Vehicle(lane, self.type, - self.ID, self.length)
-            TR.x = position[0]
-            TR.y = position[1]
-            TR.cf_model = self.cf_model
-        if TF is None:
-            position = self.position + np.array([1e10, - lc_direction * self.lane.width])
-            TF = Game_O_Vehicle(lane, self.type, - self.ID, self.length)
-            TF.x = position[0]
-            TF.y = position[1]
-            TF.cf_model = self.cf_model
-        if PC is None:
-            position = self.position + np.array([1e10, 0])
-            PC = Game_O_Vehicle(self.lane, self.type, - self.ID, self.length)
-            PC.x = position[0]
-            PC.y = position[1]
-            PC.cf_model = self.cf_model
-        if CR is None:
-            position = self.position + np.array([-1e10, 0])
-            CR = Game_O_Vehicle(self.lane, self.type, - self.ID, self.length)
-            CR.x = position[0]
-            CR.y = position[1]
-            CR.cf_model = self.cf_model
-
-        # TR.f = TF
-        # CR.f = self
-
-        return TR, TF, PC, CR
-
-    def get_lane_indexes(self, y_s):
-        """获取轨迹所在车道的索引"""
-        lane_indexes = []
-        for y in y_s:
-            for lane in self.lane.road.lane_list:
-                if lane.y_right < y <= lane.y_left:
-                    lane_indexes.append(lane.index)
-                    break
-            else:
-                lane_indexes.append(np.nan)
-        return np.array(lane_indexes)
+    def _make_dummy_agent(self, lane, type_, id_, length, x, y):
+        dummy_agent = Game_O_Vehicle(lane, type_, id_, length)
+        dummy_agent.x = x
+        dummy_agent.y = y
+        dummy_agent.speed = self.speed
+        dummy_agent.cf_model = self.cf_model
+        return dummy_agent
 
 
 class Game_A_Vehicle(Game_Vehicle):
@@ -533,7 +197,6 @@ class Game_A_Vehicle(Game_Vehicle):
     def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
         self.N_MPC = 5
-        self.mpc_solver: Optional[MPC_Solver] = None
 
         self.lc_time_max = 10  # 换道最大时间
         self.lc_time_min = 1  # 换道最小时间
@@ -633,6 +296,7 @@ class Game_A_Vehicle(Game_Vehicle):
         self.mpc_solver = None
         self.lc_conti_time = 0
         self.last_cal_step = 0
+        self.game_leader = None
 
     def update_rho_hat(self):
         """求解rho的范围，入股TR的rho_hat不在范围内，更新TR的rho_hat"""
@@ -771,7 +435,7 @@ class Game_A_Vehicle(Game_Vehicle):
         game_res_list = []
         # single_stra = self.lc_direction == 0
         single_stra = False
-        for gap in [-1, 0, 1]:
+        for gap in [0]:
             TR, TF, PC, CR = self._no_car_correction(gap, self.lc_direction)
             TR_real_stra, TF_stra, EV_stra, CP_stra, CR_stra = np.nan, np.nan, np.nan, np.nan, np.nan
             TR_real_cost, TF_cost, EV_cost, CP_cost, CR_cost = np.nan, np.nan, np.nan, np.nan, np.nan
@@ -1178,8 +842,6 @@ class Game_A_Vehicle(Game_Vehicle):
         xt_PC, dxt_PC = PC_traj[:, 0], PC_traj[:, 1]
         xt_CR, dxt_CR = CR_traj[:, 0], CR_traj[:, 1]
 
-        scale = 0.5
-
         if lc_direction == 0:
             # PC
             dxt = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps])
@@ -1188,17 +850,17 @@ class Game_A_Vehicle(Game_Vehicle):
             x_pos = A_ineq_7 @ x[: 6]  # 纵向位置
             v = dxt @ x[:6]
             PC_rear_x = xt_PC - l_PC
-            b_ineq_7_part1 = PC_rear_x - v * self.time_safe * scale
+            b_ineq_7_part1 = PC_rear_x - (v * self.time_safe + self.safe_s0) * self.scale
             constraints += [x_pos <= b_ineq_7_part1]
-            b_ineq_7_part2 = PC_rear_x - v * self.time_wanted
-            constraints += [x[12] >= (x_pos - b_ineq_7_part2) / (self.state[1] * self.time_wanted)]
+            b_ineq_7_part2 = PC_rear_x - v * self.time_wanted * self.scale
+            constraints += [x[12] >= (x_pos - b_ineq_7_part2) / (self.state[1] * self.time_wanted * self.scale)]
 
             # CR
             CR_rear_x = xt_CR + l_CR
-            b_ineq_8_part1 = CR_rear_x + CR.time_safe * dxt_CR * scale
+            b_ineq_8_part1 = CR_rear_x + (CR.time_safe * dxt_CR + self.safe_s0) * self.scale
             constraints += [x_pos >= b_ineq_8_part1]
-            b_ineq_8_part2 = CR_rear_x + CR.time_wanted * dxt_CR
-            constraints += [x[13] >= (b_ineq_8_part2 - x_pos) / (dxt_CR[0] * CR.time_wanted)]
+            b_ineq_8_part2 = CR_rear_x + CR.time_wanted * dxt_CR * self.scale
+            constraints += [x[13] >= (b_ineq_8_part2 - x_pos) / (dxt_CR[0] * CR.time_wanted * self.scale)]
 
             # 安全性
             constraints += [x[14] == 0]
@@ -1238,35 +900,35 @@ class Game_A_Vehicle(Game_Vehicle):
             dxt_before = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in lc_before_times])
             v_before = dxt_before @ x[:6]
             PC_rear_x = xt_PC[:step] - l_PC
-            b_ineq_7_part1 = PC_rear_x - v_before * self.time_safe * scale
+            b_ineq_7_part1 = PC_rear_x - (v_before * self.time_safe + self.safe_s0) * self.scale
             constraints += [x_pos_before <= b_ineq_7_part1]
-            b_ineq_7_part2 = PC_rear_x - v_before * self.time_wanted
-            constraints += [x[12] >= (x_pos_before - b_ineq_7_part2) / (self.state[1] * self.time_wanted)]
+            b_ineq_7_part2 = PC_rear_x - v_before * self.time_wanted * self.scale
+            constraints += [x[12] >= (x_pos_before - b_ineq_7_part2) / (self.state[1] * self.time_wanted * self.scale)]
 
             # CR
             CR_head_x = xt_CR[:step] + l_CR
             CR_v = dxt_CR[:step]
-            b_ineq_10_part1 = CR_head_x + CR.time_safe * CR_v * scale
+            b_ineq_10_part1 = CR_head_x + (CR.time_safe * CR_v + self.safe_s0) * self.scale
             constraints += [x_pos_before >= b_ineq_10_part1]
-            b_ineq_10_part2 = CR_head_x + CR.time_wanted * CR_v
-            constraints += [x[13] >= (b_ineq_10_part2 - x_pos_before) / (CR_v[0] * CR.time_wanted)]
+            b_ineq_10_part2 = CR_head_x + CR.time_wanted * CR_v * self.scale
+            constraints += [x[13] >= (b_ineq_10_part2 - x_pos_before) / (CR_v[0] * CR.time_wanted * self.scale)]
 
             # TF
             dxt_after = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in lc_after_times])
             v_after = dxt_after @ x[:6]
             TF_rear_x = xt_TF[step:] - l_TF
-            b_ineq_8_part1 = TF_rear_x - v_after * self.time_safe * scale
+            b_ineq_8_part1 = TF_rear_x - (v_after * self.time_safe + self.safe_s0) * self.scale
             constraints += [x_pos_after <= b_ineq_8_part1]
-            b_ineq_8_part2 = TF_rear_x - v_after * self.time_wanted
-            constraints += [x[14] >= (x_pos_after - b_ineq_8_part2) / (self.state[1] * self.time_wanted)]
+            b_ineq_8_part2 = TF_rear_x - v_after * self.time_wanted * self.scale
+            constraints += [x[14] >= (x_pos_after - b_ineq_8_part2) / (self.state[1] * self.time_wanted * self.scale)]
 
             # TR
             TR_head_x = xt_TR[step:] + l_TR
             TR_v = dxt_TR[step:]
-            b_ineq_9_part1 = TR_head_x + TR.time_safe * TR_v * scale
+            b_ineq_9_part1 = TR_head_x + (TR.time_safe * TR_v + self.safe_s0) * self.scale
             constraints += [x_pos_after >= b_ineq_9_part1]
-            b_ineq_9_part2 = TR_head_x + TR.time_wanted * TR_v
-            constraints += [x[15] >= (b_ineq_9_part2 - x_pos_after) / (TR_v[0] * TR.time_wanted)]
+            b_ineq_9_part2 = TR_head_x + TR.time_wanted * TR_v * self.scale
+            constraints += [x[15] >= (b_ineq_9_part2 - x_pos_after) / (TR_v[0] * TR.time_wanted * self.scale)]
 
             # 安全性
             safe_cost = cvxpy.max(cvxpy.hstack([[-1], x[12: 16]]))
@@ -1384,9 +1046,31 @@ class Game_A_Vehicle(Game_Vehicle):
         self.mpc_solver.init_mpc()
         return ref_path_ori
 
+    def pred_self_traj(self, time_len, stra=None,
+                       target_lane: "LaneAbstract" = None,
+                       PC_traj=None, to_ndarray=True, ache=False, PC=None):
+        """在策略下预测自车轨迹（包含初始状态）
+        :param time_len: 预测时间长度
+        :param stra: 期望时距
+        :param target_lane: 目标车道
+        :param PC_traj: 前车轨迹
+        :param to_ndarray: 是否转为ndarray
+        :param ache: 是否缓存
+        """
+        if self.is_game_leader and self.mpc_solver is not None:
+            traj_points: list[TrajPoint] = self.mpc_solver.ref_path.get_ref_pos(self.mpc_solver.step, time_len)
+            for point in traj_points:
+                point.length = self.length
+                point.width = self.width
+            return traj_points, None
+
+        traj, PC_traj = super().pred_self_traj(
+            time_len, stra, target_lane, PC_traj, to_ndarray=to_ndarray, ache=ache, PC=PC
+        )
+        return traj, PC_traj
+
 
 class Game_H_Vehicle(Game_Vehicle):
-
     def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
 

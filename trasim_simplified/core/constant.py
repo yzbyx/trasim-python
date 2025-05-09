@@ -446,15 +446,15 @@ class GameRes:
     """当前决策时步"""
     cost_df: Optional[pd.DataFrame]
     """成本函数"""
-    EV: 'Game_Vehicle'
+    EV: 'Base_Agent'
     """换道车辆"""
-    TF: 'Game_Vehicle'
+    TF: 'Base_Agent'
     """目标间隙前车"""
-    TR: 'Game_Vehicle'
+    TR: 'Base_Agent'
     """目标间隙后车"""
-    PC: 'Game_Vehicle'
+    PC: 'Base_Agent'
     """当前车道前车"""
-    CR: 'Game_Vehicle'
+    CR: 'Base_Agent'
     """当前车道后车"""
 
     EV_stra: Optional[float]
@@ -500,25 +500,29 @@ class GameRes:
 class GapJudge:
     step: int
     lc_direction: float
+    gap: Optional[float]
     target_acc: Optional[float]
     """速度调整的加速度"""
     adapt_time: float
     """调整时间"""
-    EV: 'Game_Vehicle'
+    EV: 'Vehicle'
     """换道车辆"""
-    gap: Optional[float] = None
-    TF: Optional['Game_Vehicle'] = None
+    TF: Optional['Vehicle'] = None
     """目标间隙前车"""
-    TR: Optional['Game_Vehicle'] = None
+    TR: Optional['Vehicle'] = None
     """目标间隙后车"""
-    PC: Optional['Game_Vehicle'] = None
+    PC: Optional['Vehicle'] = None
     """当前车道前车"""
     acc_gain: Optional[float] = None
     """加速度增益"""
     ttc_risk: Optional[float] = None
     """碰撞风险"""
     route_gain: Optional[float] = None
-    """路径成本函数"""
+    """目标路径增益"""
+    platoon_gain: Optional[float] = None
+    """队列换道增益"""
+    weaving_gain: Optional[float] = None
+    """交织换道增益"""
     adapt_end_time: float = None
     """调整结束时间"""
     target_lane: Optional['LaneAbstract'] = None

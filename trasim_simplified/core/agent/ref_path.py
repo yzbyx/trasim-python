@@ -6,6 +6,7 @@
 import numpy as np
 
 from trasim_simplified.core.agent.vehicle import Vehicle
+from trasim_simplified.core.constant import TrajPoint
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -150,6 +151,36 @@ class ReferencePath:
                            self.ref_yaw[start:end], self.ref_v[start:end]))
         u_ref = np.vstack((self.ref_a[start:end], self.ref_delta[start:end]))
         return x_ref, u_ref
+
+    def get_ref_pos(self, start, time_len):
+        """
+        :param start: 起始索引
+        :param time_len: 预测时间长度
+        """
+        N = int(time_len / self.dt)
+        end = min(start + N + 1, len(self.ref_x))
+        x_ref = np.vstack((self.ref_x[start:end], self.ref_y[start:end],
+                           self.ref_yaw[start:end], self.ref_v[start:end], self.ref_a[start:end])).T
+        traj_point = []
+        for x, y, yaw, v, a in x_ref:
+            traj_point.append(TrajPoint(
+                x=x,
+                y=y,
+                acc=a,
+                speed=v,
+                yaw=yaw,
+            ))
+        addi_num = N + 1 - len(traj_point)
+        if addi_num > 0:
+            for i in range(addi_num):
+                traj_point.append(TrajPoint(
+                    x=traj_point[-1].x + traj_point[-1].vx * self.dt,
+                    y=traj_point[-1].y + traj_point[-1].vy * self.dt,
+                    acc=traj_point[-1].acc,
+                    speed=traj_point[-1].speed,
+                    yaw=traj_point[-1].yaw,
+                ))
+        return traj_point
 
     def get_index(self, start, distance):
         """

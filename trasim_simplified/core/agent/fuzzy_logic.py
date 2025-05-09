@@ -96,7 +96,7 @@ class FuzzyLogic:
         self.lane_change_sim.compute()
         return self.lane_change_sim.output['决策']
 
-    def plot_membership_functions(self, variable):
+    def plot_membership_functions(self):
         # 可视化变量隶属度函数
         # 设置默认matplotlib尺寸参数
         mm = 1 / 25.4  # mm转inch
@@ -109,25 +109,66 @@ class FuzzyLogic:
 
         self.B.view()  # 可视化变量隶属度函数
         fig = plt.gcf()
+        ax = fig.get_axes()[0]
+        ax.set_ylabel("隶属度")
+        ax.legend(
+            fontsize=fontsize - 1, frameon=False,
+            loc='center left',
+            bbox_to_anchor=(1.01, 0.5),
+            labelspacing=0.1,    # 标签间垂直间距
+            handletextpad=0.1,   # 符号与标签水平间距
+            columnspacing=0.1,   # 多列图例的列间距（若有多列）
+        )
         fig.savefig("fuzzy_benefit.png", dpi=500, pil_kwargs={"compression": "tiff_lzw"})
 
         self.A.view()
         fig = plt.gcf()
+        ax = fig.get_axes()[0]
+        ax.set_ylabel("隶属度")
+        ax.legend(
+            fontsize=fontsize - 1, frameon=False,
+            loc='center left',
+            bbox_to_anchor=(1.01, 0.5),
+            labelspacing=0.1,    # 标签间垂直间距
+            handletextpad=0.1,   # 符号与标签水平间距
+            columnspacing=0.1,   # 多列图例的列间距（若有多列）
+        )
         fig.savefig("fuzzy_aggressiveness.png", dpi=500, pil_kwargs={"compression": "tiff_lzw"})
 
         self.R.view()
         fig = plt.gcf()
+        ax = fig.get_axes()[0]
+        ax.set_ylabel("隶属度")
+        ax.legend(
+            fontsize=fontsize - 1, frameon=False,
+            loc='center left',
+            bbox_to_anchor=(1.01, 0.5),
+            labelspacing=0.1,    # 标签间垂直间距
+            handletextpad=0.1,   # 符号与标签水平间距
+            columnspacing=0.1,   # 多列图例的列间距（若有多列）
+        )
         fig.savefig("fuzzy_risk.png", dpi=500, pil_kwargs={"compression": "tiff_lzw"})
 
         self.D.view()
         fig = plt.gcf()
+        ax = fig.get_axes()[0]
+        ax.set_ylabel("隶属度")
+        ax.legend(
+            fontsize=fontsize - 1, frameon=False,
+            loc='center left',
+            bbox_to_anchor=(1.01, 0.5),
+            labelspacing=0.1,    # 标签间垂直间距
+            handletextpad=0.1,   # 符号与标签水平间距
+            columnspacing=0.1,   # 多列图例的列间距（若有多列）
+        )
         fig.savefig("fuzzy_decision.png", dpi=500, pil_kwargs={"compression": "tiff_lzw"})
 
         plt.show()
 
 
-def test_fuzzy_logic():
+if __name__ == '__main__':
     fuzzy_logic = FuzzyLogic()
+    fuzzy_logic.plot_membership_functions()
 
     lane_change_sim = fuzzy_logic.lane_change_sim
 

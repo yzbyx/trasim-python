@@ -214,12 +214,23 @@ class TrajPred:
                 predicted_trajectory[:, 0] += veh_surr.ev.x
                 predicted_trajectory[:, 1] += veh_surr.ev.y
 
+                vx = np.gradient(predicted_trajectory[:, 0], veh_surr.ev.lane.dt)
+                vy = np.gradient(predicted_trajectory[:, 1], veh_surr.ev.lane.dt)
+                speed = np.sqrt(vx ** 2 + vy ** 2)
+                # 计算加速度
+                acc = np.gradient(speed, veh_surr.ev.lane.dt)
+                # 计算航向角
+                yaw = np.arctan2(vy, vx)
+
                 pred_traj = [veh_surr.ev.get_traj_point()]
                 for i in range(predicted_trajectory.shape[0]):
                     pred_traj.append(
                         TrajPoint(
                             x=predicted_trajectory[i, 0],
                             y=predicted_trajectory[i, 1],
+                            speed=speed[i],
+                            acc=acc[i],
+                            yaw=yaw[i],
                             length=veh_surr.ev.length,
                             width=veh_surr.ev.width
                         )
@@ -227,18 +238,19 @@ class TrajPred:
                 veh_surr.ev.pred_traj = pred_traj
 
                 if time_len > 3:
-                    pred_traj = []
                     dt = veh_surr.ev.lane.dt
                     for i in range(round((time_len - 3) / dt)):
                         pred_traj.append(
                             TrajPoint(
-                                x=veh_surr.ev.pred_traj[-1].x + veh_surr.ev.v * dt,
-                                y=veh_surr.ev.pred_traj[-1].y + veh_surr.ev.v_lat * dt,
+                                x=pred_traj[-1].x + pred_traj[-1].vx * dt,
+                                y=pred_traj[-1].y + pred_traj[-1].vy * dt,
+                                speed=pred_traj[-1].speed,
+                                acc=0,
+                                yaw=pred_traj[-1].yaw,
                                 length=veh_surr.ev.length,
                                 width=veh_surr.ev.width
                             )
                         )
-                    veh_surr.ev.pred_traj.extend(pred_traj)
 
                 # 获取前time_len秒的轨迹
                 add_v_a_yaw(veh_surr.ev.pred_traj, veh_surr.ev.lane.dt)

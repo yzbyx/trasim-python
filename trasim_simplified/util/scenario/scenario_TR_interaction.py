@@ -9,6 +9,8 @@ import numpy as np
 import seaborn
 from matplotlib import pyplot as plt
 
+np.random.seed(2025)
+
 from trasim_simplified.core.agent.game_agent import Game_Vehicle, Game_A_Vehicle
 from trasim_simplified.core.constant import ScenarioMode, COLOR, ScenarioTraj, V_CLASS
 from trasim_simplified.util.scenario.scenario_loader import Scenario
@@ -30,10 +32,11 @@ class ScenarioTRInteraction(Scenario):
         if mode is not None:
             self.mode = mode
         for veh, _, _ in self.surr_ids.values():
-            if veh.ID != self.ev_id:
+            if veh.ID in [self.ev_id]:
+                # veh.lc_incentive = True
+                veh.lc_incentive = False
+            else:
                 veh.no_lc = True
-                if veh.ID not in [self.tr_id, self.cr_id]:
-                    veh.skip = True
             veh.lane_can_lc = self.lane_can_lc
 
         ev: Game_Vehicle = self.surr_ids[self.ev_id][0]
@@ -64,6 +67,7 @@ class ScenarioTRInteraction(Scenario):
         # ev = self.surr_ids[self.ev_id][0].la
 
         TR_stra_dict = {}
+        EV_planned_traj = []
         for step, stage in self.road.run(
                 data_save=True, has_ui=has_ui, frame_rate=-1, warm_up_step=0,
                 sim_step=self.max_step, dt=0.1
@@ -107,27 +111,35 @@ class ScenarioTRInteraction(Scenario):
                         tr_id = ev.opti_game_res.TR.ID
                         TR_stra_dict[step] = \
                             (tr_id, ev.opti_game_res.TR_stra, np.mean(ev.rho_hat_s[tr_id]))
+                    if ev.lc_conti_time == ev.lane.dt:
+                        EV_planned_traj.append(ev.opti_game_res.EV_opti_traj)
 
                 plt.pause(0.1)
 
-            if stage == 4:
-                for vid, (car, traj, name) in self.surr_ids.items():
-                    if vid not in [self.ev_id, self.tr_id, self.cr_id]:
-                        speed = traj["speed"].values[step]
-                        x = traj[C_Info.xFrontGlobal].values[step]
-                        y = traj[C_Info.yFrontGlobal].values[step]
-                        heading = traj["heading"].values[step]
-                        acc = traj["acceleration"].values[step]
-
-                        self.set_vehicle_dynamic(car, x, y, speed, acc, heading)
+            # if stage == 4:
+            #     for vid, (car, traj, name) in self.surr_ids.items():
+            #         if vid not in [self.ev_id, self.tr_id, self.cp_id, self.cr_id]:
+            #             speed = traj["speed"].values[step]
+            #             x = traj[C_Info.xFrontGlobal].values[step]
+            #             y = traj[C_Info.yFrontGlobal].values[step]
+            #             heading = traj["heading"].values[step]
+            #             acc = traj["acceleration"].values[step]
+            #
+            #             self.set_vehicle_dynamic(car, x, y, speed, acc, heading)
 
         print("TR_stra_dict: ", TR_stra_dict)
         self.tr_stra_dict = TR_stra_dict
+        self.tp_stra_dict = TP_stra_dict
 
         # 保存数据
         save_to_pickle(
             self.tr_stra_dict,
             fr"{self.save_file_name}_TR_stra.pkl"
+        )
+
+        save_to_pickle(
+            EV_planned_traj,
+            fr"{self.save_file_name}_EV_planned_traj.pkl"
         )
 
         merged_df = self.get_res(save_res)
@@ -154,6 +166,12 @@ class ScenarioTRInteraction(Scenario):
         )
         return data
 
+    def _load_game_planned_traj(self):
+        data = load_from_pickle(
+            fr"{self.save_file_name}_EV_planned_traj.pkl"
+        )
+        return data
+
     def plot_scenario(self, ev_rho=None, tr_rho=None):
         if ev_rho is not None:
             self.ev_rho = ev_rho
@@ -163,6 +181,8 @@ class ScenarioTRInteraction(Scenario):
         self.get_save_file_name(self.ev_rho, self.tr_rho)
         merged_df, traj_s, traj_name = self._load_traj()
         tr_stra_dict = self._load_stra_data()
+        tp_stra_dict = self.tp_stra_dict
+        game_planned_traj = self._load_game_planned_traj()
 
         # 绘制激进度估计与TR策略变化曲线
         tr_id_s = []
@@ -221,6 +241,69 @@ class ScenarioTRInteraction(Scenario):
             fig_name=self.save_file_name, mode=self.mode
         )
 
+        num = len(game_planned_traj)
+        if num > 0:
+            mm = 1 / 25.4  # mm转inch
+            _width = 70 * mm * 2  # 图片宽度英寸
+            _ratio = 5 / 14  # 图片长宽比
+            figsize = (_width, _width * _ratio)
+
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+            fig: plt.Figure = fig
+            ax: plt.Axes = ax
+            self.road.draw(ax=ax, fill=False)
+
+            min_x = None
+            max_x = None
+            min_y = None
+            max_y = None
+            for i, traj in enumerate(game_planned_traj):
+                ax.plot(traj[:, 0], traj[:, 3], color="g",
+                        alpha=(i + 1) * 1 / num, linewidth=1)
+                # 端点绘制
+                ax.scatter(
+                    traj[0, 0], traj[0, 3], color="orange", s=10, alpha=(i + 1) * 1 / num
+                )
+                ax.scatter(
+                    traj[-1, 0], traj[-1, 3], color="blue", s=10, alpha=(i + 1) * 1 / num
+                )
+                ax.text(
+                    traj[-1, 0], traj[-1, 3], str(i + 1), color="k", fontsize=10,
+                    ha='center', va='bottom'
+                )
+                min_x = min(traj[:, 0]) if min_x is None else min(min_x, np.min(traj[:, 0]))
+                max_x = max(traj[:, 0]) if max_x is None else max(max_x, np.max(traj[:, 0]))
+                min_y = min(traj[:, 3]) if min_y is None else min(min_y, np.min(traj[:, 3]))
+                max_y = max(traj[:, 3]) if max_y is None else max(max_y, np.max(traj[:, 3]))
+
+            ev_traj = traj_s[traj_name.index("EV")]
+            ax.plot(
+                ev_traj["xFrontGlobal"].values,
+                ev_traj["yFrontGlobal"].values,
+                color='r', linewidth=1, alpha=0.5
+            )
+            # 端点绘制
+            ax.scatter(
+                ev_traj["xFrontGlobal"].values[0],
+                ev_traj["yFrontGlobal"].values[0],
+                color="orange", s=20, alpha=1, marker="^"
+            )
+            ax.scatter(
+                ev_traj["xFrontGlobal"].values[-1],
+                ev_traj["yFrontGlobal"].values[-1],
+                color="blue", s=20, alpha=1, marker="^"
+            )
+
+            ax.set_xlabel("X (m)")
+            ax.set_ylabel("Y (m)")
+            ax.set_xlim(min_x - 10, max_x + 10)
+            ax.set_ylim(min_y - 10, max_y + 10)
+
+            fig.savefig(
+                fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{self.save_file_name}_EV_planned_traj.png",
+                dpi=300, bbox_inches='tight'
+            )
+
 
 if __name__ == '__main__':
     scenario_path = r"E:\BaiduSyncdisk\weaving-analysis\data\pattern_scenario_data.pkl"
@@ -232,17 +315,21 @@ if __name__ == '__main__':
             name = f"{pattern_traj.dataset_name}_{pattern_name}_{pattern_traj.track_id}"
             if name in [
                 "CitySim_驶入_959", "CitySim_驶入_1353", "CitySim_驶入_2648", "CitySim_驶入_5053",
-                "CitySim_驶入_6218", "NGSIM_预期行为_464", "NGSIM_预期行为_243"
+                "CitySim_驶入_6218", "NGSIM_预期行为_464", "NGSIM_预期行为_243", "NGSIM_交织换道_1111",
+                "NGSIM_交织换道_1135", "CitySim_交织换道_955", "CitySim_交织换道_19860"
             ]:
+                continue
+            if pattern_name != "交织换道":
                 continue
             # if name not in ["NGSIM_预期行为_243"]:
             #     continue
+
             # if pattern_traj.dataset_name == "NGSIM":
             #     continue
             if pattern_traj.TR_traj is None:
                 continue
             if (pattern_traj.EV_traj["myLocalLon"].values[0] -
-                pattern_traj.TR_traj["myLocalLon"].values[0] > 0):
+                    pattern_traj.TR_traj["myLocalLon"].values[0] > 20):
                 continue
             print(name)
             base_path = r"E:\BaiduSyncdisk\car-following-model\tests\thesis\data"
@@ -262,17 +349,17 @@ if __name__ == '__main__':
             print(cf_params)
 
             car_params = {}
-            if not os.path.exists(fr"{base_path}\{name}_car_params.pkl"):
-                car_params = sce.opti_ade(cf_params)
-                save_to_pickle(
-                    car_params,
-                    fr"{base_path}\{name}_car_params.pkl"
-                )
-            car_params = load_from_pickle(fr"{base_path}\{name}_car_params.pkl")
-            print(car_params)
+            # if not os.path.exists(fr"{base_path}\{name}_car_params.pkl"):
+            #     car_params = sce.opti_ade(cf_params)
+            #     save_to_pickle(
+            #         car_params,
+            #         fr"{base_path}\{name}_car_params.pkl"
+            #     )
+            # car_params = load_from_pickle(fr"{base_path}\{name}_car_params.pkl")
+            # print(car_params)
 
             ev_rho = 0.5
-            for tr_rho in [0.1, 0.5, 0.9]:
+            for tr_rho in [0.5]:
                 save_file_name = sce.get_save_file_name(ev_rho=ev_rho, tr_rho=tr_rho)
                 print(save_file_name)
                 if not os.path.exists(fr"{base_path}\{save_file_name}.pkl"):

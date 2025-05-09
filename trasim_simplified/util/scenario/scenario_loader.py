@@ -38,11 +38,16 @@ class Scenario:
         self.tp_id = None
         self.cp_id = None
         self.cr_id = None
+        self.crr_id = None
+        self.trr_id = None
+        self.tpp_id = None
         self.surr_ids: dict[int, tuple[Game_Vehicle, pd.DataFrame, str]] = {}
         self.veh_name = {}
         self.mode = mode
         self.ev_type = ev_type
         self.ev_rho = None
+        self.tr_co = None
+        self.tp_co = None
         self.rho_hat = []
         self.save_file_name = None
         self.lane_can_lc = None
@@ -91,6 +96,12 @@ class Scenario:
                 self.cr_id = track_id
             elif name == "TP":
                 self.tp_id = track_id
+            elif name == "CRR":
+                self.crr_id = track_id
+            elif name == "TRR":
+                self.trr_id = track_id
+            elif name == "TPP":
+                self.tpp_id = track_id
             if self.dataset_name != "NGSIM":
                 traj = traj[traj["frame"] % 3 == 0]
                 traj["frame"] = traj["frame"] // 3
@@ -312,7 +323,7 @@ class Scenario:
 
     def _set_record_info(self):
         save_info = [C_Info.trackId, C_Info.frame, C_Info.time, C_Info.length, C_Info.width,
-                     C_Info.xCenterGlobal, C_Info.yCenterGlobal,
+                     C_Info.xCenterGlobal, C_Info.yCenterGlobal, C_Info.xFrontGlobal, C_Info.yFrontGlobal,
                      C_Info.speed, C_Info.acc, C_Info.yaw, C_Info.delta,
                      C_Info.lane_add_num, C_Info.isLC, C_Info.ttc]
         lanes = self.road.lane_list
@@ -391,7 +402,7 @@ class Scenario:
         merged_df, traj_s, traj_name = self._load_traj()
         plot_scenario_twin(
             traj_s, traj_names=traj_name, road=self.road,
-            fig_name=self.save_file_name
+            fig_name=self.save_file_name, highlight=["EV"],
         )
 
     def indicator_evaluation(self, merged_df=None, opti=False):
@@ -461,14 +472,18 @@ class Scenario:
         #     min_ttc_ori = min(np.nanmin(ttc_seq_ori), min_ttc_ori)
         # print("min_ttc: ", min_ttc, "min_ttc_ori: ", min_ttc_ori)
 
-        min_ttc = min(ev_traj[C_Info.ttc])
-        min_ttc_ori = min(ev_traj[C_Info.ttc + "_ori"])
-        print("安全提升：", min_ttc - min_ttc_ori)
+        min_ttc_ev = np.nanmin(ev_traj[C_Info.ttc])
+        min_ttc_ori_ev = np.nanmin(ev_traj[C_Info.ttc + "_ori"])
+        min_ttc_tr = np.nanmin(traj_s[traj_name.index("TR")][C_Info.ttc])
+        min_ttc_ori_tr = np.nanmin(traj_s[traj_name.index("TR")][C_Info.ttc + "_ori"])
+        min_ttc = np.nanmin([min_ttc_ev])
+        min_ttc_ori = np.nanmin([min_ttc_ori_ev])
+        print("安全提升：", min_ttc - min_ttc_ori, min_ttc, min_ttc_ori)
 
         # 效率
         eff = np.nanmean(v) - v[0]
         eff_ori = np.nanmean(v_ori) - v_ori[0]
-        print("效率提升：", eff - eff_ori)
+        print("效率提升：", eff - eff_ori, eff, eff_ori)
 
         # 舒适性
         yaw = ev_traj[C_Info.yaw].to_numpy()
@@ -477,11 +492,11 @@ class Scenario:
         ay_max = np.nanmax(np.abs(a * np.cos(yaw)))
         ax_ori_max = np.nanmax(np.abs(a_ori * np.sin(yaw_ori)))
         ay_ori_max = np.nanmax(np.abs(a_ori * np.cos(yaw_ori)))
-        # print("ax_max: ", ax_max, "ay_max: ", ay_max, "ax_ori_max: ",
-        #       ax_ori_max, "ay_ori_max: ", ay_ori_max, "delta com cost: ", ax_max)
-        print("舒适提升：", ax_ori_max + ay_ori_max - ax_max - ay_max)
+        acc_max = ax_max + ay_max
+        acc_max_ori = ax_ori_max + ay_ori_max
+        print("舒适提升：", acc_max_ori - acc_max, acc_max, acc_max_ori)
 
-        # ev: Game_Vehicle = self.surr_ids[self.ev_id][0]
+        # ev: Base_Agent = self.surr_ids[self.ev_id][0]
         # ev.cal_cost_by_traj()
 
         # d_yaw_max = np.nanmax(np.diff(yaw) / 0.1)

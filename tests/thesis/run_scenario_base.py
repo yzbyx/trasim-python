@@ -19,17 +19,24 @@ if __name__ == '__main__':
         have_one = False
         for pattern_traj in pattern_traj_s:
             name = f"{pattern_traj.dataset_name}_{pattern_name}_{pattern_traj.track_id}"
-            if name in [
-                "CitySim_驶入_959", "CitySim_驶入_1353", "CitySim_驶入_2648", "CitySim_驶入_5053",
-                "CitySim_驶入_6218", "NGSIM_预期行为_464", "NGSIM_预期行为_243", "NGSIM_预期行为_1191"
-            ]:
-                continue
+            # if name in [
+            #     "CitySim_驶入_959", "CitySim_驶入_1353", "CitySim_驶入_2648", "CitySim_驶入_5053",
+            #     "CitySim_驶入_6218", "NGSIM_预期行为_464", "NGSIM_预期行为_243", "NGSIM_预期行为_1191"
+            # ]:
+            #     continue
             # if name not in ["NGSIM_预期行为_243"]:
             #     continue
+            # if name not in ["CitySim_驶入_207"]:
+            #     continue
+            if name not in ["NGSIM_驶出_1706"]:
+                continue
+            # print("find")
             # if pattern_traj.dataset_name == "NGSIM":
             #     continue
-            if pattern_name != "预期行为":
-                continue
+            # if pattern_name != "交织换道":
+            #     continue
+            # if name not in ["NGSIM_避让换道_1030"]:
+            #     continue
             print(name)
             base_path = r"E:\BaiduSyncdisk\car-following-model\tests\thesis\data"
             sce = Scenario(pattern_traj, ScenarioMode.NO_INTERACTION, ev_type=V_CLASS.GAME_AV)
