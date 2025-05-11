@@ -177,10 +177,10 @@ def plot_scenario(traj_s, traj_names, road: 'Road', fig_name):
         fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\fig\{fig_name}_speed.tif",
         dpi=300, pil_kwargs={"compression": "tiff_lzw"})
 
-    # fig, ax = get_fig_ax(scale=1, close_all=False)
+    # fig, ax = get_fig_ax(SCALE=1, close_all=False)
     # ax.plot(EV_traj["frame"].values * dt, EV_traj["heading"].values, color=colors[0], label="EV")
     #
-    # fig, ax = get_fig_ax(scale=1, close_all=False)
+    # fig, ax = get_fig_ax(SCALE=1, close_all=False)
     # ax.plot(EV_traj["frame"].values * dt, EV_traj["speed"].values, color=colors[1], label="EV")
 
 

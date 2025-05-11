@@ -337,7 +337,7 @@ class Visualizer:
 
         table.auto_set_font_size(False)
         table.auto_set_column_width([0])
-        table.scale(1, 1.4)
+        table.SCALE(1, 1.4)
 
         table[(0, 1)].set_fontsize(8)
         table[(2, 1)].set_text_props(fontweight='bold', color='red')

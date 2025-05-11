@@ -268,6 +268,7 @@ class Vehicle(Obstacle):
                        target_lane: "LaneAbstract" = None,
                        PC_traj=None, to_ndarray=True, ache=False, PC: 'Vehicle' = None):
         """在策略下预测自车轨迹（包含初始状态）
+        :param PC:
         :param time_len: 预测时间长度
         :param stra: 期望时距
         :param target_lane: 目标车道

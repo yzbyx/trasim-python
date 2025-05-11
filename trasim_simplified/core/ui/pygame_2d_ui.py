@@ -1087,7 +1087,7 @@ class World(object):
                        ]
             v[1].transform(corners)
             corners = [world_to_pixel(p) for p in corners]
-            pygame.draw.lines(surface, color, False, corners, int(math.ceil(4.0 * self.map_image.scale)))
+            pygame.draw.lines(surface, color, False, corners, int(math.ceil(4.0 * self.map_image.SCALE)))
 
     def render_actors(self, surface, vehicles, traffic_lights, speed_limits, walkers):
         """Renders all the actors"""
@@ -1107,7 +1107,7 @@ class World(object):
         self.result_surface.set_clip(clipping_rect)
 
     def _compute_scale(self, scale_factor):
-        """Based on the mouse wheel and mouse position, it will compute the scale and move the map so that it is zoomed in or out based on mouse position"""
+        """Based on the mouse wheel and mouse position, it will compute the SCALE and move the map so that it is zoomed in or out based on mouse position"""
         m = self._input.mouse_pos
 
         # Percentage of surface where mouse position is actually
@@ -1122,7 +1122,7 @@ class World(object):
         self.scale_offset = (self.scale_offset[0] + diff_between_scales[0],
                              self.scale_offset[1] + diff_between_scales[1])
 
-        # Update previous scale
+        # Update previous SCALE
         self.prev_scaled_size = self.scaled_size
 
         # Scale performed
@@ -1165,7 +1165,7 @@ class World(object):
                     )
 
         angle = 0.0 if self.hero_actor is None else self.hero_transform.rotation.yaw + 90.0
-        self.traffic_light_surfaces.rotozoom(-angle, self.map_image.scale)
+        self.traffic_light_surfaces.rotozoom(-angle, self.map_image.SCALE)
 
         center_offset = (0, 0)
         if self.hero_actor is not None:
