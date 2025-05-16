@@ -12,7 +12,7 @@ from trasim_simplified.core.constant import MARKING_TYPE
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
     from trasim_simplified.core.frame.micro.road import Road
-    from trasim_simplified.core.agent import Vehicle
+    from trasim_simplified.core.agent import Vehicle, Game_A_Vehicle
 
 
 class UI2DMatplotlib:
@@ -126,12 +126,15 @@ class UI2DMatplotlib:
                 #                     edgecolor='black', linewidth=1, closed=True)
                 # self.ax.add_patch(car_patch)
                 # 加上ID
-                text = self.ax.text(car.x, car.y, str(car.ID), fontsize=12,
-                                    color='white', ha='center', va='center')
+                car_type = "AV" if hasattr(car, "mpc_solver") else "HV"
+                text = self.ax.text(
+                    car.x + car.length / 2, car.y, f"{car.ID} {car_type}", fontsize=12,
+                    color='white', ha='center', va='center'
+                )
                 self.text_list.append(text)
                 # 如果换道，且为AV，则绘制换道轨迹
                 if car.opti_game_res is not None:
-                    lc_traj = car.opti_game_res.EV_opti_traj
+                    lc_traj = car.opti_game_res.EV_stra.solve_res.traj
                     self.ax.plot(lc_traj[:, 0], lc_traj[:, 3],
                                  color='blue', linestyle='--', linewidth=1)
 

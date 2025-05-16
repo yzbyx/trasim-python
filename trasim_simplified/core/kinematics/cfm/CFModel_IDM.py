@@ -76,7 +76,7 @@ class CFModel_IDM(CFModel):
         self._update_dynamic()
         T_wanted = self._T
         if self.veh_surr.ev.is_gaming:
-            T_wanted = self.veh_surr.ev.game_factor
+            T_wanted = self.veh_surr.ev.cf_factor
         return cf_IDM_acc_jit(self._s0, self._s1, min(self._v0, self.get_speed_limit()), T_wanted,
                               self._omega, self._d,
                               self._delta, self.veh_surr.ev.v, self.gap, self.veh_surr.cp.v)

@@ -108,28 +108,26 @@ class Obstacle:
         定义朝向x轴正方向，车头在前，车尾在后的车身和车轮轮廓
         """
         WIDTH = 1.8
-        LENGTH = self.wheelbase / self.wb_prop
-        BACK_TO_WHEEL = LENGTH * (1 - self.wb_prop) / 2
         WHEEL_LEN = 0.8
         WHEEL_WIDTH = 0.2
         TREAD = 0.6
         self.outline_poses = np.array(
-            [(- BACK_TO_WHEEL, - WIDTH / 2),
-             (- BACK_TO_WHEEL, WIDTH / 2),
-             (self.wheelbase * self.prop_, WIDTH / 2),
-             (self.wheelbase * self.prop_, - WIDTH / 2),
-             (- BACK_TO_WHEEL, - WIDTH / 2)]
+            [(- self.length / 2, - WIDTH / 2),
+             (- self.length / 2, WIDTH / 2),
+             (self.length / 2, WIDTH / 2),
+             (self.length / 2, - WIDTH / 2),
+             (- self.length / 2, - WIDTH / 2)]
         )
         self.rect_kwargs = {"fill": False, "edgecolor": "black"}
-        # following right wheel
+        # rear right wheel
         self.rr_wheel_poses = np.array(
-            [(- WHEEL_LEN / 2, - WHEEL_WIDTH / 2 - TREAD),
-             (- WHEEL_LEN / 2, WHEEL_WIDTH / 2 - TREAD),
-             (WHEEL_LEN / 2, WHEEL_WIDTH / 2 - TREAD),
-             (WHEEL_LEN / 2, -WHEEL_WIDTH / 2 - TREAD),
-             (- WHEEL_LEN / 2, - WHEEL_WIDTH / 2 - TREAD)]
+            [(- self.wheelbase / 2 - WHEEL_LEN / 2, - WHEEL_WIDTH / 2 - TREAD),
+             (- self.wheelbase / 2 - WHEEL_LEN / 2, WHEEL_WIDTH / 2 - TREAD),
+             (- self.wheelbase / 2 + WHEEL_LEN / 2, WHEEL_WIDTH / 2 - TREAD),
+             (- self.wheelbase / 2 + WHEEL_LEN / 2, - WHEEL_WIDTH / 2 - TREAD),
+             (- self.wheelbase / 2 - WHEEL_LEN / 2, - WHEEL_WIDTH / 2 - TREAD)]
         )
-        # following left wheel
+        # rear left wheel
         self.rl_wheel_poses = self.rr_wheel_poses + np.array([0, 2 * TREAD])
         # front right wheel
         self.fr_wheel_poses = self.rr_wheel_poses + np.array([self.wheelbase, 0])
@@ -284,7 +282,7 @@ class Obstacle:
         return outline
 
     def plot_car(self, ax: plt.Axes):
-        x, y, yaw = self.x, self.y, self.yaw
+        x, y, yaw = self.x_c, self.y_c, self.yaw
         steer = self.delta
 
         outline = np.copy(self.outline_poses)

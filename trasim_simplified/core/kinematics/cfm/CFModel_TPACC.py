@@ -61,11 +61,9 @@ class CFModel_TPACC(CFModel):
 
     def get_expect_speed(self):
         vf_change = 0
-        if self.veh_surr.ev.is_gaming:
-            game_factor = self.veh_surr.ev.game_factor
-            if game_factor < 1:
-                game_factor = 1 / game_factor
-                vf_change = ((game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor))
+        cf_factor = self.veh_surr.ev.cf_factor
+        if cf_factor < 1:
+            vf_change = (1 - cf_factor) * 10
         return self._v0 + vf_change
 
     def get_max_dec(self):
@@ -90,10 +88,8 @@ class CFModel_TPACC(CFModel):
         return self._thw * self.scale
 
     def _update_dynamic(self):
-        self.scale = self.veh_surr.ev.game_factor \
-            if (self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader) else 1
-        self.gap = (self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length
-                    - self.get_safe_s0())
+        self.scale = self.veh_surr.ev.cf_factor
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.veh_surr.cp.length - self.get_safe_s0()
         self.dt = self.veh_surr.ev.lane.dt
         self._update_v_safe()
 
@@ -129,7 +125,7 @@ class CFModel_TPACC(CFModel):
 
     def calculate(self, kdv_, k1_, k2_, thw_, g_tau_, acc_, dec_, v_safe_dispersed_,
                   dt, gap, v, l_v, v_free, leader_is_dummy, l_v_a, tau):
-        if gap > v * g_tau_ or (self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader):
+        if gap > v * g_tau_:
             acc = k1_ * (gap - thw_ * self.scale * v) + k2_ * (l_v - v)
             is_speed_adaptive = 0
         else:
@@ -137,17 +133,17 @@ class CFModel_TPACC(CFModel):
             is_speed_adaptive = 1
 
         # if self.veh_surr.ev.is_gaming and not self.veh_surr.ev.is_game_leader:
-        #     acc += self.veh_surr.ev.game_factor * 1
+        #     acc += self.veh_surr.ev.cf_factor * 1
 
         is_acc_constraint = 0 if - dec_ <= acc <= acc_ else 1
         v_c = v + dt * max(- dec_, min(acc, acc_))
 
         # if self.veh_surr.ev.is_gaming:
-        #     game_factor = self.veh_surr.ev.game_factor
-        #     if game_factor < 1:
-        #         game_factor = 1 / game_factor
-        #         v_c += ((game_factor * 8 * self.dt) *
-        #                 np.sign(1 - self.veh_surr.ev.game_factor))
+        #     cf_factor = self.veh_surr.ev.cf_factor
+        #     if cf_factor < 1:
+        #         cf_factor = 1 / cf_factor
+        #         v_c += ((cf_factor * 8 * self.dt) *
+        #                 np.sign(1 - self.veh_surr.ev.cf_factor))
 
         v_safe = cal_v_safe(v_safe_dispersed_, tau * (self.scale if self.scale < 1 else 1),
                             l_v, gap, dec_, dec_ * (self.scale if self.scale < 1 else 1))

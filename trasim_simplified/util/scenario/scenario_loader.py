@@ -11,7 +11,6 @@ from skopt.space import Real
 
 from traj_process.processor.map_phrase.map_config import US_101_Config, ExpresswayA_Config
 from trasim_simplified.core.agent import Vehicle, Game_H_Vehicle, Game_A_Vehicle
-from trasim_simplified.core.agent.TwoDimSSM import TTC, traj_data_TTC
 from trasim_simplified.core.agent.game_agent import Game_Vehicle
 from trasim_simplified.core.constant import ScenarioTraj, V_TYPE, LCM, CFM, V_CLASS, COLOR, RouteType, ScenarioMode
 from trasim_simplified.core.frame.micro.road import Road

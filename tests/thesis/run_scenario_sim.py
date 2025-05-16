@@ -103,8 +103,32 @@ def run_road(road: Road):
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
     )
     veh_TRR.no_lc = True
-    veh_TRR.rho = 0.5
 
+    veh_TPP: Game_Vehicle = lanes[0].car_insert(
+        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+        x_base + dhw, speed, 0,
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
+        lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
+    )
+    veh_TPP.no_lc = True
+
+    veh_CPP: Game_Vehicle = lanes[1].car_insert(
+        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+        x_base + dhw / 2 + dhw, speed, 0,
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
+        lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[1], route_type=RouteType.auxiliary
+    )
+    veh_CPP.no_lc = True
+
+    veh_CRR: Game_Vehicle = lanes[1].car_insert(
+        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
+        x_base - dhw / 2 - 2 * dhw, speed, 0,
+        CFM.KK, {"v0": 10}, {"color": COLOR.red},
+        lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[1], route_type=RouteType.auxiliary
+    )
+    veh_CRR.no_lc = True
+
+    # 有交互车辆
     veh_TR = lanes[0].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_AV,
         x_base - dhw, speed, 0,
@@ -126,15 +150,6 @@ def run_road(road: Road):
     veh_TP.rho = 0.5
     veh_TP.game_co = 0.5
 
-    veh_TFF: Game_Vehicle = lanes[0].car_insert(
-        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
-        x_base + dhw, speed, 0,
-        CFM.KK, {"v0": 10}, {"color": COLOR.red},
-        lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.mainline
-    )
-    veh_TFF.no_lc = True
-    veh_TFF.rho = 0.5
-
     veh_EV: Game_A_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_AV,
         x_base - dhw / 2, speed, 0,
@@ -144,21 +159,24 @@ def run_road(road: Road):
     # veh_EV.no_lc = True
     veh_EV.rho = 0.5
 
-    veh_PC: Game_Vehicle = lanes[1].car_insert(
+    veh_CP: Game_Vehicle = lanes[1].car_insert(
         v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base + dhw / 2, speed, 0,
         CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[1], route_type=RouteType.auxiliary
     )
-    veh_PC.no_lc = True
+    veh_CP.no_lc = True
+
+
 
     veh_CR: Game_Vehicle = lanes[1].car_insert(
-        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_AV,
+        v_length, V_TYPE.PASSENGER, V_CLASS.GAME_HV,
         x_base - dhw / 2 - dhw, speed, 0,
         CFM.KK, {"v0": 10}, {"color": COLOR.red},
         lc_name=LCM.MOBIL, lc_param={}, destination_lanes=[0], route_type=RouteType.merge
     )
-    # veh_CR.no_lc = True
+    veh_CR.no_lc = True
+
 
     # for veh in [veh_TRR, veh_TR]:
     #     veh.single_stra = True
@@ -171,13 +189,13 @@ def run_road(road: Road):
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
         # if stage == 2:
         #     veh_TR.is_gaming = True
-        #     veh_TR.game_factor = 1 / 3
+        #     veh_TR.cf_factor = 1 / 3
 
         if stage == 4:
-            print(veh_TR.ID, veh_TR.is_gaming, veh_TR.game_factor)
+            print(veh_TR.ID, veh_TR.is_gaming, veh_TR.cf_factor)
             sim.ui.focus_on(veh_EV)
-            sim.ui.plot_pred_traj()
-            sim.ui.plot_hist_traj()
+            # sim.ui.plot_pred_traj()
+            # sim.ui.plot_hist_traj()
             plt.pause(0.01)
 
             print("-" * 10 + "basic_info" + "-" * 10)
@@ -201,17 +219,17 @@ def run_road(road: Road):
                 print(veh_EV.opti_game_res)
                 print(veh_EV.rho_hat_s)
                 if veh_EV.opti_game_res.TR_stra is not None:
-                    tr_id = veh_EV.opti_game_res.TR.ID
-                    if isinstance(veh_EV.opti_game_res.TR, Game_A_Vehicle):
-                        rho = veh_EV.opti_game_res.TR.rho
+                    tr_id = veh_EV.opti_game_res.game_surr.TR.ID
+                    if isinstance(veh_EV.opti_game_res.game_surr.TR, Game_A_Vehicle):
+                        rho = veh_EV.opti_game_res.game_surr.TR.rho
                     else:
                         rho = np.mean(veh_EV.rho_hat_s[tr_id])
                     TR_stra_dict[step] = \
                         (tr_id, veh_EV.opti_game_res.TR_stra, rho)
                 if veh_EV.opti_game_res.TF_stra is not None:
-                    tp_id = veh_EV.opti_game_res.TF.ID
-                    if isinstance(veh_EV.opti_game_res.TF, Game_A_Vehicle):
-                        rho = veh_EV.opti_game_res.TF.rho
+                    tp_id = veh_EV.opti_game_res.game_surr.TP.ID
+                    if isinstance(veh_EV.opti_game_res.game_surr.TP, Game_A_Vehicle):
+                        rho = veh_EV.opti_game_res.game_surr.TP.rho
                     else:
                         rho = np.mean(veh_EV.rho_hat_s[tp_id])
                     TP_stra_dict[step] = \
@@ -233,7 +251,7 @@ def run_road(road: Road):
 
     traj_s = []
     traj_names = ["EV", "TR", "TF", "PC", "TRR", "TPP"]
-    for i in [veh_EV.ID, veh_TR.ID, veh_TP.ID, veh_PC.ID, veh_TRR.ID, veh_TFF.ID]:
+    for i in [veh_EV.ID, veh_TR.ID, veh_TP.ID, veh_CP.ID, veh_TRR.ID, veh_TPP.ID]:
         traj = df[df[C_Info.trackId] == i].sort_values(C_Info.frame)
         traj_s.append(traj)
 
@@ -246,10 +264,6 @@ def plot_data(sim, save_file_name):
         traj_s, traj_names=traj_names,
         road=sim, fig_name=save_file_name, ori_plot=False
     )
-
-    ev_traj = traj_s[0]
-    tr_traj = traj_s[1]
-    tp_traj = traj_s[2]
 
     ttc_s = []
     eff_s = []

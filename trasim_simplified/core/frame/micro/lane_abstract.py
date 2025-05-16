@@ -7,7 +7,6 @@ import abc
 from abc import ABC
 from typing import Optional, TYPE_CHECKING, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from trasim_simplified.core.agent import get_veh_class

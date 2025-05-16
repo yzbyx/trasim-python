@@ -14,10 +14,12 @@ from typing import TYPE_CHECKING, Optional, Callable
 import numpy as np
 import pandas as pd
 
+from trasim_simplified.core.agent.utils import get_xy_quintic
 
 if TYPE_CHECKING:
     from trasim_simplified.core.agent import Vehicle
     from trasim_simplified.core.agent.game_agent import Game_Vehicle
+    from trasim_simplified.core.agent import Game_A_Vehicle
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 
@@ -426,14 +428,6 @@ class TrajData:
     """当前车道前车的轨迹"""
     CR_traj: Optional[np.ndarray]
     """当前车道后车的轨迹"""
-    TF_PC_traj: Optional[np.ndarray]
-    """目标间隙前车的前车轨迹"""
-    TR_PC_traj: Optional[np.ndarray]
-    """目标间隙后车的前车轨迹"""
-    PC_PC_traj: Optional[np.ndarray]
-    """前车的前车轨迹"""
-    CR_PC_traj: Optional[np.ndarray]
-    """后车的前车轨迹"""
     TF_cost_lambda: Optional[Callable]
     TR_cost_lambda: Optional[Callable]
     CP_cost_lambda: Optional[Callable]
@@ -441,59 +435,163 @@ class TrajData:
 
 
 @dataclass
+class GameVehSurr:
+    lc_direction: int
+    EV: 'Game_A_Vehicle'
+    TR: 'Game_Vehicle'
+    TP: 'Game_Vehicle'
+    CR: 'Game_Vehicle'
+    CP: 'Game_Vehicle'
+
+    TRR: 'Game_Vehicle' = None
+    TPP: 'Game_Vehicle' = None
+    CRR: 'Game_Vehicle' = None
+    CPP: 'Game_Vehicle' = None
+
+    def clone(self):
+        return GameVehSurr(
+            self.lc_direction,
+            self.EV,
+            self.TR,
+            self.TP,
+            self.CR,
+            self.CP,
+            self.TRR,
+            self.TPP,
+            self.CRR,
+            self.CPP
+        )
+
+
+@dataclass
+class LcGap:
+    TP: "Vehicle"
+    TR: "Vehicle"
+    CP: "Vehicle"
+
+    def __eq__(self, other):
+        if not isinstance(other, LcGap):
+            return False
+        return (self.TP.ID == other.TP.ID and
+                self.TR.ID == other.TR.ID and
+                self.CP.ID == other.CP.ID)
+
+    def __repr__(self):
+        return f"TP: {self.TP.ID}, TR: {self.TR.ID}, CP: {self.CP.ID}"
+
+
+@dataclass
+class StraInfo:
+    veh: "Vehicle"
+    stra_time: Optional[float]
+    cf_stra: float
+    lc_direction: int
+    lc_gap: Optional[LcGap] = None
+    solve_res: Optional['SolveRes'] = None
+
+    def __eq__(self, other):
+        if not isinstance(other, StraInfo):
+            return False
+        return (self.veh.ID == other.veh.ID and
+                self.stra_time == other.stra_time and
+                self.cf_stra == other.cf_stra and
+                self.lc_direction == other.lc_direction and
+                self.lc_gap == other.lc_gap)
+
+    def __lt__(self, other):
+        if not isinstance(other, StraInfo):
+            return False
+        return hash(self) < hash(other)
+
+    @property
+    def lane(self):
+        return self.veh.lane
+
+    @property
+    def target_lane(self):
+        if self.lc_direction == 1:
+            return self.lane.right_neighbour_lane
+        elif self.lc_direction == -1:
+            return self.lane.left_neighbour_lane
+        else:
+            return self.lane
+
+    def copy(self):
+        return StraInfo(self.veh, self.stra_time, self.cf_stra, self.lc_direction, self.lc_gap)
+
+    def __hash__(self):
+        if self.lc_gap is None:
+            return hash((self.veh.ID, float(self.stra_time), float(self.cf_stra), self.lc_direction))
+        return hash((self.veh.ID, float(self.stra_time), float(self.cf_stra), self.lc_direction,
+                     self.lc_gap.TP.ID, self.lc_gap.TR.ID, self.lc_gap.CP.ID))
+
+    def __repr__(self):
+        return f"veh: {self.veh.ID}, stra_time: {self.stra_time:.3f}, cf_stra: {self.cf_stra:.3f}, " \
+               f"lc_direction: {self.lc_direction}, lc_gap: {self.lc_gap}, total_cost: {self.solve_res.cost:.3f}, "\
+               f"safe: {self.solve_res.safe:.3f}, com: {self.solve_res.com:.3f}, " \
+               f"eff: {self.solve_res.eff:.3f}, route: {self.solve_res.route:.3f}"
+
+
+@dataclass
 class GameRes:
     step: int
     """当前决策时步"""
-    cost_df: Optional[pd.DataFrame]
-    """成本函数"""
-    EV: 'Base_Agent'
-    """换道车辆"""
-    TF: 'Base_Agent'
-    """目标间隙前车"""
-    TR: 'Base_Agent'
-    """目标间隙后车"""
-    PC: 'Base_Agent'
-    """当前车道前车"""
-    CR: 'Base_Agent'
-    """当前车道后车"""
+    game_surr: Optional[GameVehSurr]
+    total_cost: Optional[float]
 
-    EV_stra: Optional[float]
-    TF_stra: Optional[float]
-    TR_stra: Optional[float]
-    CR_stra: Optional[float]
-    CP_stra: Optional[float]
+    EV_stra: Optional[StraInfo]
+    TF_stra: Optional[StraInfo]
+    TR_stra: Optional[StraInfo]
+    CR_stra: Optional[StraInfo]
+    CP_stra: Optional[StraInfo]
 
     EV_cost: Optional[float]
-    TF_cost: Optional[float]
+    TP_cost: Optional[float]
     TR_cost: Optional[float]
     CR_cost: Optional[float]
     CP_cost: Optional[float]
 
-    TR_real_EV_stra: Optional[float]
-
-    EV_opti_series: Optional[pd.Series]
-
     traj_data: Optional[TrajData] = None
     """其他车辆的轨迹"""
-    EV_safe_cost: Optional[float] = None
-    EV_com_cost: Optional[float] = None
-    EV_eff_cost: Optional[float] = None
-    EV_route_cost: Optional[float] = None
     EV_opti_traj: Optional[np.ndarray] = None
     EV_lc_step: Optional[int] = None
 
     TR_esti_lambda: Optional[Callable] = None
     TR_real_lambda: Optional[Callable] = None
+    CR_esti_lambda: Optional[Callable] = None
+    CR_real_lambda: Optional[Callable] = None
 
     def __repr__(self):
-        return f"step: {self.step}, EV: {self.EV.ID}, TF: {self.TF.ID}, TR: {self.TR.ID}, " \
-               f"EV: {self.EV_stra}, TF: {self.TF_stra}, TR: {self.TR_stra}, " \
-               f"TR_EV_stra: {self.TR_real_EV_stra}" \
-               f"cost: {self.EV_cost:.3f}, " \
-               f"TF_cost: {self.TF_cost:.3f}, " \
-               f"TR_real_cost: {self.TR_cost:.3f} " \
-               f"safe: {self.EV_safe_cost:.3f}, com: {self.EV_com_cost:.3f}, " \
-               f"eff: {self.EV_eff_cost:.3f}, route: {self.EV_route_cost:.3f}, " \
+        return f"step: {self.step}, " \
+               f"EV: {self.game_surr.EV.ID}-{self.game_surr.EV.NAME}, "\
+               f"TP: {self.game_surr.TP.ID}-{self.game_surr.TP.NAME}, "\
+               f"TR: {self.game_surr.TR.ID}-{self.game_surr.TR.NAME}, "\
+               f"CP: {self.game_surr.CR.ID}-{self.game_surr.CR.NAME}, "\
+               f"CR: {self.game_surr.CP.ID}-{self.game_surr.CP.NAME}\n"\
+               f"EV: {self.EV_stra}\nTP: {self.TF_stra}\nTR: {self.TR_stra}\nCR: {self.CR_stra}\nCP: {self.CP_stra}"
+
+
+@dataclass
+class SolveRes:
+    quintic: Optional[np.ndarray]
+    times: Optional[np.ndarray]
+    safe: float
+    com: float
+    eff: float
+    route: float
+    cost: float
+
+    cost_lambda: Optional[Callable] = None
+    _traj: Optional[np.ndarray] = None
+
+    @property
+    def traj(self):
+        if self._traj is None:
+            self._traj = np.vstack([np.array(get_xy_quintic(self.quintic, t)) for t in self.times])
+        return self._traj
+
+    def set_traj(self, traj):
+        self._traj = traj
 
 
 @dataclass
@@ -582,7 +680,6 @@ class ScenarioMode:
     """第三类（有交互，TR_HV_TP_AV）"""
     INTERACTION_TR_AV_TP_AV = "有交互(TR-AV TP-AV)"
     """第三类（有交互，TR_AV_TP_AV）"""
-
 
 
 if __name__ == '__main__':

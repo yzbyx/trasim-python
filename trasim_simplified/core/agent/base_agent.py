@@ -3,7 +3,6 @@
 # @Author : yzbyx
 # @File : base_agent.py
 # Software: PyCharm
-import abc
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -12,7 +11,7 @@ from trasim_simplified.core.agent import Vehicle
 from trasim_simplified.core.agent.collision_risk import calculate_collision_risk
 from trasim_simplified.core.agent.fuzzy_logic import FuzzyLogic
 from trasim_simplified.core.agent.utils import interval_intersection
-from trasim_simplified.core.constant import V_TYPE, RouteType, GapJudge, VehSurr, TrajPoint
+from trasim_simplified.core.constant import V_TYPE, RouteType, GapJudge, VehSurr, TrajPoint, StraInfo, LcGap
 from trasim_simplified.core.kinematics.lcm import LCModel_Mobil
 
 if TYPE_CHECKING:
@@ -27,6 +26,8 @@ class Base_Agent(Vehicle):
 
     def pred_lc_risk(self, time_len=3., lc_direction=None):
         """车辆当前时刻换道的风险/不换道的风险TTC"""
+        stra_info = StraInfo(self, time_len, 1, 0)
+
         if lc_direction == -1:
             if self.left_lane is None:
                 return -np.inf
@@ -39,9 +40,10 @@ class Base_Agent(Vehicle):
                     traj_lr is not None and abs(traj_lr[0].x - self.x) < self.length):
                 min_ttc_2d_left = -np.inf
             else:
-                traj_ev_left, _ = self.pred_self_traj(
-                    target_lane=self.left_lane, PC_traj=traj_lp, time_len=time_len, to_ndarray=False
-                )
+                stra_info.lc_direction = lc_direction
+                stra_info.lc_gap = LcGap(self.lf, self.lr, self.leader)
+                traj_ev_left, _ = self.pred_self_traj(stra_info, to_ndarray=False)
+
                 ev_lp_ttc_2d = calculate_collision_risk(traj_ev_left, traj_lp) if traj_lp is not None else np.inf
                 ev_lr_ttc_2d = calculate_collision_risk(traj_ev_left, traj_lr) if traj_lr is not None else np.inf
                 ev_cp_ttc_2d = calculate_collision_risk(traj_ev_left, traj_cp) if traj_cp is not None else np.inf
@@ -61,9 +63,10 @@ class Base_Agent(Vehicle):
                     (traj_rr is not None and abs(traj_rr[0].x - self.x) < self.length)):
                 min_ttc_2d_right = -np.inf
             else:
-                traj_ev_right, _ = self.pred_self_traj(
-                    target_lane=self.right_lane, PC_traj=traj_rp, time_len=time_len, to_ndarray=False
-                )
+                stra_info.lc_direction = lc_direction
+                stra_info.lc_gap = LcGap(self.rf, self.rr, self.leader)
+                traj_ev_right, _ = self.pred_self_traj(stra_info, to_ndarray=False)
+
                 ev_rp_ttc_2d = calculate_collision_risk(traj_ev_right, traj_rp) if traj_rp is not None else np.inf
                 ev_rr_ttc_2d = calculate_collision_risk(traj_ev_right, traj_rr) if traj_rr is not None else np.inf
                 ev_cp_ttc_2d = calculate_collision_risk(traj_ev_right, traj_cp) if traj_cp is not None else np.inf
@@ -74,9 +77,7 @@ class Base_Agent(Vehicle):
         if lc_direction == 0:
             traj_cp = self.pred_net.pred_traj(self.leader.pack_veh_surr(), type_="net", time_len=time_len) \
                 if self.leader is not None else None
-            traj_ev_stay, _ = self.pred_self_traj(
-                target_lane=self.lane, PC_traj=traj_cp, time_len=time_len, to_ndarray=False
-            )
+            traj_ev_stay, _ = self.pred_self_traj(stra_info, to_ndarray=False, ache=False)
             ev_cp_ttc_2d = calculate_collision_risk(traj_ev_stay, traj_cp) if traj_cp is not None else np.inf
             min_ev_cp_ttc_2d = np.min(ev_cp_ttc_2d)
             return min_ev_cp_ttc_2d
@@ -112,11 +113,8 @@ class Base_Agent(Vehicle):
 
         if self.lane_changing and self.risk_2d >= self.ttc_star:
             return
-        if (self.opti_gap is not None
-                and abs(self.y_c - self.target_lane.y_center) < 0.1
-                and self.v_lat < 0.1 and abs(self.yaw) < 1 / 180 * np.pi):
-            self.reset_lc_state()
-
+        # if self.opti_gap is not None and self.is_keep_lane_center():
+        #     self.reset_lc_state()
         if self.lane_changing and self.risk_2d < self.ttc_star:
             self.reset_lc_state()
 
@@ -132,7 +130,8 @@ class Base_Agent(Vehicle):
                         continue
 
                     target_lane_index = self.lane.index + lc_direction
-                    if self.route_type == RouteType.mainline and target_lane_index not in self.destination_lane_indexes:
+                    if (self.route_type == RouteType.mainline and
+                            target_lane_index not in self.destination_lane_indexes):
                         continue
                     if self.route_type == RouteType.merge and lc_direction != -1:
                         continue
@@ -159,7 +158,7 @@ class Base_Agent(Vehicle):
                     )
 
                     # 目标路径激励
-                    route_incentive = self._route_incentive(lc_direction)
+                    route_incentive = self.route_incentive(lc_direction)
 
                     # 队列换道激励
                     platoon_incentive = self._platoon_incentive(lc_direction)
@@ -171,7 +170,7 @@ class Base_Agent(Vehicle):
                     lc_base_prob = self.fuzzy_logic.compute(acc_gain, ttc_risk, self.rho)
 
                     # 换道意图
-                    if is_acc_ok and is_ttc_ok:
+                    if is_ttc_ok:  # ATTENTION：未考虑is_acc_ok
                         lc_prob = lc_base_prob + route_incentive + platoon_incentive + weaving_incentive
                     else:
                         lc_prob = 0
@@ -202,30 +201,29 @@ class Base_Agent(Vehicle):
         # 判断速度调整时间内能否以舒适的加减速度达到可行换道位置，用于MOBIL模型判断
         # x_safe_min = TR_end.x + self.length + self.time_safe * TR_end.vx
         # x_safe_max = TF_end.x - TF.length - self.time_safe * TF_end.vx
-        x_safe_min = TR_end.x + self.length
-        x_safe_max = TF_end.x - TF.length
+        x_safe_min = TR_end.x + self.length + self.safe_s0
+        x_safe_max = TF_end.x - TF.length - self.safe_s0
 
         if x_safe_max < x_safe_min:
             return False, target_acc
 
-        if not (x_safe_min <= self.x <= x_safe_max):
-            acc_1 = 2 * (x_safe_max - self.x - self.v * adapt_time) / adapt_time ** 2
-            acc_2 = 2 * (x_safe_min - self.x - self.v * adapt_time) / adapt_time ** 2
-            # 若(acc_1, acc_2)与[self.acc_max, - self.dec_max]的交集不为空，
-            # 则选择加速度绝对值最小的加速度作为调整加速度
-            acc_ = np.array([acc_2, acc_1])
-            acc = interval_intersection(acc_, (- self.dec_max, self.acc_max))
-            if acc is None or acc[0] == acc[1]:
-                return False, target_acc
+        if adapt_time == 0:
+            return False, target_acc
+        acc_1 = 2 * (x_safe_max - self.x - self.v * adapt_time) / adapt_time ** 2
+        acc_2 = 2 * (x_safe_min - self.x - self.v * adapt_time) / adapt_time ** 2
+        # 若(acc_1, acc_2)与[self.acc_max, - self.dec_max]的交集不为空，
+        # 则选择加速度绝对值最小的加速度作为调整加速度
+        acc_ = np.array([acc_2, acc_1])
+        acc = interval_intersection(acc_, (- self.dec_max, self.acc_max))
+        if acc is None or acc[0] == acc[1]:
+            return False, target_acc
 
-            if acc[0] <= 0 <= acc[1]:
-                target_acc = 0
-            elif acc[0] > 0:
-                target_acc = acc[0]
-            else:
-                target_acc = acc[1]
-        else:
+        if acc[0] <= 0 <= acc[1]:
             target_acc = 0
+        elif acc[0] > 0:
+            target_acc = acc[0]
+        else:
+            target_acc = acc[1]
 
         return True, target_acc
 
@@ -288,7 +286,8 @@ class Base_Agent(Vehicle):
             return
 
         final_candidate_gap = []
-        for gap_res, lc_prob in self.gap_res_list:
+        for gap_res in self.gap_res_list:
+            lc_prob = gap_res.lc_prob
             if lc_prob > np.random.uniform():
                 final_candidate_gap.append((gap_res, lc_prob))
 
@@ -304,6 +303,7 @@ class Base_Agent(Vehicle):
         if set_lane_changing:
             self.target_lane = gap_res.target_lane
             self.lane_changing = True
+            self.lc_cross = False
 
     def _weaving_incentive(self, lc_direction):
         if self.lane.index in self.destination_lane_indexes:
@@ -324,12 +324,12 @@ class Base_Agent(Vehicle):
                 return self.platoon_incentive * np.exp(- dhw / self.incentive_range)
         return 0
 
-    def _route_incentive(self, lc_direction):
+    def route_incentive(self, lc_direction):
         _, e_r_stay = self._cal_lane_cost(self.lane.index, self.x)
         _, e_r_lc = self._cal_lane_cost(self.lane.index + lc_direction, self.x)
         return e_r_stay - e_r_lc
 
-    def _no_car_correction(self, gap, lc_direction):
+    def _no_car_correction(self, gap, lc_direction, return_RR=False):
         """判别TR, TF, PC, CR是否存在，若不存在则设置为不影响换道博弈的虚拟车辆
         :gap: 车辆间距
         """
@@ -375,17 +375,36 @@ class Base_Agent(Vehicle):
         CR = self.r
         if TR is None:
             position = self.position + np.array([-1e10, - lc_direction * self.lane.width])
-            TR = self._make_dummy_agent(lane, self.type, -self.ID, self.length, position[0], position[1])
+            TR = self._make_dummy_agent(lane, self.type, -self.ID - 1, self.length, position[0], position[1])
         if TF is None:
             position = self.position + np.array([1e10, - lc_direction * self.lane.width])
-            TF = self._make_dummy_agent(lane, self.type, -self.ID, self.length, position[0], position[1])
+            TF = self._make_dummy_agent(lane, self.type, -self.ID - 2, self.length, position[0], position[1])
         if PC is None:
             position = self.position + np.array([1e10, 0])
-            PC = self._make_dummy_agent(lane, self.type, -self.ID, self.length, position[0], position[1])
+            PC = self._make_dummy_agent(lane, self.type, -self.ID - 3, self.length, position[0], position[1])
         if CR is None:
             position = self.position + np.array([-1e10, 0])
-            CR = self._make_dummy_agent(lane, self.type, -self.ID, self.length, position[0], position[1])
+            CR = self._make_dummy_agent(lane, self.type, -self.ID - 4, self.length, position[0], position[1])
 
+        if return_RR:
+            if TR.r is None:
+                TRR = self._make_dummy_agent(TR.lane, TR.type, -TR.ID - 5, TR.length, TR.x * 2, TR.y)
+            else:
+                TRR = TR.r
+            if CR.r is None:
+                CRR = self._make_dummy_agent(CR.lane, CR.type, -CR.ID - 6, CR.length, CR.x * 2, CR.y)
+            else:
+                CRR = CR.r
+            if TF.f is None:
+                TFF = self._make_dummy_agent(TF.lane, TF.type, -TF.ID - 7, TF.length, TF.x * 2, TF.y)
+            else:
+                TFF = TF.f
+            if PC.f is None:
+                CPP = self._make_dummy_agent(PC.lane, PC.type, -PC.ID - 8, PC.length, PC.x * 2, PC.y)
+            else:
+                CPP = PC.f
+
+            return TR, TF, PC, CR, TRR, CRR, TFF, CPP
         # TR.f = TF
         # CR.f = self
 

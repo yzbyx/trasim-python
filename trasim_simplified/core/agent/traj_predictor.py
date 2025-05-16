@@ -68,6 +68,7 @@ def add_v_a_yaw(traj_list: list[TrajPoint], dt=0.1):
 class TrajPred:
     def __init__(self):
         self.net: Optional[PredictionNet] = None
+        self.max_time = 10
 
     @staticmethod
     def get_scene(veh_surr: VehSurr):
@@ -181,14 +182,16 @@ class TrajPred:
         plt.show()
         plt.ion()
 
-    def pred_traj(self, veh_surr: VehSurr, type_="net", time_len=3):
+    def pred_traj(self, veh_surr: VehSurr, type_="net", time_len=3, to_ndarray=False):
         """
         预测轨迹，包括当前轨迹点，轨迹时长为time_len+dt
         :param veh_surr:
         :param type_:
         :param time_len:
+        :param to_ndarray: 是否转换为ndarray
         :return: 得到车头中点的轨迹
         """
+        assert time_len <= self.max_time, f"max_time is {self.max_time}, but time_len is {time_len}"
         if type_ == "net":
             if veh_surr.ev.pred_traj is None:
                 if self.net is None:
@@ -237,20 +240,19 @@ class TrajPred:
                     )
                 veh_surr.ev.pred_traj = pred_traj
 
-                if time_len > 3:
-                    dt = veh_surr.ev.lane.dt
-                    for i in range(round((time_len - 3) / dt)):
-                        pred_traj.append(
-                            TrajPoint(
-                                x=pred_traj[-1].x + pred_traj[-1].vx * dt,
-                                y=pred_traj[-1].y + pred_traj[-1].vy * dt,
-                                speed=pred_traj[-1].speed,
-                                acc=0,
-                                yaw=pred_traj[-1].yaw,
-                                length=veh_surr.ev.length,
-                                width=veh_surr.ev.width
-                            )
+                dt = veh_surr.ev.lane.dt
+                for i in range(round((self.max_time - 3) / dt)):
+                    pred_traj.append(
+                        TrajPoint(
+                            x=pred_traj[-1].x + pred_traj[-1].vx * dt,
+                            y=pred_traj[-1].y + pred_traj[-1].vy * dt,
+                            speed=pred_traj[-1].speed,
+                            acc=0,
+                            yaw=pred_traj[-1].yaw,
+                            length=veh_surr.ev.length,
+                            width=veh_surr.ev.width
                         )
+                    )
 
                 # 获取前time_len秒的轨迹
                 add_v_a_yaw(veh_surr.ev.pred_traj, veh_surr.ev.lane.dt)
@@ -263,6 +265,9 @@ class TrajPred:
             traj_pred = veh_surr.ev.pred_traj[:round(time_len / veh_surr.ev.lane.dt) + 1]
         else:
             raise ValueError("Invalid type_ value. Expected 'net' or 'const'.")
+
+        if to_ndarray:
+            return np.array([point.to_ndarray() for point in traj_pred])
 
         return [point.copy() for point in traj_pred]
 

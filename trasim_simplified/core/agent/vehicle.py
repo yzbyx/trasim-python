@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
-from trasim_simplified.core.constant import COLOR, V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType, GameRes, \
-    GapJudge
+from trasim_simplified.core.constant import V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType, GameRes, \
+    GapJudge, StraInfo
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
 from trasim_simplified.core.kinematics.lcm import get_lc_model, LCModel, get_lc_id
 from trasim_simplified.core.agent.obstacle import Obstacle
@@ -17,7 +17,6 @@ from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
-    from trasim_simplified.core.agent.game_agent import Game_A_Vehicle
 
 
 class Vehicle(Obstacle):
@@ -86,6 +85,7 @@ class Vehicle(Obstacle):
         # 目标车道与交织路线类型
         self.destination_lane_indexes = None
         self.route_type: Optional[RouteType] = None
+        self.route_lc_direction = None
 
         # 换道相关
         self.no_lc = False  # 是否禁止换道
@@ -110,14 +110,13 @@ class Vehicle(Obstacle):
 
         # 博弈相关
         self.is_gaming = False  # 是否处于博弈状态
-        self.game_factor = None  # 博弈策略（期望时距）
-        self.is_game_leader = False
-        self.game_leader: Optional[Vehicle] = None
+        self.is_game_leader = False  # 是否为博弈领导者
+        self.cf_factor = 1  # 博弈策略（期望时距）
         self.opti_game_res: Optional[GameRes] = None
         self.game_res_list: Optional[list[GameRes]] = None
-        self.rho_hat_s = {}  # 储存车辆id_对应的rho_hat范围
         self.rho = 0.5
         self.game_co = 1  # 自动驾驶的公平协作程度 [0, 1]
+        self.state = None
 
         self.platoon_incentive = 0  # 队列换道激励系数
         self.weaving_incentive = 0.5  # 交织换道激励系数
@@ -135,11 +134,11 @@ class Vehicle(Obstacle):
 
         self.k_s = 1
         self.k_c = 1
-        self.k_r = 10
+        self.k_r = 100
         self.k_e = 1
 
-        self.game_traj_ache: Optional[
-            dict[tuple[float, float], tuple[np.ndarray, np.ndarray]]
+        self.traj_ache: Optional[
+            dict[StraInfo, tuple[np.ndarray, np.ndarray]]
         ] = None
         """博弈轨迹缓存，包含自车对应策略的轨迹以及前车预估轨迹 (策略，时间): (自车轨迹，前车轨迹)"""
 
@@ -187,11 +186,23 @@ class Vehicle(Obstacle):
 
         self.left_lane, self.right_lane = self.lane.road.get_available_adjacent_lane(self.lane, self.x)
 
-        self.game_traj_ache = None
+        self.traj_ache = None
         self.gap_res_list: Optional[list[GapJudge]] = None
         self.game_res_list = None
 
+        self.state = self.get_state_for_traj()
+
         self.lc_cross = self.target_lane.index == self.lane.index
+
+        if self.lane.index in self.destination_lane_indexes:
+            self.route_lc_direction = 0
+        else:
+            if self.lane.index < self.destination_lane_indexes[0]:
+                self.route_lc_direction = 1
+            elif self.lane.index > self.destination_lane_indexes[-1]:
+                self.route_lc_direction = -1
+            else:
+                self.route_lc_direction = 0
 
         if len(self.hist_traj) in [0, 1]:
             hist_traj = []
@@ -211,7 +222,7 @@ class Vehicle(Obstacle):
         self.target_lane = self.lane
         self.lc_conti_time = 0
         self.lc_direction = 0
-        self.opti_gap = None
+        self.opti_gap: Optional[GapJudge] = None
 
     def cal_traj_pred(self):
         self.pred_traj = None
@@ -228,6 +239,13 @@ class Vehicle(Obstacle):
             rp=self.rf,
             rr=self.rr,
         )
+
+    def is_keep_lane_center(self):
+        is_keep = (
+                abs(self.y_c - self.lane.y_center) < 0.1
+                and abs(self.yaw) < 1 / 180 * np.pi
+        )
+        return is_keep
 
     @property
     def last_step_lc_statu(self):
@@ -264,59 +282,40 @@ class Vehicle(Obstacle):
 
         return new_vehicle
 
-    def pred_self_traj(self, time_len, stra=None,
-                       target_lane: "LaneAbstract" = None,
-                       PC_traj=None, to_ndarray=True, ache=False, PC: 'Vehicle' = None):
+    def pred_self_traj(self, stra_info: StraInfo = None, to_ndarray=True, ache=True):
         """在策略下预测自车轨迹（包含初始状态）
-        :param PC:
-        :param time_len: 预测时间长度
-        :param stra: 期望时距
-        :param target_lane: 目标车道
-        :param PC_traj: 前车轨迹
+        :param stra_info: 策略信息
         :param to_ndarray: 是否转为ndarray
         :param ache: 是否缓存
         """
-        if ache and self.game_traj_ache is not None and (stra, time_len) in self.game_traj_ache:
-            return self.game_traj_ache[(stra, time_len)]
-        step_num = round(time_len / self.dt) + 1
-        veh = self.clone()
-        leader = veh.clone()
-        if target_lane is not None:
-            veh.target_lane = target_lane
-            veh.lane_changing = True
-        if stra is not None:
-            veh.game_factor = stra
-            veh.is_gaming = True
+        stra_info = stra_info.copy()
+        if ache and self.traj_ache is not None and stra_info in self.traj_ache:
+            traj, PC_traj = self.traj_ache[stra_info]
         else:
-            veh.game_factor = None
-            veh.is_gaming = False
+            time_len = stra_info.stra_time
+            target_lane = stra_info.target_lane
+            lc_direction = stra_info.lc_direction
+            lc_gap = stra_info.lc_gap
+            lane_changing = True if lc_direction != 0 else False
 
-        if self.f is None and PC_traj is None and PC is None:
-            traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
-            # 估计轨迹
-            leader.x = veh.x + 1e6
-            leader.speed = veh.speed
-            leader.acc = 0
-            PC_traj = [leader.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
-            for step in range(step_num - 1):
-                delta = veh.cf_lateral_control()
-                acc = veh.cf_model.step(VehSurr(ev=veh, cp=leader))
-                veh.update_state(acc, delta)
+            step_num = round(time_len / self.dt) + 1
+            veh = self.clone()
+            leader = veh.clone()
+
+            veh.target_lane = target_lane
+            veh.lane_changing = lane_changing
+            veh.cf_factor = stra_info.cf_stra
+
+            if (not lane_changing and self.f is None) or (lane_changing and lc_gap.TP is None):
+                traj = [self.get_traj_point()]
                 leader.x = veh.x + 1e6
                 leader.speed = veh.speed
                 leader.acc = 0
-                traj.append(veh.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
-                PC_traj.append(leader.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
-            traj = np.array(traj) if to_ndarray else traj
-            PC_traj = np.array(PC_traj) if to_ndarray else PC_traj
-
-        else:
-            if PC_traj is None:
-                if PC is None:
-                    PC_traj = self.f.pred_traj[:step_num]
-                else:
-                    PC_traj = PC.pred_traj[:step_num]
-            traj = [self.get_traj_point().to_ndarray() if to_ndarray else self.get_traj_point()]
+                PC_traj = [leader.get_traj_point()] * step_num
+            else:
+                cp = self.f if not lane_changing else lc_gap.TP
+                PC_traj = cp.pred_net.pred_traj(cp.pack_veh_surr(), time_len=time_len)
+                traj = [self.get_traj_point()]
 
             for step in range(round(step_num) - 1):
                 info = PC_traj[step]
@@ -328,15 +327,19 @@ class Vehicle(Obstacle):
                 delta = veh.cf_lateral_control()
                 acc = veh.cf_model.step(VehSurr(ev=veh, cp=leader))
                 veh.update_state(acc, delta)
-                traj.append(veh.get_traj_point().to_ndarray() if to_ndarray else veh.get_traj_point())
-            traj = np.array(traj) if to_ndarray else traj
-            if to_ndarray:
-                PC_traj = np.array([traj_point.to_ndarray() for traj_point in PC_traj])
-        assert len(traj) == step_num
-        if ache:
-            if self.game_traj_ache is None:
-                self.game_traj_ache = {}
-            self.game_traj_ache[(stra, time_len)] = (traj, PC_traj)
+                traj.append(veh.get_traj_point())
+
+            assert len(traj) == len(PC_traj) == step_num
+
+            if ache:
+                if self.traj_ache is None:
+                    self.traj_ache = {}
+                self.traj_ache[stra_info] = (traj, PC_traj)
+
+        if to_ndarray:
+            traj = np.array([point.to_ndarray() for point in traj])
+            PC_traj = np.array([point.to_ndarray() for point in PC_traj])
+
         return traj, PC_traj
 
     def cf_lateral_control(self):
@@ -353,10 +356,6 @@ class Vehicle(Obstacle):
 
         delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
 
-        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        # delta = self.delta + d_delta
-        # delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
-
         # 使用加速度/转向率限制平滑转向角度的变化
         d_delta_smooth = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
         delta_smooth = self.delta + d_delta_smooth
@@ -364,36 +363,14 @@ class Vehicle(Obstacle):
         dynamic_delta_max = self.DELTA_MAX * max(0.5, 1 - abs(l_lat) / self.lane.width)
         delta = np.clip(delta_smooth, -dynamic_delta_max, dynamic_delta_max)
 
-        # lane_future_heading = 0
-        #
-        # # Lateral position control
-        # lateral_speed_command = -self.KP_LATERAL * (self.y_c - self.target_lane.y_center)
-        # # Lateral speed to heading
-        # heading_command = np.arcsin(
-        #     np.clip(lateral_speed_command / utils.not_zero(self.speed), -1, 1)
-        # )
-        # heading_ref = lane_future_heading + np.clip(
-        #     heading_command, -np.pi / 4, np.pi / 4
-        # )
-        # # Heading control
-        # heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(
-        #     heading_ref - self.yaw
-        # )
-        # # Heading rate to steering angle
-        # slip_angle = np.arcsin(
-        #     np.clip(
-        #         self.length / 2 / utils.not_zero(self.speed) * heading_rate_command,
-        #         -1,
-        #         1,
-        #         )
-        # )
-        # delta = np.arctan(2 * np.tan(slip_angle))
-
-        # d_delta = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        # delta = self.delta + d_delta
-        delta = np.clip(delta, -self.DELTA_MAX, self.DELTA_MAX)
-
         return delta
+
+    def cal_vehicle_control(self):
+        veh_surr = self.pack_veh_surr()
+        next_acc = self.cf_model.step(veh_surr)
+        self.next_acc = next_acc
+        self.next_delta = self.cf_lateral_control()
+        return self.next_acc, self.next_delta
 
     def get_history_trajectory(self, hist_time: float):
         """获取历史轨迹"""
@@ -644,13 +621,6 @@ class Vehicle(Obstacle):
                 setattr(self, key, value)
             else:
                 raise TrasimError(f"车辆参数{key}不存在！")
-
-    def cal_vehicle_control(self):
-        veh_surr = self.pack_veh_surr()
-        next_acc = self.cf_model.step(veh_surr)
-        self.next_acc = next_acc
-        self.next_delta = self.cf_lateral_control()
-        return self.next_acc, self.next_delta
 
     def get_basic_info(self, sep="\n"):
         return f"step: {self.lane.step_}, time: {self.lane.time_}, lane_index: {self.lane.index}{sep}" \

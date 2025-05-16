@@ -9,14 +9,14 @@ import numpy as np
 import seaborn
 from matplotlib import pyplot as plt
 
-np.random.seed(2025)
-
 from trasim_simplified.core.agent.game_agent import Game_Vehicle, Game_A_Vehicle
 from trasim_simplified.core.constant import ScenarioMode, COLOR, ScenarioTraj, V_CLASS
 from trasim_simplified.util.scenario.scenario_loader import Scenario
 from trasim_simplified.core.constant import TrackInfo as C_Info
 from trasim_simplified.util.scenario_plot import plot_scenario_twin
 from trasim_simplified.util.tools import load_from_pickle, save_to_pickle
+
+np.random.seed(2025)
 
 
 class ScenarioTRInteraction(Scenario):
@@ -108,7 +108,7 @@ class ScenarioTRInteraction(Scenario):
                     print("-" * 10 + "opti_game_res" + "-" * 10)
                     print(ev.opti_game_res)
                     if ev.opti_game_res.TR_stra is not None:
-                        tr_id = ev.opti_game_res.TR.ID
+                        tr_id = ev.opti_game_res.game_surr.TR.ID
                         TR_stra_dict[step] = \
                             (tr_id, ev.opti_game_res.TR_stra, np.mean(ev.rho_hat_s[tr_id]))
                     if ev.lc_conti_time == ev.lane.dt:

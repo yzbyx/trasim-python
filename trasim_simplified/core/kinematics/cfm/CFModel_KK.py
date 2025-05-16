@@ -83,14 +83,14 @@ class CFModel_KK(CFModel):
         self.scale = 1
 
     def _update_dynamic(self):
-        self.scale = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.game_factor
+        self.scale = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.cf_factor
 
         vf_change = 0
         if self.veh_surr.ev.is_gaming:
-            game_factor = self.veh_surr.ev.game_factor
+            game_factor = self.veh_surr.ev.cf_factor
             if game_factor < 1:
                 game_factor = 1 / game_factor
-                vf_change = (game_factor * 5) * np.sign(1 - self.veh_surr.ev.game_factor)
+                vf_change = (game_factor * 5) * np.sign(1 - self.veh_surr.ev.cf_factor)
 
         self.dt = self.veh_surr.ev.dt
         self._vf = self.get_expect_speed() + vf_change
@@ -196,12 +196,12 @@ class CFModel_KK(CFModel):
         v_c = self._cal_v_c(self.G, a_n, b_n)
 
         # if self.veh_surr.ev.is_gaming:
-        #     game_factor = self.veh_surr.ev.game_factor
-        #     if game_factor < 1:
-        #         game_factor = 1 / game_factor
+        #     cf_factor = self.veh_surr.ev.cf_factor
+        #     if cf_factor < 1:
+        #         cf_factor = 1 / cf_factor
         #         v_c += (
-        #                 (game_factor * 8 * self.dt) *
-        #                 np.sign(1 - self.veh_surr.ev.game_factor)
+        #                 (cf_factor * 8 * self.dt) *
+        #                 np.sign(1 - self.veh_surr.ev.cf_factor)
         #         )
 
         # ----v_s计算---- #
