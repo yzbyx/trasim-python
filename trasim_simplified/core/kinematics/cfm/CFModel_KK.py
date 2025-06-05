@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-07-04 12:41
+# @time : 2022-07-04 12:41
 # @Author : yzbyx
 # @File : CFModel_KK.py
 # @Software : PyCharm
@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
-from trasim_simplified.core.constant import CFM, SECTION_TYPE
-from trasim_simplified.msg.trasimError import TrasimError
+from trasim_simplified.core.constant import CFM, VehSurr
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel_KK(CFModel):
@@ -39,20 +38,26 @@ class CFModel_KK(CFModel):
 
     'v_21': 15
     """
-    def __init__(self, car: Optional['Vehicle'], f_param: dict[str, float]):
-        super().__init__(car)
+
+    def __init__(self, f_param: dict[str, float]):
+        super().__init__()
         # -----模型属性------ #
         self.name = CFM.KK
         self.thesis = 'Physics of automated driving in framework of three-phase traffic theory (2018)'
 
+        self._v0 = f_param.get("v0", 33.3)
+
         # -----模型变量------ #
-        self._d = f_param.get("d", 7.5)
+        self._s0 = f_param.get("s0", 2)
+        """停车间距"""
         self._tau = f_param.get("tau", 1)
-
+        """反应时间"""
         self._k = f_param.get("k", 3)
-
+        """同步系数"""
         self._b = f_param.get("b", 1)
+        """期望减速度"""
         self._a = f_param.get("a", 0.5)
+        """舒适加速度（同舒适减速度）"""
         self._a_0 = 0.2 * self._a
         self._a_a = self._a_b = self._a
 
@@ -64,26 +69,46 @@ class CFModel_KK(CFModel):
         self._v_01 = f_param.get("v_01", 10)
         self._v_21 = f_param.get("v_21", 15)
 
-        self._v_safe_dispersed = f_param.get("v_safe_dispersed", True)
+        self._v_safe_dispersed = f_param.get("v_safe_dispersed", False)
         """v_safe计算是否离散化时间"""
 
         self._delta_vr_2 = f_param.get("delta_vr_2", 5.)
 
+        # self._time_wanted = f_param.get("time_wanted", 1.3)
+
         self.status = 0
         self.index = None
+        self.ev: Optional["Vehicle"] = None
+
+        self.scale = 1
 
     def _update_dynamic(self):
-        self.dt = self.vehicle.lane.dt
-        assert self.dt == self._tau
-        if self.vehicle.lane.state_update_method != "Euler" and self._v_safe_dispersed:
-            TrasimError("状态更新方式需要为Euler！")
-        self._vf = self.get_expect_speed()
-        self.update_v_safe(self)
+        self.scale = 1 if not self.veh_surr.ev.is_gaming else self.veh_surr.ev.cf_factor
 
-        self.v = self.vehicle.v
-        self.gap = self.vehicle.gap
-        self.l_v = self.vehicle.leader.v
-        self.l_length = self.vehicle.leader.length
+        vf_change = 0
+        if self.veh_surr.ev.is_gaming:
+            game_factor = self.veh_surr.ev.cf_factor
+            if game_factor < 1:
+                game_factor = 1 / game_factor
+                vf_change = (game_factor * 5) * np.sign(1 - self.veh_surr.ev.cf_factor)
+
+        self.dt = self.veh_surr.ev.dt
+        self._vf = self.get_expect_speed() + vf_change
+
+        self.v = self.veh_surr.ev.v
+        self.l_length = self.veh_surr.cp.length
+        self.gap = self.veh_surr.cp.x - self.veh_surr.ev.x - self.l_length - self._s0
+        self.l_v = self.veh_surr.cp.v
+        self.l_v_a = self.veh_surr.cp.a
+
+        self.v_safe = cal_v_safe(
+            self.v_safe_dispersed,
+            self._tau * (self.scale if self.scale < 1 else 1),
+            self.veh_surr.cp.v,
+            self.gap,
+            self.get_expect_dec(),
+            self.get_expect_dec() * (self.scale if self.scale < 1 else 1)  # 前车期望减速度取当前车的期望减速度，下同
+        )
 
     @property
     def v_safe_dispersed(self):
@@ -148,10 +173,14 @@ class CFModel_KK(CFModel):
                 if (cf_model.index < len(cf_model.v_a_list) - 1) else None
         return cf_model.l_v_a
 
-    def step(self, index, *args):
-        self.index = index
-        if self.vehicle.leader is None:
-            return 0.
+    def step(self, veh_surr: VehSurr):
+        self.veh_surr = veh_surr
+        self.ev = veh_surr.ev
+        if self.veh_surr.cp is None:
+            speed = max(
+                0., min(self.get_expect_speed(), self.veh_surr.ev.v + self._a * self.veh_surr.ev.dt)
+            )
+            return (speed - self.veh_surr.ev.v) / self.veh_surr.ev.dt
         self._update_dynamic()
         acc, self.status = self._calculate()
         return acc
@@ -161,30 +190,26 @@ class CFModel_KK(CFModel):
         a_n, b_n = self.cal_an_bn()
 
         # ----G计算---- #
-        if SECTION_TYPE.ON_RAMP in self.vehicle.lane.get_section_type(self.vehicle.x, self.vehicle.type):
-            # 只计算向左换道
-            pos = self.vehicle.x
-            left, _ = self.vehicle.lane.road.get_available_adjacent_lane(self.vehicle.lane, pos, self.vehicle.type)
-            _, left_leader = left.get_relative_car(self.vehicle)
-            v_hat_leader = self.v_hat_leader_on_ramp(
-                left_leader, left.get_speed_limit(pos, self.vehicle.type), self._delta_vr_2
-            )
-            self.G = cal_G(self._k, self._tau, self._a, self.v, v_hat_leader)
-            gap = np.Inf if left_leader is None else (- left_leader.get_dist(self.vehicle.x) - left_leader.length)
+        self.G = cal_G(self._k, self._tau * self.scale, self._a, self.v, self.l_v)
 
-            # ----v_c计算---- #
-            v_c = self._cal_v_c_on_ramp(self.G, a_n, b_n, v_hat_leader, left_leader, gap)
-        else:
-            self.G = cal_G(self._k, self._tau, self._a, self.v, self.l_v)
+        # ----v_c计算---- #
+        v_c = self._cal_v_c(self.G, a_n, b_n)
 
-            # ----v_c计算---- #
-            v_c = self._cal_v_c(self.G, a_n, b_n)
+        # if self.veh_surr.ev.is_gaming:
+        #     cf_factor = self.veh_surr.ev.cf_factor
+        #     if cf_factor < 1:
+        #         cf_factor = 1 / cf_factor
+        #         v_c += (
+        #                 (cf_factor * 8 * self.dt) *
+        #                 np.sign(1 - self.veh_surr.ev.cf_factor)
+        #         )
 
         # ----v_s计算---- #
         v_s = self._cal_v_s()
 
         # ----v_hat计算---- #
         v_hat = min(self._vf, v_s, v_c)
+        # print("v_hat计算:", self._vf, v_s, v_c)
 
         # ----xi扰动计算---- #
         xi, S = self._cal_xi(v_hat, self.dt, self.v)
@@ -197,7 +222,7 @@ class CFModel_KK(CFModel):
         return final_acc, status
 
     def _cal_v_s(self):
-        v_s = min(self.v_safe, self.gap / self.dt + self.l_v_a)
+        v_s = min(self.v_safe, self.gap / (self._tau * self.scale) + self.l_v_a)
         return v_s
 
     @staticmethod
@@ -219,7 +244,31 @@ class CFModel_KK(CFModel):
         return self._b
 
     def get_expect_speed(self):
+        return self._v0
+
+    def get_speed_limit(self):
         return self.get_speed_limit()
+
+    def get_max_dec(self):
+        return 8
+
+    def get_max_acc(self):
+        return 8
+
+    def get_time_wanted(self):
+        return self._tau * self.scale * 1.3
+
+    def get_time_safe(self):
+        return self._tau * self.scale
+
+    def get_com_acc(self):
+        return self._a
+
+    def get_com_dec(self):
+        return self._b
+
+    def get_safe_s0(self):
+        return self._s0
 
     def cal_an_bn(self):
         r2 = self.random.random()
@@ -231,11 +280,15 @@ class CFModel_KK(CFModel):
         return a_n, b_n
 
     def _cal_v_c(self, G, a_n, b_n):
-        if self.gap <= G:
-            delta = max(-b_n * self._tau, min(a_n * self._tau, self.l_v - self.v))
-            v_c = self.v + delta
+        if not self.veh_surr.ev.is_gaming:
+            if self.gap <= G:
+                delta = max(-b_n * self.dt, min(a_n * self.dt, self.l_v - self.v))
+                v_c = self.v + delta
+            else:
+                v_c = self.v + a_n * self.dt
         else:
-            v_c = self.v + a_n * self._tau
+            a_c = 0.3 * (self.gap - self.get_time_wanted() * self.v) + 0.3 * (self.l_v - self.v)
+            v_c = self.v + a_c * self.dt
         return v_c
 
     def _cal_v_c_on_ramp(self, G, a_n, b_n, v_hat_leader, _l: 'Vehicle', gap):
@@ -272,12 +325,20 @@ class CFModel_KK(CFModel):
 
     @staticmethod
     def _sig_func(x):
+        """
+        信号函数，小于0返回-1，大于等于0返回1
+        """
         return 0 if x < 0 else 1
 
     def p_0_v(self, v):
         return 0.575 + 0.125 * min(1, v / self._v_01)
 
     def p_2_v(self, v):
+        """
+
+        :param v:
+        :return:
+        """
         return 0.48 + 0.32 * self._sig_func(v - self._v_21)
 
 
@@ -285,21 +346,21 @@ def cal_G(k_, tau_, a_, v, l_v):
     return max(0, k_ * tau_ * v + (1 / a_) * v * (v - l_v))
 
 
-def cal_v_safe(v_safe_dispersed, dt, leaderV, gap, dec, leader_dec):
+def cal_v_safe(v_safe_dispersed, tau, leaderV, gap, dec, leader_dec):
     """其中的dt为反应时间，同时也是离散化时间步长"""
     if v_safe_dispersed:
-        alpha_l = int(leaderV / (leader_dec * dt))
-        beta_l = leaderV / (leader_dec * dt) - alpha_l
-        X_d_l = leader_dec * (dt ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
-        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (dt ** 2)) + 0.25) - 0.5)
-        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (dt ** 2)) - alpha_safe / 2
+        alpha_l = int(leaderV / (leader_dec * tau))
+        beta_l = leaderV / (leader_dec * tau) - alpha_l
+        X_d_l = leader_dec * (tau ** 2) * (alpha_l * beta_l + 0.5 * alpha_l * (alpha_l - 1))
+        alpha_safe = int(np.sqrt(2 * (X_d_l + gap) / (dec * (tau ** 2)) + 0.25) - 0.5)
+        beta_safe = (X_d_l + gap) / ((alpha_safe + 1) * dec * (tau ** 2)) - alpha_safe / 2
 
-        return dec * dt * (alpha_safe + beta_safe)
+        return dec * tau * (alpha_safe + beta_safe)
     else:
         x_d_l = (leaderV ** 2) / (2 * leader_dec)
         total_allow_dist = x_d_l + gap
         a = 1 / (2 * dec)
-        v_safe = (- dt + np.sqrt(dt ** 2 + 4 * a * total_allow_dist)) / (2 * a)
+        v_safe = (- tau + np.sqrt(tau ** 2 + 4 * a * total_allow_dist)) / (2 * a)
 
         return v_safe
 

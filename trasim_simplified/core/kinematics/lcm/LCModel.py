@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/12 16:22
+# @time : 2023/5/12 16:22
 # @Author : yzbyx
 # @File : LCModel.py
 # Software: PyCharm
@@ -14,7 +14,7 @@ from trasim_simplified.core.constant import RUNMODE, RANDOM_SEED
 from trasim_simplified.core.kinematics.model import Model
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class LCModel(Model, ABC):
@@ -22,12 +22,12 @@ class LCModel(Model, ABC):
 
     _RANDOM = random.Random(RANDOM_SEED.LCM_SEED)
 
-    def __init__(self, vehicle: Optional['Vehicle']):
-        super().__init__(vehicle)
+    def __init__(self):
+        super().__init__()
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = LCModel._RANDOM
-        self.last_lc_time_ = - np.Inf
+        self.last_lc_time_ = - np.inf
 
     @abc.abstractmethod
     def base_cal(self):

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/13 16:47
+# @time : 2023/5/13 16:47
 # @Author : yzbyx
 # @File : LCModel_ACC.py
 # Software: PyCharm
@@ -10,7 +10,7 @@ import numpy as np
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 from trasim_simplified.core.kinematics.lcm.LCModel import LCModel
@@ -36,7 +36,7 @@ class LCModel_ACC(LCModel):
         # -----on ramp----- #
         self._lambda_b = l_param.get("lambda_b", 0.75)
         self._delta_vr_1 = l_param.get("delta_vr_1", 10.)
-        self.xm = np.NAN
+        self.xm = np.nan
 
         self.left_lane: Optional['LaneAbstract'] = None
         self.right_lane: Optional['LaneAbstract'] = None
@@ -64,7 +64,7 @@ class LCModel_ACC(LCModel):
         left_ = False
         right_ = False
 
-        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
+        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.inf
         if self.left_lane is not None:
             _f, _l = self.left_lane.get_relative_car(self.vehicle)
             safe_, left_d_l = self._safe_check(_f, _l)
@@ -150,8 +150,8 @@ class LCModel_ACC(LCModel):
         if not (head_safe and behind_safe):
             if _l is not None and _f is not None:
                 if _f.gap > self._lambda_b * _f.v + self.vehicle.length:
-                    condition_1 = (self.vehicle.pos_list[-1] < self.xm and self.vehicle.x >= xm)
-                    condition_2 = (self.vehicle.pos_list[-1] >= self.xm and self.vehicle.x < xm)
+                    condition_1 = (self.vehicle.x_list[-1] < self.xm and self.vehicle.x >= xm)
+                    condition_2 = (self.vehicle.x_list[-1] >= self.xm and self.vehicle.x < xm)
                     if condition_1 or condition_2:
                         head_safe = behind_safe = True
                         x = xm

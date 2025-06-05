@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/10/14 21:25
+# @time : 2023/10/14 21:25
 # @Author : yzbyx
 # @File : follow_sim.py
 # Software: PyCharm
@@ -8,28 +8,53 @@ import typing
 import numpy as np
 import pandas as pd
 
-from trasim_simplified.core.constant import TrackInfo as TI
+from trasim_simplified.core.agent import Vehicle
+from trasim_simplified.core.constant import TrackInfo as TI, V_TYPE, VehSurr
+from trasim_simplified.core.frame.micro.open_lane import LaneOpen
+from trasim_simplified.core.kinematics.cfm import CFModel
 
 from trasim_simplified.msg.trasimError import TrasimError
 
 
-def simulation(cf_func, init_x, init_v, obs_lx, obs_lv, cf_param, dt,
+def simulation(cf_func, init_x, init_v, init_a,
+               obs_lx, obs_lv, obs_la,
+               cf_param, dt,
                leaderL: float | typing.Iterable, update_method="Euler") -> tuple[list, list, list, list]:
     """
     给定前车的位置、速度，以及模型参数，仿真得到后车的位置、速度、加速度，默认前车ID不变
 
     注意！原始数据的位置、速度的关系需要与模型状态的更新方式相对应
     """
-    tau = cf_param.get('tau', False)
-    if tau:
-        assert tau >= dt
+    # tau = cf_param.get('tau', False)
+    # if tau:
+    #     assert tau >= dt
+    acc = float(init_a)
     speed = float(init_v)
     pos = float(init_x)
-    sim_pos, sim_speed, sim_acc, sim_cf_acc = [pos], [speed], [0], [0]
+    sim_pos, sim_speed, sim_acc, sim_cf_acc = [pos], [speed], [acc], [0]
+
+    lane = LaneOpen(1000)
+    lane.set_speed_limit(30)
+    veh = Vehicle(lane, V_TYPE.PASSENGER, id_=0, length=leaderL)
+    veh_leader = Vehicle(lane, V_TYPE.PASSENGER, id_=0, length=leaderL)
+
+    is_cf_model = issubclass(cf_func, CFModel)
+    if is_cf_model:
+        cf_func = cf_func(cf_param)
+
     if isinstance(leaderL, float | int | np.float64 | np.float32):
         leaderL = [leaderL] * len(obs_lx)
-    for lx, lv, ll in zip(obs_lx[:-1], obs_lv[:-1], leaderL[:-1]):
-        cf_acc = cf_func(**cf_param, speed=speed, gap=lx - pos - ll, leaderV=lv, interval=dt)
+    for lx, lv, la, ll in zip(obs_lx[:-1], obs_lv[:-1], obs_la[:-1], leaderL[:-1]):
+        if is_cf_model:
+            veh.x = pos
+            veh.speed = speed
+            veh.acc = acc
+            veh_leader.x = lx
+            veh_leader.speed = lv
+            veh_leader.acc = la
+            cf_acc = cf_func.step(VehSurr(ev=veh, cp=veh_leader))
+        else:
+            cf_acc = cf_func(**cf_param, speed=speed, gap=lx - pos - ll, leaderV=lv, interval=dt)
         sim_cf_acc.append(cf_acc)
         if update_method == "Euler":  # 差分型，最常用
             speed_before = speed
@@ -124,12 +149,12 @@ def data_to_df(dt: float, x_lists, v_lists, a_lists, cf_a_lists):
     step_total = len(x_lists[0])
     car_total = len(x_lists)
     df = pd.DataFrame(
-        data={TI.v_ID: np.concatenate([[i] * step_total for i in range(car_total)]),
-              TI.Frame_ID: list(range(step_total)) * car_total,
+        data={TI.trackId: np.concatenate([[i] * step_total for i in range(car_total)]),
+              TI.frame: list(range(step_total)) * car_total,
               TI.x: np.concatenate(x_lists),
               TI.v: np.concatenate(v_lists),
               TI.a: np.concatenate(a_lists),
               TI.cf_acc: np.concatenate(cf_a_lists)}
     )
-    df[TI.time] = df[TI.Frame_ID] * dt
+    df[TI.time] = df[TI.frame] * dt
     return df

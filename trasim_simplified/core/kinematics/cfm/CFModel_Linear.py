@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-04-09 9:44
+# @time : 2023-04-09 9:44
 # @Author : yzbyx
 # @File : CFModel_Linear.py
 # @Software : PyCharm
@@ -11,7 +11,7 @@ from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.kinematics.cfm import CFModel
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel_Linear(CFModel):

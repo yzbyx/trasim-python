@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/12 16:31
+# @time : 2023/5/12 16:31
 # @Author : yzbyx
 # @File : LCModel_KK.py
 # Software: PyCharm
@@ -11,21 +11,19 @@ from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_G
 from trasim_simplified.msg.trasimError import TrasimError
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
     from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
 
 from trasim_simplified.core.kinematics.lcm.LCModel import LCModel
-from trasim_simplified.core.constant import LCM, SECTION_TYPE
+from trasim_simplified.core.constant import LCM
 
 
 class LCModel_KK(LCModel):
-    def __init__(self, vehicle: 'Vehicle', l_param: dict[str, float]):
-        super().__init__(vehicle)
+    def __init__(self, l_param: dict[str, float]):
+        super().__init__()
         self.name = LCM.KK
         self.thesis = 'Physics of Automated-Driving Vehicular Traﬃc'
 
-        self._a_0 = vehicle.cf_model.get_expect_acc()
-        self._delta_1 = l_param.get("delta_1", 2 * self._a_0 * self.vehicle.lane.dt)
         self._delta_2 = l_param.get("delta_2", 5)
         self._gamma_ahead = l_param.get("gamma_ahead", 1)
         self._gamma_behind = l_param.get("gamma_behind", 0.5)
@@ -40,7 +38,7 @@ class LCModel_KK(LCModel):
         # -----on ramp----- #
         self._lambda_b = l_param.get("lambda_b", 0.75)
         self._delta_vr_1 = l_param.get("delta_vr_1", 10.)
-        self.xm = np.NAN
+        self.xm = np.nan
 
         self.left_lane: Optional['LaneAbstract'] = None
         self.right_lane: Optional['LaneAbstract'] = None
@@ -50,16 +48,21 @@ class LCModel_KK(LCModel):
         assert self.vehicle.lane.is_circle is False, "此换道模型在边界处由于xm"
         self.lane = self.vehicle.lane
         self.dt = self.lane.dt
+        self._a_0 = vehicle.cf_model.get_expect_acc()
+        self._delta_1 = l_param.get("delta_1", 2 * self._a_0 * self.vehicle.lane.dt)
 
-    def step(self, index, *args):
+    def step(self):
         self._update_dynamic()
-        self.left_lane, self.right_lane = args
-        type_ = self.lane.get_section_type(self.vehicle.x, self.vehicle.type)
-        if SECTION_TYPE.BASE in type_:
-            return self.base_cal()
-        if SECTION_TYPE.ON_RAMP in type_:
-            return self.on_ramp_cal()
-        raise TrasimError(f"没有对应{type_}的处理函数！")
+        self.left_lane, self.right_lane = self.lane.road.get_available_adjacent_lane(self.lane, self.vehicle.x)
+        # type_ = self.lane.get_section_type(self.vehicle.x, self.vehicle.type)
+        res = self.base_cal()
+        if res["lc"] != 0:
+            self.vehicle.target_lane = self.left_lane if res["lc"] == -1 else self.right_lane
+        # if SECTION_TYPE.BASE in type_:
+        #     return self.base_cal()
+        # if SECTION_TYPE.ON_RAMP in type_:
+        #     return self.on_ramp_cal()
+        # raise TrasimError(f"没有对应{type_}的处理函数！")
 
     def base_cal(self):
         if self.vehicle.leader is None:
@@ -70,7 +73,7 @@ class LCModel_KK(LCModel):
         left_ = False
         right_ = False
 
-        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.Inf
+        l_v = self.vehicle.leader.v if self.vehicle.dhw < self._L_a else np.inf
         # 判断是否选择左转
         if self.left_lane is not None:
             _f, _l = self.left_lane.get_relative_car(self.vehicle)
@@ -117,7 +120,7 @@ class LCModel_KK(LCModel):
             head_safe = (d_l > min(self._gamma_ahead * self.vehicle.v * self._tau + _l.length, D_ahead))
         else:
             head_safe = True
-            d_l = np.Inf
+            d_l = np.inf
         if _f is not None:
             d_f = _f.get_dist(self.vehicle.x) - self.vehicle.length
             D_behind = cal_G(self._k, self._tau, self._a_0, _f.v, self.vehicle.v)
@@ -145,20 +148,20 @@ class LCModel_KK(LCModel):
         else:
             v_hat = self.vehicle.v + self._delta_vr_1
             head_safe = True
-            d_l = np.Inf
+            d_l = np.inf
         if _f is not None:
             D_behind, behind_safe, _, _ = self._safe_func_on_ramp_common(_f, self.vehicle, v_hat)
         else:
             behind_safe = True
 
-        xm = np.NAN
+        xm = np.nan
         if _l is not None and _f is not None:
             xm = _f.x + _f.dhw / 2
         if not (head_safe and behind_safe):
             if _l is not None and _f is not None:
                 if _f.gap > self._lambda_b * _f.v + self.vehicle.length:
-                    condition_1 = (self.vehicle.pos_list[-1] < self.xm and self.vehicle.x >= xm)
-                    condition_2 = (self.vehicle.pos_list[-1] >= self.xm and self.vehicle.x < xm)
+                    condition_1 = (self.vehicle.x_list[-1] < self.xm and self.vehicle.x >= xm)
+                    condition_2 = (self.vehicle.x_list[-1] >= self.xm and self.vehicle.x < xm)
                     if condition_1 or condition_2:
                         head_safe = behind_safe = True
                         x = xm

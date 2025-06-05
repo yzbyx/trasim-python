@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/6/3 19:35
+# @time : 2023/6/3 19:35
 # @Author : yzbyx
 # @File : CFModel_CTM.py
 # Software: PyCharm
@@ -9,7 +9,7 @@ from trasim_simplified.core.constant import CFM
 from trasim_simplified.core.kinematics.cfm import CFModel
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel_CTM(CFModel):

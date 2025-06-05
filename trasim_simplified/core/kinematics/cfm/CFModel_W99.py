@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 10:55
+# @time : 2022-04-04 10:55
 # @Author : yzbyx
 # @File : CFModel_W99.py
 # @Software : PyCharm
@@ -15,7 +15,7 @@ import numba
 import numpy as np
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM

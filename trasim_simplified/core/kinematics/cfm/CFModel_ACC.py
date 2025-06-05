@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/10 11:58
+# @time : 2023/5/10 11:58
 # @Author : yzbyx
 # @File : CFModel_ACC.py
 # Software: PyCharm
@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING, Optional
 from trasim_simplified.core.kinematics.cfm.CFModel_KK import cal_v_safe, CFModel_KK
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM, V_TYPE
 
 
 class CFModel_ACC(CFModel):
-    def __init__(self, vehicle: Optional['Vehicle'], f_param: dict[str, float]):
-        super().__init__(vehicle)
+    def __init__(self, f_param: dict[str, float]):
+        super().__init__()
         self.name = CFM.ACC
         self.thesis = "Modeling cooperative and autonomous adaptive" \
                       " cruise control dynamic responses using experimental data (2014)"

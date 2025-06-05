@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 16:20
+# @time : 2023-03-31 16:20
 # @Author : yzbyx
 # @File : data_container.py
 # @Software : PyCharm
@@ -25,8 +25,12 @@ class DataContainer:
     def config(self, save_info=None, basic_info=True):
         """默认包含车辆ID"""
         if basic_info:
-            save_info = [Info.lane_add_num, Info.step, Info.Time,
-                         Info.id, Info.Preceding_ID, Info.x, Info.v, Info.a, Info.v_Length]
+            basic_info = [Info.lane_add_num, Info.step, Info.time,
+                          Info.id, Info.Preceding_ID, Info.x, Info.v, Info.a, Info.length]
+            if save_info is None:
+                save_info = basic_info
+            else:
+                save_info = basic_info + save_info
         if save_info is None:
             save_info = {}
         self.save_info.update(save_info)
@@ -38,22 +42,34 @@ class DataContainer:
         data: dict[str, list] = {info: [] for info in self.save_info}
         total_car_list_has_data = self.get_total_car_has_data()
         info_list = list(self.save_info)
+        assert len(info_list) != 0, "没有指定保存数据"
         for info in info_list:
             for car in total_car_list_has_data:
-                data[info].extend(car.get_data_list(info))
+                temp = car.get_data_list(info)
+                assert len(temp) != 0, f"车辆{car.ID}没有{info}数据"
+                data[info].extend(temp)
         self.data_df = pd.DataFrame(data, columns=info_list).sort_values(by=[Info.id, Info.time]).reset_index(drop=True)
         return self.data_df
 
     def get_total_car_has_data(self):
         """仿真完成后调用"""
         if self.total_car_list_has_data is None:
-            car_on_lane_has_data = [car for car in self.lane.car_list if car.has_data()]
+            car_on_lane_has_data = [car for car in self.lane.car_list]
             self.total_car_list_has_data = car_on_lane_has_data + self.lane.out_car_has_data
         return self.total_car_list_has_data
 
     def get_data(self, id_, info_name):
         """仿真完成后调用"""
         return self.data_df[self.data_df[Info.id] == id_][info_name]
+
+    def reset(self):
+        """仿真开始前调用"""
+        self.data_pd = None
+        self.save_info.clear()
+        self.total_car_list_has_data = None
+        self.data_df = None
+        self.lane.car_list.clear()
+        self.lane.out_car_has_data.clear()
 
 
 if __name__ == '__main__':

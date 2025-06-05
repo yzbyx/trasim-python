@@ -4,6 +4,7 @@
     <option name="enabledOnReformat" value="true" />
     <option name="executionMode" value="BINARY" />
     <option name="pathToExecutable" value="D:\software\Anaconda\Scripts\black.exe" />
+    <option name="sdkName" value="Python 3.11 (car-following-model-test)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11 (car-following-model-test)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="traj-process-312" project-jdk-type="Python SDK" />
 </project>

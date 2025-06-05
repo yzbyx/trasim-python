@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-04-14 12:07
+# @time : 2023-04-14 12:07
 # @Author : yzbyx
 # @File : open_lane.py
 # @Software : PyCharm
@@ -7,8 +7,9 @@ from typing import Optional
 
 import numpy as np
 
+from trasim_simplified.core.agent import get_veh_class
 from trasim_simplified.core.frame.micro.lane_abstract import LaneAbstract
-from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class THW_DISTRI:
@@ -17,8 +18,8 @@ class THW_DISTRI:
 
 
 class LaneOpen(LaneAbstract):
-    def __init__(self, lane_length: float):
-        super().__init__(lane_length)
+    def __init__(self, lane_length: float, width: float = 3.5):
+        super().__init__(lane_length, width)
         self.is_circle = False
         self.outflow_point = True
         """此车道是否为流出车道 (影响车辆跟驰行为)"""
@@ -48,10 +49,6 @@ class LaneOpen(LaneAbstract):
         self.offset_pos = offset_pos
         self.car_num_percent = np.array(self.car_num_list) / sum(self.car_num_list)
 
-    def step(self):
-        for i, car in enumerate(self.car_list):
-            car.step(i)
-
     def car_summon(self):
         if 0 < self.time_ < self.next_car_time:
             return
@@ -60,10 +57,9 @@ class LaneOpen(LaneAbstract):
             assert self.car_num_percent is not None
             if len(self.car_list) != 0:
                 first = self.car_list[0]
-                # if first.x - first.length - first.v * self.dt < 0:
-                if first.x - first.length < 0:
+                if first.x - first.length - first.v * self.dt < 0:
                     self.fail_summon_num += 1
-                    # print(f"车道{self.ID}在{self.step_}仿真步生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
+                    print(f"车道{self.ID}在{self.step_}仿真步生成车辆失败！共延迟{self.fail_summon_num}个仿真步")
                     return
 
             i = np.random.choice(self.car_num_percent, p=self.car_num_percent.ravel())
@@ -72,32 +68,39 @@ class LaneOpen(LaneAbstract):
                 i = np.random.choice(pos)
             else:
                 i = pos[0]
-            vehicle = Vehicle(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
+            VehClass = get_veh_class(self.car_class_list[i])
+            vehicle = VehClass(self, self.car_type_list[i], self._get_new_car_id(), self.car_length_list[i])
             vehicle.x = self.offset_pos
+            vehicle.y = self.y_center
             vehicle.set_cf_model(self.cf_name_list[i], self.cf_param_list[i])
             vehicle.set_lc_model(self.lc_name_list[i], self.lc_param_list[i])
+            vehicle.set_car_param(self.car_param_list[i])
+            vehicle.destination_lane_indexes = self.destination_lanes_list[i]
+            vehicle.route_type = self.route_type_list[i]
+            vehicle.target_lane = self
+
             if self.car_initial_speed_list[i] >= 0:
-                vehicle.v = np.random.uniform(
+                vehicle.speed = np.random.uniform(
                     max(self.car_initial_speed_list[i] - 0.5, 0), self.car_initial_speed_list[i] + 0.5
                 ) if self.speed_with_random_list[i] else self.car_initial_speed_list[i]
             else:
                 if self.car_initial_speed_list[i] == -1:
                     if len(self.car_list) == 0:
-                        vehicle.v = vehicle.cf_model.get_expect_speed()
+                        vehicle.speed = vehicle.cf_model.get_expect_speed()
                     else:
-                        vehicle.v = self.car_list[0].v
+                        vehicle.speed = self.car_list[0].v
                 else:
                     # 新的车辆汇入方式（效果不行，堵塞带依旧影响发车）
                     if len(self.car_list) != 0:
                         leader = self.car_list[0]
-                        vehicle.v = leader.v
+                        vehicle.speed = leader.v
                         l_d = leader.dhw
                         if not np.isnan(l_d):
                             x = leader.x - l_d - leader.length
                             vehicle.x = x if x >= vehicle.x else vehicle.x
                     else:
-                        vehicle.v = vehicle.cf_model.get_expect_speed()
-            vehicle.a = 0
+                        vehicle.speed = vehicle.cf_model.get_expect_speed()
+            vehicle.acc = 0
             vehicle.set_car_param(self.car_param_list[i])
 
             if len(self.car_list) != 0:
@@ -130,8 +133,9 @@ class LaneOpen(LaneAbstract):
 
     def update_state(self):
         for car in self.car_list:
-            self.car_state_update_common(car)
+            if not car.skip:
+                car.update_state(car.next_acc, car.next_delta)
 
-            if car.x > self.lane_length:
-                car.is_run_out = True
-                self.car_remove(car, car.has_data())
+                if car.x > self.lane_length:
+                    car.is_run_out = True
+                    self.car_remove(car, car.has_data())

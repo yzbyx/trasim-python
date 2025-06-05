@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/9/30 17:27
+# @time : 2023/9/30 17:27
 # @Author : yzbyx
 # @File : pyqtgraph_ui.py
 # Software: PyCharm
 from typing import Union, Optional
 
-import pyqtgraph as pg
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import QApplication
-from pyqtgraph import GraphicsLayoutWidget
+try:
+    import pyqtgraph as pg
+    from PyQt5 import QtCore
+    from PyQt5.QtWidgets import QApplication
+    from pyqtgraph import GraphicsLayoutWidget
+except ImportError:
+    pass
 
-from trasim_simplified.core.vehicle import Vehicle
+from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class PyqtUI:

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/27 10:52
+# @time : 2023/5/27 10:52
 # @Author : yzbyx
 # @File : CFModel_CACC.py
 # Software: PyCharm
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM

@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 10:56
+# @time : 2022-04-04 10:56
 # @Author : yzbyx
 # @File : CFModel.py
 # @Software : PyCharm
@@ -14,7 +14,7 @@ from trasim_simplified.core.constant import RUNMODE, RANDOM_SEED
 from trasim_simplified.core.kinematics.model import Model
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel(Model, ABC):
@@ -22,8 +22,8 @@ class CFModel(Model, ABC):
 
     _RANDOM = random.Random(RANDOM_SEED.CFM_SEED)
 
-    def __init__(self, vehicle: Optional['Vehicle']):
-        super().__init__(vehicle)
+    def __init__(self):
+        super().__init__()
         self.status = None
         self.mode = RUNMODE.NORMAL
         self.random = CFModel._RANDOM
@@ -41,13 +41,39 @@ class CFModel(Model, ABC):
         pass
 
     @abc.abstractmethod
+    def get_time_safe(self):
+        pass
+
+    @abc.abstractmethod
+    def get_time_wanted(self):
+        pass
+
+    @abc.abstractmethod
     def get_expect_speed(self):
         pass
 
     def get_speed_limit(self):
-        if self.vehicle.lane.force_speed_limit is False:
-            return np.Inf
-        return self.vehicle.lane.get_speed_limit(self.vehicle.x, self.vehicle.type)
+        return self.veh_surr.ev.lane.get_speed_limit(self.veh_surr.ev.x)
+
+    @abc.abstractmethod
+    def get_max_dec(self):
+        pass
+
+    @abc.abstractmethod
+    def get_max_acc(self):
+        pass
+
+    @abc.abstractmethod
+    def get_safe_s0(self):
+        pass
+
+    @abc.abstractmethod
+    def get_com_acc(self):
+        pass
+
+    @abc.abstractmethod
+    def get_com_dec(self):
+        pass
 
     def equilibrium_state(self, *args):
         pass

@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2023-03-31 16:18
+# @time : 2023-03-31 16:18
 # @Author : yzbyx
 # @File : data_processor.py
 # @Software : PyCharm

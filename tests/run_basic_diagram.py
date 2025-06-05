@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time : 2023/5/27 12:21
+# @time : 2023/5/27 12:21
 # @Author : yzbyx
 # @File : run_basic_diagram.py
 # Software: PyCharm

@@ -1,5 +1,5 @@
 # -*- coding = uft-8 -*-
-# @Time : 2022-04-04 21:48
+# @time : 2022-04-04 21:48
 # @Author : yzbyx
 # @File : CFModel_NonLinearGHR.py
 # @Software : PyCharm
@@ -12,7 +12,7 @@ from trasim_simplified.core.kinematics.cfm.CFModel import CFModel
 from trasim_simplified.core.constant import CFM
 
 if TYPE_CHECKING:
-    from trasim_simplified.core.vehicle import Vehicle
+    from trasim_simplified.core.agent.vehicle import Vehicle
 
 
 class CFModel_NonLinearGHR(CFModel):
@@ -44,7 +44,7 @@ class CFModel_NonLinearGHR(CFModel):
         time = self.vehicle.lane.time_ - self._tau
         index = np.where(((time - 1e-4) < np.array(self.vehicle.time_list)) &
                          ((time + 1e-4) > np.array(self.vehicle.time_list)))[0][0]
-        self.pre_x = self.vehicle.pos_list[index]
+        self.pre_x = self.vehicle.x_list[index]
         self.pre_v = self.vehicle.speed_list[index]
         self.l_pre_x = self.pre_x + self.vehicle.dhw_list[index]
         self.l_pre_v = self.vehicle.leader.speed_list[index]
