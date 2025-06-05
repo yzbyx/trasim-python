@@ -24,6 +24,9 @@ A = np.array([
     [0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0],  # ddy0
 ])
 
+MIN_COST = -1
+BUFFER_FRAME = 2
+
 
 def get_A2(T):
     return np.array([
@@ -35,7 +38,7 @@ def get_A2(T):
 
 def get_traj_own_constraints_and_costs(
         x: cvxpy.Variable, veh: 'Game_A_Vehicle',
-        target_lane: 'LaneAbstract', T
+        target_lane: 'LaneAbstract', T, lc_surr: GameVehSurr
 ) -> tuple[list[cvxpy.Constraint], cvxpy.Expression, cvxpy.Expression, float]:
     y1 = target_lane.y_center
     dt = veh.dt
@@ -53,15 +56,15 @@ def get_traj_own_constraints_and_costs(
     A_xy = np.array([[1, t, t ** 2, t ** 3, t ** 4, t ** 5] for t in time_steps])
     if target_lane.index > veh.lane.index:
         constraints += [A_xy @ x[6: 12] <= veh.lane.y_left]
-        constraints += [A_xy @ x[6: 12] <= target_lane.y_right]
+        constraints += [A_xy @ x[6: 12] >= target_lane.y_right]
     else:
         constraints += [A_xy @ x[6: 12] <= target_lane.y_left]
-        constraints += [A_xy @ x[6: 12] <= veh.lane.y_right]
+        constraints += [A_xy @ x[6: 12] >= veh.lane.y_right]
 
     # 计算每个时间步的dx约束
     A_dxy = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps])
     constraints += [A_dxy @ x[: 6] >= 0]
-    constraints += [A_dxy @ x[: 6] <= veh.vel_desire + 5]
+    constraints += [A_dxy @ x[: 6] <= veh.vel_desire + veh.LC_VEL_INCREASE_TOL]
 
     # 计算每个时间步的ddx和ddy约束
     A_ddxy = np.array([[0, 0, 2, 6 * t, 12 * t ** 2, 20 * t ** 3] for t in time_steps])
@@ -76,15 +79,19 @@ def get_traj_own_constraints_and_costs(
     A_xy_jerk = np.array([[0, 0, 0, 6, 24 * t, 60 * t ** 2] for t in time_steps])
     com_cost = 0.5 * cvxpy.max(cvxpy.abs(A_xy_jerk @ x[:6])) / veh.JERK_MAX
     com_cost += 0.5 * cvxpy.max(cvxpy.abs(A_xy_jerk @ x[6:12])) / veh.JERK_MAX
+    target_vel = lc_surr.CP.state[1] if veh.lane == target_lane else lc_surr.TP.state[1]
+    end_cost = cvxpy.abs(A_dxy[-1] @ x[: 6] - target_vel) / veh.DELTA_V
+    end_cost += cvxpy.abs(A_ddxy[-1] @ x[: 6]) / veh.acc_desire
+    com_cost += end_cost
     # com_cost = cvxpy.min(cvxpy.hstack([[1], com_cost]))
     # com_cost = cvxpy.max(cvxpy.hstack([[-1], com_cost]))
 
     # 效率成本
     ev_v = A_dxy @ x[:6]
-    eff_cost = (ev_v[0] - cvxpy.mean(ev_v)) / 10
+    eff_cost = (ev_v[0] - cvxpy.mean(ev_v)) / veh.DELTA_V
     # eff_cost = cvxpy.min(cvxpy.hstack([[1], eff_cost]))
     # eff_cost = cvxpy.max(cvxpy.hstack([[-1], eff_cost]))
-    eff_cost += (T - 5) / 5
+    eff_cost += T / veh.LC_TIME_BASE
 
     # 路径成本
     lc_direction = target_lane.index - veh.lane.index
@@ -95,23 +102,24 @@ def get_traj_own_constraints_and_costs(
 
 
 def get_single_surr_constraints_and_costs(
-        veh: 'Game_A_Vehicle',
-        ev_pos, ev_v, other_pos, other_v, other_l, is_preceding
+        veh: 'Game_A_Vehicle', other_veh: 'Game_Vehicle',
+        ev_pos, ev_v, other_pos, other_v, other_l, other_is_preceding
 ):
     x_relax: cvxpy.Variable = cvxpy.Variable(1)
-    v = ev_v if is_preceding else other_v
-    sign = 1 if is_preceding else -1
-    l = other_l if is_preceding else veh.length
+    v = ev_v if other_is_preceding else other_v
+    sign = 1 if other_is_preceding else -1
+    l = other_l if other_is_preceding else veh.length
+
+    v_state = other_veh.state[1] if not other_is_preceding else veh.state[1]
 
     constraints = []
 
     other_pos = other_pos - l * sign
-    b_ineq_part1 = other_pos - (v * veh.time_safe + veh.safe_s0) * veh.SCALE * sign
+    b_ineq_part1 = other_pos - (v * veh.time_safe + veh.safe_s0) * veh.scale * sign
     constraints += [(ev_pos - b_ineq_part1) * sign <= 0]
-    b_ineq_part2 = other_pos - (v * veh.time_wanted + veh.safe_s0) * veh.SCALE * sign
-    constraints += [x_relax >= (ev_pos - b_ineq_part2) * sign / (veh.state[1] * veh.time_wanted * veh.SCALE)]
+    constraints += [x_relax >= (ev_pos - other_pos) * sign / (v_state * veh.time_wanted + veh.safe_s0)]
 
-    cost = cvxpy.maximum(x_relax, -1)
+    cost = cvxpy.maximum(x_relax, MIN_COST)
     # cost = cvxpy.minimum(cost, 1)
 
     return constraints, cost
@@ -127,6 +135,8 @@ def get_lc_cross_step(T, veh: 'Game_A_Vehicle', target_lane: 'LaneAbstract', ori
         step = (Y[Y <= ori_lane.y_left]).shape[0]  # 进入目标车道的初始时刻
     else:
         step = (Y[Y >= ori_lane.y_right]).shape[0]  # 进入目标车道的初始时刻
+    if step == 0:
+        step = 1
     return step
 
 
@@ -167,22 +177,22 @@ def get_surr_constraints_and_costs(
 
     dt = veh.dt
     time_steps = np.arange(0, T + dt / 2, dt)
-    dxt = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps])
     A_xy = np.array([[1, t, t ** 2, t ** 3, t ** 4, t ** 5] for t in time_steps])  # 纵向位置
+    A_dxy = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps])
     ev_pos = A_xy @ x[: 6]  # 纵向位置
-    ev_v = dxt @ x[:6]
+    ev_v = A_dxy @ x[: 6]
 
     if veh.lane == target_lane:
         cp_constraints, cp_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos, ev_v, xt_PC, dxt_PC, l_PC, True
+            veh, PC, ev_pos, ev_v, xt_PC, dxt_PC, l_PC, True
         )
 
         cr_constraints, cr_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos, ev_v, xt_CR, dxt_CR, l_CR, False
+            veh, CR, ev_pos, ev_v, xt_CR, dxt_CR, l_CR, False
         )
 
-        tr_cost = 0
-        tp_cost = 0
+        tr_cost = MIN_COST
+        tp_cost = MIN_COST
         step = None
 
         constraints += cp_constraints
@@ -190,17 +200,19 @@ def get_surr_constraints_and_costs(
     else:
         step = get_lc_cross_step(T, veh, target_lane, ori_lane)
 
+        # print(step)
+
         cp_constraints, cp_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos[:step], ev_v[:step], xt_PC[:step], dxt_PC[:step], l_PC, True
+            veh, PC, ev_pos[:step], ev_v[:step], xt_PC[:step], dxt_PC[:step], l_PC, True
         )
         cr_constraints, cr_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos[:step], ev_v[:step], xt_CR[:step], dxt_CR[:step], l_CR, False
+            veh, CR, ev_pos[:step], ev_v[:step], xt_CR[:step], dxt_CR[:step], l_CR, False
         )
         tp_constraints, tp_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos[step:], ev_v[step:], xt_TP[step:], dxt_TP[step:], l_TP, True
+            veh, TP, ev_pos[step:], ev_v[step:], xt_TP[step:], dxt_TP[step:], l_TP, True
         )
         tr_constraints, tr_cost = get_single_surr_constraints_and_costs(
-            veh, ev_pos[step:], ev_v[step:], xt_TR[step:], dxt_TR[step:], l_TR, False
+            veh, TR, ev_pos[step:], ev_v[step:], xt_TR[step:], dxt_TR[step:], l_TR, False
         )
 
         constraints += cp_constraints
@@ -231,33 +243,40 @@ def weaving_constraints_and_costs(
         var_other: cvxpy.Variable, other_veh: 'Game_A_Vehicle',
         ev_lc_cross_step, ot_lc_cross_step
 ):
+    if ev_lc_cross_step is None or ot_lc_cross_step is None:
+        return [], [], 0, 0
     dt = veh.dt
     time_steps = np.arange(0, T + dt / 2, dt)
     A_xy = np.array([[1, t, t ** 2, t ** 3, t ** 4, t ** 5] for t in time_steps])  # 纵向位置
     A_dxy = np.array([[0, 1, 2 * t, 3 * t ** 2, 4 * t ** 3, 5 * t ** 4] for t in time_steps])  # 横向速度
     ev_x = A_xy @ var_ev[: 6]  # 纵向位置
-    ev_vx = A_dxy @ var_ev[:6]
+    ev_vx = A_dxy @ var_ev[: 6]
     ot_x = A_xy @ var_other[: 6]  # 纵向位置
-    ot_vx = A_dxy @ var_other[:6]
+    ot_vx = A_dxy @ var_other[: 6]
 
     if ev_lc_cross_step < ot_lc_cross_step:  # EV先换道
-        ev_x_interest = ev_x[ev_lc_cross_step: ot_lc_cross_step]
-        ev_vx_interest = ev_vx[ev_lc_cross_step: ot_lc_cross_step]
-        ot_x_interest = ot_x[ev_lc_cross_step: ot_lc_cross_step]
-        ot_vx_interest = ot_vx[ev_lc_cross_step: ot_lc_cross_step]
-    else:
-        ev_x_interest = ev_x[ot_lc_cross_step: ev_lc_cross_step]
-        ev_vx_interest = ev_vx[ot_lc_cross_step: ev_lc_cross_step]
-        ot_x_interest = ot_x[ot_lc_cross_step: ev_lc_cross_step]
-        ot_vx_interest = ot_vx[ot_lc_cross_step: ev_lc_cross_step]
+        cross_before_step = ev_lc_cross_step
+        cross_after_step = ot_lc_cross_step
+    else:  # OT先换道
+        cross_before_step = ot_lc_cross_step
+        cross_after_step = ev_lc_cross_step
 
-    is_preceding = True if veh.x < other_veh.x else False
-    ot_constraints, ot_cost = get_single_surr_constraints_and_costs(
-        veh, ev_x_interest, ev_vx_interest, ot_x_interest, ot_vx_interest, other_veh.length, is_preceding
-    )
+    cross_before_step = max(0, cross_before_step - BUFFER_FRAME)
+    cross_after_step = min(len(time_steps) - 1, cross_after_step + BUFFER_FRAME)
 
+    ev_x_interest = ev_x[cross_before_step: cross_after_step]
+    ev_vx_interest = ev_vx[cross_before_step: cross_after_step]
+    ot_x_interest = ot_x[cross_before_step: cross_after_step]
+    ot_vx_interest = ot_vx[cross_before_step: cross_after_step]
+
+    other_is_preceding = True if veh.x < other_veh.x else False
     ev_constraints, ev_cost = get_single_surr_constraints_and_costs(
-        other_veh, ot_x_interest, ot_vx_interest, ev_x_interest, ev_vx_interest, veh.length, not is_preceding
+        other_veh, veh, ot_x_interest, ot_vx_interest, ev_x_interest, ev_vx_interest,
+        veh.length, not other_is_preceding
+    )
+    ot_constraints, ot_cost = get_single_surr_constraints_and_costs(
+        veh, other_veh, ev_x_interest, ev_vx_interest, ot_x_interest, ot_vx_interest,
+        other_veh.length, other_is_preceding
     )
 
     return ev_constraints, ot_constraints, ev_cost, ot_cost
@@ -268,6 +287,8 @@ def platoon_constraints_and_costs(
         var_other: cvxpy.Variable, other_veh: 'Game_A_Vehicle',
         ev_lc_cross_step, ot_lc_cross_step
 ):
+    if ev_lc_cross_step is None or ot_lc_cross_step is None:
+        return [], [], 0, 0
     dt = veh.dt
     time_steps = np.arange(0, T + dt / 2, dt)
     A_xy = np.array([[1, t, t ** 2, t ** 3, t ** 4, t ** 5] for t in time_steps])  # 纵向位置
@@ -294,18 +315,18 @@ def platoon_constraints_and_costs(
     ot_vx_after = ot_vx[cross_after_step:]
 
     is_preceding = True if veh.x < other_veh.x else False
-    ot_constraints_before, ot_cost_before = get_single_surr_constraints_and_costs(
-        veh, ev_x_before, ev_vx_before, ot_x_before, ot_vx_before, other_veh.length, is_preceding
-    )
     ev_constraints_before, ev_cost_before = get_single_surr_constraints_and_costs(
-        other_veh, ot_x_before, ot_vx_before, ev_x_before, ev_vx_before, veh.length, not is_preceding
-    )
-    ot_constraints_after, ot_cost_after = get_single_surr_constraints_and_costs(
-        veh, ev_x_after, ev_vx_after, ot_x_after, ot_vx_after, other_veh.length, is_preceding
+        other_veh, veh, ot_x_before, ot_vx_before, ev_x_before, ev_vx_before, veh.length, not is_preceding
     )
     ev_constraints_after, ev_cost_after = get_single_surr_constraints_and_costs(
-        other_veh, ot_x_after, ot_vx_after, ev_x_after, ev_vx_after, veh.length, not is_preceding
+        other_veh, veh, ot_x_after, ot_vx_after, ev_x_after, ev_vx_after, veh.length, not is_preceding
     )
+    ot_constraints_before, ot_cost_before = get_single_surr_constraints_and_costs(
+        veh, other_veh, ev_x_before, ev_vx_before, ot_x_before, ot_vx_before, other_veh.length, is_preceding
+    )
+    ot_constraints_after, ot_cost_after = get_single_surr_constraints_and_costs(
+        veh, other_veh, ev_x_after, ev_vx_after, ot_x_after, ot_vx_after, other_veh.length, is_preceding
+        )
 
     ev_constraints = ev_constraints_before + ev_constraints_after
     ot_constraints = ot_constraints_before + ot_constraints_after
@@ -325,7 +346,7 @@ def opti_quintic_given_T_single(
     x_ev = cvxpy.Variable(12)  # fxt，fyt的五次多项式系数
 
     ev_constraints, ev_com_cost, ev_eff_cost, ev_route_cost = \
-        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T)
+        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T, lc_surr)
 
     ev_constraints_surr, ev_safe_cost, ev_cross_step = get_surr_constraints_and_costs(
         x_ev, EV, T,
@@ -333,6 +354,12 @@ def opti_quintic_given_T_single(
         TP_traj, TR_traj, CP_traj, CR_traj,
         target_lane, ori_lane
     )
+
+    ev_safe_cost *= EV.k_s
+    ev_com_cost *= EV.k_c
+    ev_eff_cost *= EV.k_e
+    ev_route_cost *= EV.k_r
+    # ev_end_cost *= EV.k_f
 
     constraints = ev_constraints + ev_constraints_surr
     ev_total_cost = ((1 - EV.rho) * (ev_safe_cost + ev_com_cost) + EV.rho * ev_eff_cost + ev_route_cost)
@@ -367,9 +394,9 @@ def opti_quintic_given_T_weaving(
     x_tr = cvxpy.Variable(12)  # y的五次多项式系数
 
     ev_constraints, ev_com_cost, ev_eff_cost, ev_route_cost = \
-        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T)
+        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T, lc_surr)
     tr_constraints, tr_com_cost, tr_eff_cost, tr_route_cost = \
-        get_traj_own_constraints_and_costs(x_tr, TR, ori_lane, T)
+        get_traj_own_constraints_and_costs(x_tr, TR, ori_lane, T, lc_surr)
 
     ev_constraints_surr, ev_safe_cost_surr, ev_cross_step = get_surr_constraints_and_costs(
         x_ev, EV, T,
@@ -393,42 +420,14 @@ def opti_quintic_given_T_weaving(
     ev_safe_cost = cvxpy.max(cvxpy.hstack([ev_safe_cost_surr, ev_ot_safe_cost]))
     tr_safe_cost = cvxpy.max(cvxpy.hstack([tr_safe_cost_surr, ot_ev_safe_cost]))
 
-    ev_total_cost = ((1 - EV.rho) * (ev_safe_cost + ev_com_cost) + EV.rho * ev_eff_cost + ev_route_cost)
-    tr_total_cost = ((1 - TR.rho) * (tr_safe_cost + tr_com_cost) + TR.rho * tr_eff_cost + tr_route_cost)
-
-    total_cost = ev_total_cost + TR.game_co * tr_total_cost
-    constraints = (
-            ev_constraints + tr_constraints +
-            ev_constraints_surr + tr_constraints_surr +
-            ev_ot_constraints + ot_ev_constraints
-    )
-
-    have_res = solve_quintic_given_T(constraints, total_cost)
-    if not have_res:
-        return None, None
-
-    times = np.arange(0, T + EV.dt / 2, EV.dt)
-
-    ev_res = x_ev.value
-    ev_safe_cost_value = ev_safe_cost.value
-    ev_com_cost_value = ev_com_cost.value
-    ev_eff_cost_value = ev_eff_cost.value
-    ev_route_cost_value = ev_route_cost
-    ev_total_cost = ev_total_cost.value
-
-    ev_solve_res = SolveRes(
-        ev_res, times, ev_safe_cost_value, ev_com_cost_value, ev_eff_cost_value, ev_route_cost_value, ev_total_cost
-    )
-
-    tr_res = x_tr.value
-    tr_safe_cost_value = tr_safe_cost.value
-    tr_com_cost_value = tr_com_cost.value
-    tr_eff_cost_value = tr_eff_cost.value
-    tr_route_cost_value = tr_route_cost
-    tr_total_cost = tr_total_cost.value
-
-    tr_solve_res = SolveRes(
-        tr_res, times, tr_safe_cost_value, tr_com_cost_value, tr_eff_cost_value, tr_route_cost_value, tr_total_cost
+    ev_solve_res, tr_solve_res = weaving_and_platoon_share(
+        T, EV, TR,
+        ev_safe_cost, ev_com_cost, ev_eff_cost, ev_route_cost,
+        tr_safe_cost, tr_com_cost, tr_eff_cost, tr_route_cost,
+        ev_constraints, tr_constraints,
+        ev_constraints_surr, tr_constraints_surr,
+        ev_ot_constraints, ot_ev_constraints,
+        x_ev, x_tr
     )
 
     return ev_solve_res, tr_solve_res
@@ -446,9 +445,9 @@ def opti_quintic_given_T_platoon(
     x_cr = cvxpy.Variable(12)  # y的五次多项式系数
 
     ev_constraints, ev_com_cost, ev_eff_cost, ev_route_cost = \
-        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T)
+        get_traj_own_constraints_and_costs(x_ev, EV, target_lane, T, lc_surr)
     cr_constraints, cr_com_cost, cr_eff_cost, cr_route_cost = \
-        get_traj_own_constraints_and_costs(x_cr, CR, target_lane, T)
+        get_traj_own_constraints_and_costs(x_cr, CR, target_lane, T, lc_surr)
 
     ev_constraints_surr, ev_safe_cost_surr, ev_cross_step = get_surr_constraints_and_costs(
         x_ev, EV, T,
@@ -468,17 +467,47 @@ def opti_quintic_given_T_platoon(
         x_cr, CR,
         ev_cross_step, cr_cross_step
     )
-
     ev_safe_cost = cvxpy.max(cvxpy.hstack([ev_safe_cost_surr, ev_ot_safe_cost]))
     cr_safe_cost = cvxpy.max(cvxpy.hstack([cr_safe_cost_surr, ot_ev_safe_cost]))
 
-    ev_total_cost = ((1 - EV.rho) * (ev_safe_cost + ev_com_cost) + EV.rho * ev_eff_cost + ev_route_cost)
-    cr_total_cost = ((1 - CR.rho) * (cr_safe_cost + cr_com_cost) + CR.rho * cr_eff_cost + cr_route_cost)
+    ev_solve_res, cr_solve_res = weaving_and_platoon_share(
+        T, EV, CR,
+        ev_safe_cost, ev_com_cost, ev_eff_cost, ev_route_cost,
+        cr_safe_cost, cr_com_cost, cr_eff_cost, cr_route_cost,
+        ev_constraints, cr_constraints,
+        ev_constraints_surr, cr_constraints_surr,
+        ev_ot_constraints, ot_ev_constraints,
+        x_ev, x_cr
+    )
 
-    total_cost = ev_total_cost + CR.game_co * cr_total_cost  # 等权
+    return ev_solve_res, cr_solve_res
+
+
+def weaving_and_platoon_share(
+        T, EV, OV, ev_safe_cost, ev_com_cost, ev_eff_cost, ev_route_cost,
+        or_safe_cost, or_com_cost, or_eff_cost, or_route_cost,
+        ev_constraints, or_constraints,
+        ev_constraints_surr, or_constraints_surr,
+        ev_ot_constraints, ot_ev_constraints,
+        x_ev, x_or
+):
+    ev_safe_cost *= EV.k_s
+    ev_com_cost *= EV.k_c
+    ev_eff_cost *= EV.k_e
+    ev_route_cost *= EV.k_r
+
+    or_safe_cost *= OV.k_s
+    or_com_cost *= OV.k_c
+    or_eff_cost *= OV.k_e
+    or_route_cost *= OV.k_r
+
+    ev_total_cost = ((1 - EV.rho) * (ev_safe_cost + ev_com_cost) + EV.rho * ev_eff_cost + ev_route_cost)
+    or_total_cost = ((1 - OV.rho) * (or_safe_cost + or_com_cost) + OV.rho * or_eff_cost + or_route_cost)
+
+    total_cost = ev_total_cost + OV.game_co * or_total_cost  # 等权
     constraints = (
-            ev_constraints + cr_constraints +
-            ev_constraints_surr + cr_constraints_surr +
+            ev_constraints + or_constraints +
+            ev_constraints_surr + or_constraints_surr +
             ev_ot_constraints + ot_ev_constraints
     )
 
@@ -499,15 +528,15 @@ def opti_quintic_given_T_platoon(
         ev_safe_cost_value, ev_com_cost_value, ev_eff_cost_value, ev_route_cost_value, ev_total_cost
     )
 
-    cr_res = x_cr.value
-    cr_safe_cost_value = cr_safe_cost.value
-    cr_com_cost_value = cr_com_cost.value
-    cr_eff_cost_value = cr_eff_cost.value
-    cr_route_cost_value = cr_route_cost
-    cr_total_cost = cr_total_cost.value
-    cr_solve_res = SolveRes(
-        cr_res, times,
-        cr_safe_cost_value, cr_com_cost_value, cr_eff_cost_value, cr_route_cost_value, cr_total_cost
+    or_res = x_or.value
+    or_safe_cost_value = or_safe_cost.value
+    or_com_cost_value = or_com_cost.value
+    or_eff_cost_value = or_eff_cost.value
+    or_route_cost_value = or_route_cost
+    or_total_cost = or_total_cost.value
+    or_solve_res = SolveRes(
+        or_res, times,
+        or_safe_cost_value, or_com_cost_value, or_eff_cost_value, or_route_cost_value, or_total_cost
     )
 
-    return ev_solve_res, cr_solve_res
+    return ev_solve_res, or_solve_res

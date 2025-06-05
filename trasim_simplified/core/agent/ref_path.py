@@ -68,6 +68,7 @@ class ReferencePath:
         self.ref_y = ref_path[:, 3]
         self.ref_dy = ref_path[:, 4]
         self.ref_ddy = ref_path[:, 5]
+        self.ref_path = ref_path
 
         self.dt = dt
 

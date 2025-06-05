@@ -3,6 +3,8 @@
 # @Author : yzbyx
 # @File : scenario_loader.py
 # Software: PyCharm
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,40 +12,51 @@ from skopt import gp_minimize
 from skopt.space import Real
 
 from traj_process.processor.map_phrase.map_config import US_101_Config, ExpresswayA_Config
-from trasim_simplified.core.agent import Vehicle, Game_H_Vehicle, Game_A_Vehicle
-from trasim_simplified.core.agent.game_agent import Game_Vehicle
-from trasim_simplified.core.constant import ScenarioTraj, V_TYPE, LCM, CFM, V_CLASS, COLOR, RouteType, ScenarioMode
+from trasim_simplified.core.agent import Game_A_Vehicle, Game_O_Vehicle
+from trasim_simplified.core.agent.game_agent import Game_Vehicle, Game_H_Vehicle
+from trasim_simplified.core.constant import ScenarioTraj, V_TYPE, LCM, CFM, V_CLASS, COLOR, RouteType, ScenarioMode, \
+    SurrClass
 from trasim_simplified.core.frame.micro.road import Road
 from trasim_simplified.core.kinematics.cfm import get_cf_model
 from trasim_simplified.util.calibrate.clb_cf_model import ga_cal, cf_param_ranges, cf_param_types, cf_param_ins, \
     show_traj
-from trasim_simplified.util.scenario.util import make_road_from_osm
+from trasim_simplified.util.scenario.scenario_util import make_road_from_osm, cal_dist_indicator
 from trasim_simplified.core.constant import TrackInfo as C_Info
-from trasim_simplified.util.scenario_plot import plot_scenario, plot_scenario_twin
+from trasim_simplified.util.scenario_plot import plot_scenario_twin
 from trasim_simplified.util.tools import save_to_pickle, load_from_pickle
 
 pd.options.mode.copy_on_write = True
 
 
 class Scenario:
-    def __init__(self, traj_data: ScenarioTraj, mode: str, ev_type=V_CLASS.GAME_HV):
+    def __init__(self, traj_data: ScenarioTraj, surr_class: SurrClass):
         self.weaving_offset = 60
         self.dataset_name = traj_data.dataset_name
         self.pattern_name = traj_data.pattern_name
+        self.surr_class = surr_class
         self.traj_data = traj_data
         self.max_step = 1000
-        self.ev_id = None
-        self.tr_id = None
-        self.tp_id = None
-        self.cp_id = None
-        self.cr_id = None
-        self.crr_id = None
-        self.trr_id = None
-        self.tpp_id = None
         self.surr_ids: dict[int, tuple[Game_Vehicle, pd.DataFrame, str]] = {}
-        self.veh_name = {}
-        self.mode = mode
-        self.ev_type = ev_type
+        self.name_2_id = {}
+        self.id_2_name = {}
+        self.name_2_class = {}
+
+        self.ev_type = None
+        self.cp_type = None
+        self.cr_type = None
+        self.tr_type = None
+        self.tp_type = None
+
+        self.ev: Optional[Game_Vehicle] = None
+        self.cp: Optional[Game_Vehicle] = None
+        self.cpp: Optional[Game_Vehicle] = None
+        self.cr: Optional[Game_Vehicle] = None
+        self.crr: Optional[Game_Vehicle] = None
+        self.tr: Optional[Game_Vehicle] = None
+        self.trr: Optional[Game_Vehicle] = None
+        self.tp: Optional[Game_Vehicle] = None
+        self.tpp: Optional[Game_Vehicle] = None
+
         self.ev_rho = None
         self.tr_co = None
         self.tp_co = None
@@ -85,22 +98,10 @@ class Scenario:
                 setattr(self.traj_data, name + "_traj", None)
                 continue
             track_id = traj["trackId"].values[0]
-            if name == "EV":
-                self.ev_id = track_id
-            elif name == "TR":
-                self.tr_id = track_id
-            elif name == "CP":
-                self.cp_id = track_id
-            elif name == "CR":
-                self.cr_id = track_id
-            elif name == "TP":
-                self.tp_id = track_id
-            elif name == "CRR":
-                self.crr_id = track_id
-            elif name == "TRR":
-                self.trr_id = track_id
-            elif name == "TPP":
-                self.tpp_id = track_id
+
+            self.name_2_id[name] = track_id
+            self.id_2_name[track_id] = name
+
             if self.dataset_name != "NGSIM":
                 traj = traj[traj["frame"] % 3 == 0]
                 traj["frame"] = traj["frame"] // 3
@@ -125,7 +126,7 @@ class Scenario:
 
             self.surr_ids.update({traj["trackId"].values[0]: (None, traj, name)})
 
-    def load_vehicle(self, ev_type=V_CLASS.GAME_HV):
+    def _load_vehicle(self):
         self.road.reset()
         self._set_record_info()
 
@@ -161,11 +162,21 @@ class Scenario:
             else:
                 raise ValueError(f"Unknown route type: {route_type}")
 
-            if i == 0:
-                self.ev_id = vid
-                car = self._make_vehicle(lane_id, length, x, y, speed, acc, heading, vid, ev_type, route_type)
-            else:
-                car = self._make_vehicle(lane_id, length, x, y, speed, acc, heading, vid, V_CLASS.GAME_HV, route_type)
+            car_class = self.surr_class.get_class(name)
+            car = self._make_vehicle(
+                lane_id, length, x, y, speed, acc, heading, vid, car_class, route_type
+            )
+
+            if name == "EV":
+                self.ev = car
+            elif name == "CP":
+                self.cp = car
+            elif name == "CR":
+                self.cr = car
+            elif name == "TR":
+                self.tr = car
+            elif name == "TP":
+                self.tp = car
 
             car.cf_model.param_update({"v0": vel_max})
 
@@ -209,26 +220,30 @@ class Scenario:
         return car
 
     def run(
-            self, mode: ScenarioMode = None, cf_params: dict = None, car_params: dict = None,
+            self, cf_params: dict = None, car_params: dict = None,
             has_ui=True, save_res=True
     ):
-        self.load_vehicle(self.ev_type)
+        self.road.reset()
+        self._load_vehicle()
 
-        if mode is not None:
-            self.mode = mode
-        if self.mode == ScenarioMode.NO_INTERACTION:
-            for veh, _, _ in self.surr_ids.values():
-                if veh.ID != self.ev_id:
-                    veh.skip = True
-                veh.lane_can_lc = self.lane_can_lc
-        else:
-            for veh, _, _ in self.surr_ids.values():
-                if veh.ID != self.ev_id:
+        for vid, (veh, traj, name) in self.surr_ids.items():
+            if isinstance(veh, Game_O_Vehicle):
+                veh.skip = True
+                veh.no_lc = True
+            elif isinstance(veh, Game_H_Vehicle):
+                if self.ev.route_type == RouteType.merge and veh.route_type == RouteType.diverge:
+                    pass
+                elif self.ev.route_type == RouteType.diverge and veh.route_type == RouteType.merge:
+                    pass
+                else:
                     veh.no_lc = True
-                veh.lane_can_lc = self.lane_can_lc
-
-        ev: Game_Vehicle = self.surr_ids[self.ev_id][0]
-        ev.set_car_param({"color": COLOR.green})
+            elif isinstance(veh, Game_A_Vehicle):
+                if veh.ID == self.ev.ID:
+                    veh.can_raise_game = True
+                else:
+                    veh.no_lc = True
+            else:
+                raise ValueError(f"Unknown vehicle class: {veh.__class__.__name__}")
 
         if cf_params is not None:
             if isinstance(list(cf_params.values())[0], dict):
@@ -236,7 +251,7 @@ class Scenario:
                     if vid in cf_params:
                         car.cf_model.param_update(cf_params[vid])
             else:
-                ev.cf_model.param_update(cf_params)
+                self.ev.cf_model.param_update(cf_params)
 
         if car_params is not None:
             if isinstance(list(car_params.values())[0], dict):
@@ -244,19 +259,7 @@ class Scenario:
                     if vid in car_params:
                         car.set_car_param(car_params[vid])
             else:
-                ev.set_car_param(car_params)
-
-        if self.mode in [
-            ScenarioMode.INTERACTION_TR_HV_TP_HV,
-            ScenarioMode.INTERACTION_TR_HV_TP_AV
-        ]:
-            raise NotImplementedError("Interaction mode is not implemented yet.")
-        elif self.mode == ScenarioMode.NO_INTERACTION:
-            self.ev_rho = ev.rho
-        else:
-            raise ValueError(f"Unknown mode: {self.mode}")
-
-        self.get_save_file_name(self.ev_rho)
+                self.ev.set_car_param(car_params)
 
         TR_stra_dict = {}
         for step, stage in self.road.run(
@@ -267,53 +270,68 @@ class Scenario:
                 for vid, (car, traj, name) in self.surr_ids.items():
                     line = self.road.ui.ax.plot(traj[C_Info.xCenterGlobal].values,
                                                 traj[C_Info.yCenterGlobal].values + self.road.lane_list[0].y_left,
-                                                color='g', linewidth=1, alpha=0.5)[-1]
+                                                color='g', linewidth=1, alpha=0.3)[-1]
                     self.road.ui.static_item.append(line)
 
             if stage == 4 and has_ui:
                 # 显示ev真实轨迹
-                self.road.ui.focus_on(ev)
-                self.road.ui.plot_hist_traj()
-                self.road.ui.plot_pred_traj()
+                # self.road.ui.focus_on(ev)
+                # self.road.ui.plot_hist_traj()
+                # self.road.ui.plot_pred_traj()
 
-                print("-" * 10 + "basic_info" + "-" * 10)
-                print("step:", step, ev)
+                for veh in self.road.get_total_car():
+                    if not isinstance(veh, Game_A_Vehicle):
+                        continue
+                    print("-" * 30 + f"veh: {veh.name}" + "-" * 30)
+                    print("-" * 10 + "basic_info" + "-" * 10)
+                    print("step:", step, veh)
+                    if veh.gap_res_list is not None:
+                        print("-" * 10 + "gap_res_list" + "-" * 10)
+                        for res in veh.gap_res_list:
+                            print(res)
 
-                if ev.gap_res_list is not None:
-                    print("-" * 10 + "gap_res_list" + "-" * 10)
-                    for res in ev.gap_res_list:
-                        print(res)
+                    if veh.opti_gap is not None:
+                        print("-" * 10 + "opti_gap_res" + "-" * 10)
+                        print(veh.opti_gap)
 
-                if ev.opti_gap is not None:
-                    print("-" * 10 + "opti_gap_res" + "-" * 10)
-                    print(ev.opti_gap)
+                    if veh.game_res_list is not None:
+                        print("-" * 10 + "game_res_list" + "-" * 10)
+                        for res in veh.game_res_list:
+                            print(res)
 
-                if isinstance(ev, Game_A_Vehicle) and ev.game_res_list is not None:
-                    print("-" * 10 + "game_res_list" + "-" * 10)
-                    for res in ev.game_res_list:
-                        print(res)
-
-                if ev.opti_game_res is not None:
-                    print("-" * 10 + "opti_game_res" + "-" * 10)
-                    print(ev.opti_game_res)
-                    if ev.opti_game_res.TR_stra is not None:
-                        tr_id = ev.opti_game_res.TR.ID
-                        TR_stra_dict[step] =\
-                            (tr_id, ev.opti_game_res.TR_stra, ev.rho_hat_s[tr_id])
+                    if veh.opti_game_res is not None:
+                        print("-" * 10 + "opti_game_res" + "-" * 10)
+                        print(veh.opti_game_res)
+                        print(veh.rho_hat_s)
+                        # if veh.opti_game_res.TR_stra is not None:
+                        #     tr_id = veh.opti_game_res.game_surr.TR.ID
+                        #     if isinstance(veh.opti_game_res.game_surr.TR, Game_A_Vehicle):
+                        #         rho = veh.opti_game_res.game_surr.TR.rho
+                        #     else:
+                        #         rho = np.mean(veh.rho_hat_s[tr_id])
+                        #     TR_stra_dict[step] = \
+                        #         (tr_id, veh.opti_game_res.TR_stra, rho)
+                        # if veh.opti_game_res.TF_stra is not None:
+                        #     tp_id = veh.opti_game_res.game_surr.TP.ID
+                        #     if isinstance(veh.opti_game_res.game_surr.TP, Game_A_Vehicle):
+                        #         rho = veh.opti_game_res.game_surr.TP.rho
+                        #     else:
+                        #         rho = np.mean(veh.rho_hat_s[tp_id])
+                        #     TP_stra_dict[step] = \
+                        #         (tp_id, veh.opti_game_res.TF_stra, rho)
 
                 plt.pause(0.1)
 
-            if stage == 4:
-                if self.mode == ScenarioMode.NO_INTERACTION:
-                    for vid, (car, traj, name) in self.surr_ids.items():
-                        if vid != self.ev_id:
-                            speed = traj["speed"].values[step]
-                            x = traj[C_Info.xFrontGlobal].values[step]
-                            y = traj[C_Info.yFrontGlobal].values[step]
-                            heading = traj["heading"].values[step]
-                            acc = traj["acceleration"].values[step]
+            if stage == 4 and step < self.max_step:
+                for vid, (car, traj, name) in self.surr_ids.items():
+                    if isinstance(car, Game_O_Vehicle):
+                        speed = traj["speed"].values[step]
+                        x = traj[C_Info.xFrontGlobal].values[step]
+                        y = traj[C_Info.yFrontGlobal].values[step]
+                        heading = traj["heading"].values[step]
+                        acc = traj["acceleration"].values[step]
 
-                            self.set_vehicle_dynamic(car, x, y, speed, acc, heading)
+                        self.set_vehicle_dynamic(car, x, y, speed, acc, heading)
 
         print("TR_stra_dict: ", TR_stra_dict)
 
@@ -363,7 +381,7 @@ class Scenario:
         if save_res:
             save_to_pickle(
                 merged_df,
-                fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\data\{self.save_file_name}.pkl"
+                fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\data\{self.save_file_name}_sim_data.pkl"
             )
 
         return merged_df
@@ -372,7 +390,7 @@ class Scenario:
         if merged_df is None:
             # 读取合并后的数据
             merged_df = load_from_pickle(
-                fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\data\{self.save_file_name}.pkl")
+                fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\data\{self.save_file_name}_sim_data.pkl")
         traj_s = []
         traj_name = []
         for i in self.surr_ids.keys():
@@ -381,128 +399,29 @@ class Scenario:
             traj_name.append(self.surr_ids[i][2])
         return merged_df, traj_s, traj_name
 
-    def get_save_file_name(self, rho=None):
-        if rho is not None:
-            self.ev_rho = rho
-        if self.mode == ScenarioMode.NO_INTERACTION:
-            self.save_file_name = \
-                (fr"{self.dataset_name}_{self.pattern_name}_{self.traj_data.track_id}_"
-                 fr"{self.mode}_EV-{self.ev_rho}")
-        elif self.mode == ScenarioMode.INTERACTION_TR_HV_TP_HV:
-            self.save_file_name = \
-                (fr"{self.dataset_name}_{self.pattern_name}_{self.traj_data.track_id}_"
-                 fr"{self.mode}_HV-{self.ev_rho}")
-        else:
-            raise ValueError(f"Unknown mode: {self.mode}")
-        return self.save_file_name
-
-    def plot_scenario(self, rho=None):
-        self.get_save_file_name(rho)
+    def plot_scenario(self, highlight=None):
+        if highlight is None:
+            highlight = ["EV"]
         merged_df, traj_s, traj_name = self._load_traj()
         plot_scenario_twin(
             traj_s, traj_names=traj_name, road=self.road,
-            fig_name=self.save_file_name, highlight=["EV"],
+            fig_name=self.save_file_name, highlight=highlight,
         )
 
-    def indicator_evaluation(self, merged_df=None, opti=False):
+    def indicator_evaluation(self, merged_df=None):
+        self._load_vehicle()
         df, traj_s, traj_name = self._load_traj(merged_df)
 
-        # 行驶距离偏差
-        x_center = traj_s[0][C_Info.xCenterGlobal].to_numpy()
-        y_center = traj_s[0][C_Info.yCenterGlobal].to_numpy()
-        x_center_ori = traj_s[0][C_Info.xCenterGlobal + "_ori"].to_numpy()
-        y_center_ori = traj_s[0][C_Info.yCenterGlobal + "_ori"].to_numpy()
-        nan_indexes = np.isnan(x_center) | np.isnan(y_center) | np.isnan(x_center_ori) | np.isnan(y_center_ori)
-        x_center = x_center[~nan_indexes]
-        y_center = y_center[~nan_indexes]
-        x_center_ori = x_center_ori[~nan_indexes]
-        y_center_ori = y_center_ori[~nan_indexes]
-        # x_dist = np.max(x_center) - np.min(x_center)
-        # y_dist = np.max(y_center) - np.min(y_center)
-        # x_e = np.sqrt((x_center - x_center_ori) ** 2) / x_dist
-        # y_e = np.sqrt((y_center - y_center_ori) ** 2) / y_dist
-        distance = np.linalg.norm(
-            np.array([x_center - x_center_ori, y_center - y_center_ori]), axis=0
-        )
-        ade = np.mean(distance)
+        ade_all = 0
+        for name in traj_name:
+            if self.surr_class.get_class(name) != V_CLASS.GAME_OV:
+                traj = traj_s[traj_name.index(name)]
+                ade, fde, lane_correct = cal_dist_indicator(traj)
+                ade_all += ade * (5 if name == "EV" else 1)  # EV的权重为5，其余为1
+                if not lane_correct:
+                    ade_all += 1000  # 如果车道不正确，增加一个惩罚值
 
-        # 计算车道变更
-        ev_traj = traj_s[traj_name.index("EV")]
-        lane_end = ev_traj[C_Info.laneId].values[-1]
-        lane_end_ori = ev_traj[C_Info.laneId + "_ori"].values[-2]  # 仿真会多记一次
-
-        if opti:
-            if lane_end != lane_end_ori:
-                return 1e10
-            return ade
-
-        print("车道变更：", lane_end == lane_end_ori)
-
-        fde = distance[-1]
-        print("ade: ", ade, "fde: ", fde)
-
-        # 计算指标
-        # 计算速度偏差
-        v = traj_s[0][C_Info.speed].to_numpy()
-        v_ori = traj_s[0][C_Info.speed + "_ori"].to_numpy()
-        v_error = np.abs(v - v_ori)
-        v_error = v_error[~np.isnan(v_error)]
-        mean_v_error = np.mean(v_error)
-
-        # 计算加速度偏差
-        a = traj_s[0][C_Info.acc].to_numpy()
-        a_ori = traj_s[0][C_Info.acc + "_ori"].to_numpy()
-        a_error = np.abs(a - a_ori)
-        a_error = a_error[~np.isnan(a_error)]
-        mean_a_error = np.mean(a_error)
-        print("ave: ", mean_v_error, "aae: ", mean_a_error)
-
-        # 安全2D-TTC
-
-        # min_ttc = np.inf
-        # min_ttc_ori = np.inf
-        # for name in ["CP", "TP", "TR", "CR"]:
-        #     if name not in traj_name:
-        #         continue
-        #     traj = traj_s[traj_name.index(name)]
-        #     ttc_seq = traj_data_TTC(ev_traj, traj, is_ori=False)
-        #     ttc_seq_ori = traj_data_TTC(ev_traj, traj, is_ori=True)
-        #     min_ttc = min(np.nanmin(ttc_seq), min_ttc)
-        #     min_ttc_ori = min(np.nanmin(ttc_seq_ori), min_ttc_ori)
-        # print("min_ttc: ", min_ttc, "min_ttc_ori: ", min_ttc_ori)
-
-        min_ttc_ev = np.nanmin(ev_traj[C_Info.ttc])
-        min_ttc_ori_ev = np.nanmin(ev_traj[C_Info.ttc + "_ori"])
-        min_ttc_tr = np.nanmin(traj_s[traj_name.index("TR")][C_Info.ttc])
-        min_ttc_ori_tr = np.nanmin(traj_s[traj_name.index("TR")][C_Info.ttc + "_ori"])
-        min_ttc = np.nanmin([min_ttc_ev])
-        min_ttc_ori = np.nanmin([min_ttc_ori_ev])
-        print("安全提升：", min_ttc - min_ttc_ori, min_ttc, min_ttc_ori)
-
-        # 效率
-        eff = np.nanmean(v) - v[0]
-        eff_ori = np.nanmean(v_ori) - v_ori[0]
-        print("效率提升：", eff - eff_ori, eff, eff_ori)
-
-        # 舒适性
-        yaw = ev_traj[C_Info.yaw].to_numpy()
-        yaw_ori = ev_traj[C_Info.yaw + "_ori"].to_numpy()
-        ax_max = np.nanmax(np.abs(a * np.sin(yaw)))
-        ay_max = np.nanmax(np.abs(a * np.cos(yaw)))
-        ax_ori_max = np.nanmax(np.abs(a_ori * np.sin(yaw_ori)))
-        ay_ori_max = np.nanmax(np.abs(a_ori * np.cos(yaw_ori)))
-        acc_max = ax_max + ay_max
-        acc_max_ori = ax_ori_max + ay_ori_max
-        print("舒适提升：", acc_max_ori - acc_max, acc_max, acc_max_ori)
-
-        # ev: Base_Agent = self.surr_ids[self.ev_id][0]
-        # ev.cal_cost_by_traj()
-
-        # d_yaw_max = np.nanmax(np.diff(yaw) / 0.1)
-        # d_yaw_max_ori = np.nanmax(np.diff(yaw_ori) / 0.1)
-        # print("d_yaw_max: ", d_yaw_max, "d_yaw_max_ori: ", d_yaw_max_ori)
-
-        return ade
+        return ade_all
 
     def opti_ade(self, cf_params=None):
         def fitness_func(params):
@@ -515,14 +434,16 @@ class Scenario:
                         "k_c": 10 ** params[1],
                         "k_e": 10 ** params[2],
                         "k_r": 10 ** params[3],
+                        'scale': params[4],
+                        'preview_time': params[5],
                     },
                     cf_params=cf_params,
                     has_ui=False, save_res=False
                 )
             except Exception as e:
                 print(f"Error: {e}")
-                return 1e10
-            ade = self.indicator_evaluation(df, opti=True)
+                return 1000
+            ade = self.indicator_evaluation(df)
             return ade
 
         def run_bayesian_opti():
@@ -532,6 +453,8 @@ class Scenario:
                 Real(-1, 1, name='k_c'),
                 Real(-1, 1, name='k_e'),
                 Real(-1, 1, name='k_r'),
+                Real(0, 1, name='scale'),
+                Real(1, 10, name='preview_time'),
             ]
             # x0 = list(itertools.product([0, 0.5, 1], [5, 10, 15, 20, 25]))
             # 运行贝叶斯优化
@@ -563,56 +486,53 @@ class Scenario:
     def calibrate_cf(self, TR_AV=False, TP_AV=False):
         cf_param_dict_s = {}
         for vid, (car, traj, name) in self.surr_ids.items():
-            if vid == self.ev_id:
+            if isinstance(car, Game_A_Vehicle):
                 cf_name = self.av_cf_name
+            elif isinstance(car, Game_H_Vehicle):
+                cf_name = self.hv_cf_name
             else:
-                if name == "TR" and TR_AV:
-                    cf_name = self.av_cf_name
-                elif name == "TP" and TP_AV:
-                    cf_name = self.av_cf_name
-                else:
-                    cf_name = self.hv_cf_name
+                continue
             cf_func = get_cf_model(cf_name)
 
-            try:
-                track = traj
-                evL = track["length"].values[0]
-                track = track[track["myLeadId"] != -1]
-                leaderL = track["myLeadLength"].values[0]
+            # try:
+            track = traj
+            evL = track["length"].values[0]
+            track = track[track["myLeadId"] != -1]
+            leaderL = track["myLeadLength"].values[0]
 
-                obs_x = track["myLocalLon"].values + evL / 2 * np.cos(track["heading"].values)
-                obs_v = track["myLonVelocity"].values
-                obs_a = track["myLonAcceleration"].values
-                obs_lx = track["myLeadLocalLon"].values + leaderL / 2
-                obs_lv = track["myLeadLonVelocity"].values
-                obs_la = track["myLeadLonAcceleration"].values
+            obs_x = track["myLocalLon"].values + evL / 2 * np.cos(track["heading"].values)
+            obs_v = track["myLonVelocity"].values
+            obs_a = track["myLonAcceleration"].values
+            obs_lx = track["myLeadLocalLon"].values + leaderL / 2
+            obs_lv = track["myLeadLonVelocity"].values
+            obs_la = track["myLeadLonAcceleration"].values
 
-                results = ga_cal(
-                    cf_func=cf_func,
-                    obs_x=np.array(obs_x),
-                    obs_v=np.array(obs_v),
-                    obs_a=np.array(obs_a),
-                    obs_lx=np.array(obs_lx),
-                    obs_lv=np.array(obs_lv),
-                    obs_la=np.array(obs_la),
-                    leaderL=leaderL,
-                    dt=0.1,
-                    ranges=cf_param_ranges[cf_name],
-                    types=cf_param_types[cf_name],
-                    ins=cf_param_ins[cf_name],
-                    seed=2025, drawing=0, verbose=False
-                )
-                print(results["Vars"])
-                # show_traj(
-                #     cf_name, results["Vars"], 0.1,
-                #     obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la, leaderL,
-                #     traj_step=None, pair_ID=self.ev_id
-                # )
+            results = ga_cal(
+                cf_func=cf_func,
+                obs_x=np.array(obs_x),
+                obs_v=np.array(obs_v),
+                obs_a=np.array(obs_a),
+                obs_lx=np.array(obs_lx),
+                obs_lv=np.array(obs_lv),
+                obs_la=np.array(obs_la),
+                leaderL=leaderL,
+                dt=0.1,
+                ranges=cf_param_ranges[cf_name],
+                types=cf_param_types[cf_name],
+                ins=cf_param_ins[cf_name],
+                seed=2025, drawing=0, verbose=False
+            )
+            print(results["Vars"])
+            # show_traj(
+            #     cf_name, results["Vars"], 0.1,
+            #     obs_x, obs_v, obs_a, obs_lx, obs_lv, obs_la, leaderL,
+            #     traj_step=None, pair_ID=self.ev_id
+            # )
 
-                cf_param_dict_s.update({vid: results["Vars"]})
-            except Exception as e:
-                print(f"Error: {e}")
-                cf_param_dict_s.update({vid: {}})
-                continue
+            cf_param_dict_s.update({vid: results["Vars"]})
+            # except Exception as e:
+            #     print(f"Error: {e}")
+            #     cf_param_dict_s.update({vid: {}})
+            #     continue
 
         return cf_param_dict_s

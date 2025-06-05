@@ -60,11 +60,7 @@ class CFModel_TPACC(CFModel):
         return self._a
 
     def get_expect_speed(self):
-        vf_change = 0
-        cf_factor = self.veh_surr.ev.cf_factor
-        if cf_factor < 1:
-            vf_change = (1 - cf_factor) * 10
-        return self._v0 + vf_change
+        return self._v0
 
     def get_max_dec(self):
         return 8

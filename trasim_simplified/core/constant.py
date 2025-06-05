@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Optional, Callable
 import numpy as np
 import pandas as pd
 
-from trasim_simplified.core.agent.utils import get_xy_quintic
 
 if TYPE_CHECKING:
     from trasim_simplified.core.agent import Vehicle
@@ -230,6 +229,8 @@ class V_CLASS(Enum):
     """博弈人类车辆"""
     GAME_AV = "AV"
     """博弈自动驾驶车辆"""
+    GAME_OV = "OV"
+    """障碍物车辆"""
 
 
 # ******************************
@@ -467,17 +468,15 @@ class GameVehSurr:
 class LcGap:
     TP: "Vehicle"
     TR: "Vehicle"
-    CP: "Vehicle"
 
     def __eq__(self, other):
         if not isinstance(other, LcGap):
             return False
         return (self.TP.ID == other.TP.ID and
-                self.TR.ID == other.TR.ID and
-                self.CP.ID == other.CP.ID)
+                self.TR.ID == other.TR.ID)
 
     def __repr__(self):
-        return f"TP: {self.TP.ID}, TR: {self.TR.ID}, CP: {self.CP.ID}"
+        return f"TP: {self.TP.name}, TR: {self.TR.name}"
 
 
 @dataclass
@@ -486,7 +485,7 @@ class StraInfo:
     stra_time: Optional[float]
     cf_stra: float
     lc_direction: int
-    lc_gap: Optional[LcGap] = None
+    veh_cp: Optional['Vehicle'] = None
     solve_res: Optional['SolveRes'] = None
 
     def __eq__(self, other):
@@ -496,7 +495,7 @@ class StraInfo:
                 self.stra_time == other.stra_time and
                 self.cf_stra == other.cf_stra and
                 self.lc_direction == other.lc_direction and
-                self.lc_gap == other.lc_gap)
+                self.veh_cp == other.veh_cp)
 
     def __lt__(self, other):
         if not isinstance(other, StraInfo):
@@ -517,17 +516,16 @@ class StraInfo:
             return self.lane
 
     def copy(self):
-        return StraInfo(self.veh, self.stra_time, self.cf_stra, self.lc_direction, self.lc_gap)
+        return StraInfo(self.veh, self.stra_time, self.cf_stra, self.lc_direction, self.veh_cp)
 
     def __hash__(self):
-        if self.lc_gap is None:
+        if self.veh_cp is None:
             return hash((self.veh.ID, float(self.stra_time), float(self.cf_stra), self.lc_direction))
-        return hash((self.veh.ID, float(self.stra_time), float(self.cf_stra), self.lc_direction,
-                     self.lc_gap.TP.ID, self.lc_gap.TR.ID, self.lc_gap.CP.ID))
+        return hash((self.veh.ID, float(self.stra_time), float(self.cf_stra), self.lc_direction, self.veh_cp.ID))
 
     def __repr__(self):
-        return f"veh: {self.veh.ID}, stra_time: {self.stra_time:.3f}, cf_stra: {self.cf_stra:.3f}, " \
-               f"lc_direction: {self.lc_direction}, lc_gap: {self.lc_gap}, total_cost: {self.solve_res.cost:.3f}, "\
+        return f"veh: {self.veh.name}, stra_time: {self.stra_time:.3f}, cf_stra: {self.cf_stra:.3f}, " \
+               f"lc_direction: {self.lc_direction}, veh_cp: {self.veh_cp}, total_cost: {self.solve_res.cost:.3f}, "\
                f"safe: {self.solve_res.safe:.3f}, com: {self.solve_res.com:.3f}, " \
                f"eff: {self.solve_res.eff:.3f}, route: {self.solve_res.route:.3f}"
 
@@ -563,11 +561,11 @@ class GameRes:
 
     def __repr__(self):
         return f"step: {self.step}, " \
-               f"EV: {self.game_surr.EV.ID}-{self.game_surr.EV.NAME}, "\
-               f"TP: {self.game_surr.TP.ID}-{self.game_surr.TP.NAME}, "\
-               f"TR: {self.game_surr.TR.ID}-{self.game_surr.TR.NAME}, "\
-               f"CP: {self.game_surr.CR.ID}-{self.game_surr.CR.NAME}, "\
-               f"CR: {self.game_surr.CP.ID}-{self.game_surr.CP.NAME}\n"\
+               f"EV: {self.game_surr.EV.name}, "\
+               f"TP: {self.game_surr.TP.name}, "\
+               f"TR: {self.game_surr.TR.name}, "\
+               f"CP: {self.game_surr.CP.name}, "\
+               f"CR: {self.game_surr.CR.name}\n"\
                f"EV: {self.EV_stra}\nTP: {self.TF_stra}\nTR: {self.TR_stra}\nCR: {self.CR_stra}\nCP: {self.CP_stra}"
 
 
@@ -586,6 +584,7 @@ class SolveRes:
 
     @property
     def traj(self):
+        from trasim_simplified.core.agent.utils import get_xy_quintic
         if self._traj is None:
             self._traj = np.vstack([np.array(get_xy_quintic(self.quintic, t)) for t in self.times])
         return self._traj
@@ -629,11 +628,11 @@ class GapJudge:
     """换道概率"""
 
     def __repr__(self):
-        return f"step: {self.step}, EV: {self.EV.ID}, lc_d: {self.lc_direction}, tar_a: {self.target_acc}, " \
+        return f"step: {self.step}, EV: {self.EV.name}, lc_d: {self.lc_direction}, tar_a: {self.target_acc}, " \
                f"a_time: {self.adapt_time}, gap: {self.gap}, "\
                f"a_gain: {self.acc_gain:.3f}, ttc_risk: {self.ttc_risk:.3f}, route_gain: {self.route_gain:.3f} " \
                f"lc_prob: {self.lc_prob:.3f}, "\
-               f"TF: {self.TF.ID}, TR: {self.TR.ID}, PC: {self.PC.ID}, "
+               f"TF: {self.TF.name}, TR: {self.TR.name}, PC: {self.PC.name}, "
 
 
 @dataclass
@@ -680,6 +679,33 @@ class ScenarioMode:
     """第三类（有交互，TR_HV_TP_AV）"""
     INTERACTION_TR_AV_TP_AV = "有交互(TR-AV TP-AV)"
     """第三类（有交互，TR_AV_TP_AV）"""
+
+
+@dataclass
+class SurrClass:
+    ev_type: V_CLASS
+    tp_type: V_CLASS = V_CLASS.GAME_OV
+    tr_type: V_CLASS = V_CLASS.GAME_OV
+    cp_type: V_CLASS = V_CLASS.GAME_OV
+    cr_type: V_CLASS = V_CLASS.GAME_OV
+
+    def name(self):
+        return (f"EV-{self.ev_type.value}_TP-{self.tp_type.value}_TR-{self.tr_type.value}_"
+                f"CP-{self.cp_type.value}_CR-{self.cr_type.value}")
+
+    def get_class(self, name):
+        if name == 'EV':
+            return self.ev_type
+        elif name == 'TP':
+            return self.tp_type
+        elif name == 'TR':
+            return self.tr_type
+        elif name == 'CP':
+            return self.cp_type
+        elif name == 'CR':
+            return self.cr_type
+        else:
+            return V_CLASS.GAME_OV
 
 
 if __name__ == '__main__':

@@ -27,7 +27,7 @@ class ScenarioTRInteraction(Scenario):
 
     def run(self, mode: ScenarioMode = None, cf_params: dict = None, car_params: dict = None,
             has_ui=True, save_res=True, ev_rho=None, tr_rho=None):
-        self.load_vehicle(self.ev_type)
+        self._load_vehicle(self.ev_type)
 
         if mode is not None:
             self.mode = mode

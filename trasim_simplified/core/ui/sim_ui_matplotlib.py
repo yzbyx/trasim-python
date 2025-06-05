@@ -49,10 +49,26 @@ class UI2DMatplotlib:
             # 设置x轴和y轴的范围
             x_min = veh.x - 100
             x_max = veh.x + 100
-            y_min = veh.y - 10
-            y_max = veh.y + 10
+            y_min = veh.y - 5
+            y_max = veh.y + 5
 
             self.ax.set_xlim(x_min, x_max)
+            self.ax.set_ylim(y_min, y_max)
+
+    def resize_by_car(self):
+        """
+        根据车辆数量调整UI大小
+        """
+        if self.ax is not None:
+            # 计算新的x轴范围
+            x_min = min(car.x for lane in self.lane_list for car in lane.car_list) - 10
+            x_max = max(car.x for lane in self.lane_list for car in lane.car_list) + 10
+
+            # 设置x轴范围
+            self.ax.set_xlim(x_min, x_max)
+            # 设置y轴范围
+            y_min = min(car.y for lane in self.lane_list for car in lane.car_list) - 5
+            y_max = max(car.y for lane in self.lane_list for car in lane.car_list) + 5
             self.ax.set_ylim(y_min, y_max)
 
     def plot_pred_traj(self):
@@ -133,10 +149,12 @@ class UI2DMatplotlib:
                 )
                 self.text_list.append(text)
                 # 如果换道，且为AV，则绘制换道轨迹
-                if car.opti_game_res is not None:
-                    lc_traj = car.opti_game_res.EV_stra.solve_res.traj
+                if hasattr(car, "mpc_solver") and car.mpc_solver is not None:
+                    lc_traj = car.mpc_solver.ref_path.ref_path
                     self.ax.plot(lc_traj[:, 0], lc_traj[:, 3],
                                  color='blue', linestyle='--', linewidth=1)
+
+        self.resize_by_car()
 
         plt.pause(0.01)  # 短暂暂停以更新显示
         if self.frame_rate > 0:

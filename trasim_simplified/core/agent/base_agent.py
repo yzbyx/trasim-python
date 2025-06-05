@@ -41,7 +41,7 @@ class Base_Agent(Vehicle):
                 min_ttc_2d_left = -np.inf
             else:
                 stra_info.lc_direction = lc_direction
-                stra_info.lc_gap = LcGap(self.lf, self.lr, self.leader)
+                stra_info.veh_cp = self.lf
                 traj_ev_left, _ = self.pred_self_traj(stra_info, to_ndarray=False)
 
                 ev_lp_ttc_2d = calculate_collision_risk(traj_ev_left, traj_lp) if traj_lp is not None else np.inf
@@ -64,7 +64,7 @@ class Base_Agent(Vehicle):
                 min_ttc_2d_right = -np.inf
             else:
                 stra_info.lc_direction = lc_direction
-                stra_info.lc_gap = LcGap(self.rf, self.rr, self.leader)
+                stra_info.veh_cp = self.rf
                 traj_ev_right, _ = self.pred_self_traj(stra_info, to_ndarray=False)
 
                 ev_rp_ttc_2d = calculate_collision_risk(traj_ev_right, traj_rp) if traj_rp is not None else np.inf
@@ -113,10 +113,9 @@ class Base_Agent(Vehicle):
 
         if self.lane_changing and self.risk_2d >= self.ttc_star:
             return
-        # if self.opti_gap is not None and self.is_keep_lane_center():
-        #     self.reset_lc_state()
         if self.lane_changing and self.risk_2d < self.ttc_star:
             self.reset_lc_state()
+            print(f"{self.name} reset lane changing state due to risk {self.risk_2d} < {self.ttc_star}")
 
         judge_res = []
         for adapt_time in np.arange(0, 3.1, 1):
@@ -199,10 +198,10 @@ class Base_Agent(Vehicle):
         TR_end = TR_traj[-1]
         TF_end = TF_traj[-1]
         # 判断速度调整时间内能否以舒适的加减速度达到可行换道位置，用于MOBIL模型判断
-        # x_safe_min = TR_end.x + self.length + self.time_safe * TR_end.vx
-        # x_safe_max = TF_end.x - TF.length - self.time_safe * TF_end.vx
-        x_safe_min = TR_end.x + self.length + self.safe_s0
-        x_safe_max = TF_end.x - TF.length - self.safe_s0
+        x_safe_min = TR_end.x + self.length + (self.time_safe * TR_end.vx + self.safe_s0) * self.scale
+        x_safe_max = TF_end.x - TF.length - (self.time_safe * TF_end.vx + self.safe_s0) * self.scale
+        # x_safe_min = TR_end.x + self.length + self.safe_s0
+        # x_safe_max = TF_end.x - TF.length - self.safe_s0
 
         if x_safe_max < x_safe_min:
             return False, target_acc
@@ -214,7 +213,7 @@ class Base_Agent(Vehicle):
         # 若(acc_1, acc_2)与[self.acc_max, - self.dec_max]的交集不为空，
         # 则选择加速度绝对值最小的加速度作为调整加速度
         acc_ = np.array([acc_2, acc_1])
-        acc = interval_intersection(acc_, (- self.dec_max, self.acc_max))
+        acc = interval_intersection(acc_, (- self.dec_desire, self.acc_desire))
         if acc is None or acc[0] == acc[1]:
             return False, target_acc
 
@@ -338,28 +337,28 @@ class Base_Agent(Vehicle):
         if lc_direction == 1 and self.right_lane is None:
             raise ValueError("right lane is None, please check the code.")
         if lc_direction == 0:
-            TF = TR = None
+            TP = TR = None
         else:
             if gap == -1:  # 后向搜索
                 if lc_direction == 1:
-                    TF = self.rr
+                    TP = self.rr
                     TR = self.rr.r if self.rr is not None else None
                 else:
-                    TF = self.lr
+                    TP = self.lr
                     TR = self.lr.r if self.lr is not None else None
             elif gap == 1:  # 前向搜索
                 if lc_direction == 1:
                     TR = self.rf
-                    TF = self.rf.f if self.rf is not None else None
+                    TP = self.rf.f if self.rf is not None else None
                 else:
                     TR = self.lf
-                    TF = self.lf.f if self.lf is not None else None
+                    TP = self.lf.f if self.lf is not None else None
             elif gap == 0:  # 相邻搜索
                 if lc_direction == 1:
-                    TF = self.rf
+                    TP = self.rf
                     TR = self.rr
                 else:
-                    TF = self.lf
+                    TP = self.lf
                     TR = self.lr
             else:
                 raise ValueError("gap should be -1, 0 or 1, please check the code.")
@@ -371,44 +370,52 @@ class Base_Agent(Vehicle):
         else:
             lane = self.lane
 
-        PC = self.f
+        CP = self.f
         CR = self.r
         if TR is None:
             position = self.position + np.array([-1e10, - lc_direction * self.lane.width])
             TR = self._make_dummy_agent(lane, self.type, -self.ID - 1, self.length, position[0], position[1])
-        if TF is None:
+            TR.state = TR.get_state_for_traj()
+        if TP is None:
             position = self.position + np.array([1e10, - lc_direction * self.lane.width])
-            TF = self._make_dummy_agent(lane, self.type, -self.ID - 2, self.length, position[0], position[1])
-        if PC is None:
+            TP = self._make_dummy_agent(lane, self.type, -self.ID - 2, self.length, position[0], position[1])
+            TP.state = TP.get_state_for_traj()
+        if CP is None:
             position = self.position + np.array([1e10, 0])
-            PC = self._make_dummy_agent(lane, self.type, -self.ID - 3, self.length, position[0], position[1])
+            CP = self._make_dummy_agent(lane, self.type, -self.ID - 3, self.length, position[0], position[1])
+            CP.state = CP.get_state_for_traj()
         if CR is None:
             position = self.position + np.array([-1e10, 0])
             CR = self._make_dummy_agent(lane, self.type, -self.ID - 4, self.length, position[0], position[1])
+            CR.state = CR.get_state_for_traj()
 
         if return_RR:
             if TR.r is None:
                 TRR = self._make_dummy_agent(TR.lane, TR.type, -TR.ID - 5, TR.length, TR.x * 2, TR.y)
+                TRR.state = TRR.get_state_for_traj()
             else:
                 TRR = TR.r
             if CR.r is None:
                 CRR = self._make_dummy_agent(CR.lane, CR.type, -CR.ID - 6, CR.length, CR.x * 2, CR.y)
+                CRR.state = CRR.get_state_for_traj()
             else:
                 CRR = CR.r
-            if TF.f is None:
-                TFF = self._make_dummy_agent(TF.lane, TF.type, -TF.ID - 7, TF.length, TF.x * 2, TF.y)
+            if TP.f is None:
+                TPP = self._make_dummy_agent(TP.lane, TP.type, -TP.ID - 7, TP.length, TP.x * 2, TP.y)
+                TPP.state = TPP.get_state_for_traj()
             else:
-                TFF = TF.f
-            if PC.f is None:
-                CPP = self._make_dummy_agent(PC.lane, PC.type, -PC.ID - 8, PC.length, PC.x * 2, PC.y)
+                TPP = TP.f
+            if CP.f is None:
+                CPP = self._make_dummy_agent(CP.lane, CP.type, -CP.ID - 8, CP.length, CP.x * 2, CP.y)
+                CPP.state = CPP.get_state_for_traj()
             else:
-                CPP = PC.f
+                CPP = CP.f
 
-            return TR, TF, PC, CR, TRR, CRR, TFF, CPP
+            return TR, TP, CP, CR, TRR, CRR, TPP, CPP
         # TR.f = TF
         # CR.f = self
 
-        return TR, TF, PC, CR
+        return TR, TP, CP, CR
 
     def _make_dummy_agent(self, lane, type_, id_, length, x, y):
         """创建一个虚拟车辆"""

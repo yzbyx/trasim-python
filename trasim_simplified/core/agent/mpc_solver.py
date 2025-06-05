@@ -56,6 +56,7 @@ class MPC_Solver:
 
         self.total_j = 0
         self.return_j = False
+        self.is_end = False
 
     def init_mpc(self, dynamic_n_mpc=False, print_config=False, return_j=False):
         self.return_j = return_j
@@ -73,6 +74,8 @@ class MPC_Solver:
         # self.ugv.update_state(u[0, 1], u[1, 1])
 
         self.step += 1
+
+        self.is_end = is_end
 
         return u[0, 1], u[1, 1], is_end
 

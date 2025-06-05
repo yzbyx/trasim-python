@@ -31,7 +31,7 @@ class ScenarioInteractionCo(Scenario):
         self.tr_type = tr_type
         self.tp_type = tp_type
 
-    def load_vehicle(self, ev_type: str = V_CLASS.GAME_AV):
+    def _load_vehicle(self, ev_type: str = V_CLASS.GAME_AV):
         self.road.reset()
         self._set_record_info()
 
@@ -85,7 +85,7 @@ class ScenarioInteractionCo(Scenario):
 
     def run(self, mode: ScenarioMode = None, cf_params: dict = None, car_params: dict = None,
             has_ui=True, save_res=True, ev_co=None, tr_co=None, tp_co=None):
-        self.load_vehicle(self.ev_type)
+        self._load_vehicle(self.ev_type)
 
         if mode is not None:
             self.mode = mode

@@ -204,6 +204,16 @@ class Road:
                 if car.type != V_TYPE.OBSTACLE:
                     car.cal_traj_pred()
 
+    def get_total_car(self):
+        """
+        获取所有车辆
+        :return:
+        """
+        all_cars = []
+        for lane in self.lane_list:
+            all_cars.extend(lane.car_list)
+        return all_cars
+
     def get_lane_index(self, y):
         """
         获取车道编号

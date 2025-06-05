@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from trasim_simplified.core.agent.traj_predictor import TrajPred, get_pred_net
+from trasim_simplified.core.agent.utils import not_zero, wrap_to_pi
 from trasim_simplified.core.constant import V_TYPE, TrackInfo as C_Info, VehSurr, TrajPoint, RouteType, GameRes, \
     GapJudge, StraInfo
 from trasim_simplified.core.kinematics.cfm import get_cf_model, CFModel, get_cf_id
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
 
 
 class Vehicle(Obstacle):
+    NAME = "Veh"
+
     def __init__(self, lane: Optional['LaneAbstract'], type_: V_TYPE, id_: int, length: float):
         super().__init__(type_)
         self.ID = id_
@@ -111,20 +114,29 @@ class Vehicle(Obstacle):
         # 博弈相关
         self.is_gaming = False  # 是否处于博弈状态
         self.is_game_leader = False  # 是否为博弈领导者
+        self.is_game_initiator = False  # 是否为博弈发起者
         self.cf_factor = 1  # 博弈策略（期望时距）
         self.opti_game_res: Optional[GameRes] = None
         self.game_res_list: Optional[list[GameRes]] = None
         self.rho = 0.5
         self.game_co = 1  # 自动驾驶的公平协作程度 [0, 1]
         self.state = None
+        self.can_raise_game = False  # 主动发起博弈
+        self.scale = 1
 
-        self.platoon_incentive = 0  # 队列换道激励系数
-        self.weaving_incentive = 0.5  # 交织换道激励系数
+        self.platoon_incentive = 1  # 队列换道激励系数
+        self.weaving_incentive = 1  # 交织换道激励系数
         self.incentive_range = 50  # 前向激励范围
 
         # 横向控制参数
-        self.PREVIEW_TIME = 3
-        self.MIN_PREVIEW_S = 10
+        self.preview_time = 1.
+        self.MIN_PREVIEW_S = 10.
+        # TAU_PURSUIT = 0.5 * self.preview_time  # [s]
+        # KP_A = 1 / TAU_ACC
+        # KP_HEADING = 1 / TAU_HEADING
+        # KP_LATERAL = 1 / TAU_LATERAL  # [1/s]
+        self.K_P = 1.5  # 横向控制比例系数
+        self.K_D = 0.2  # 横向控制微分系数
 
         # 轨迹预测相关
         self.pred_net: Optional[TrajPred] = get_pred_net()
@@ -134,13 +146,20 @@ class Vehicle(Obstacle):
 
         self.k_s = 1
         self.k_c = 1
-        self.k_r = 100
+        self.k_r = 10
         self.k_e = 1
+        self.k_f = 1
+
+        self.last_delta_error = 0
 
         self.traj_ache: Optional[
             dict[StraInfo, tuple[np.ndarray, np.ndarray]]
         ] = None
         """博弈轨迹缓存，包含自车对应策略的轨迹以及前车预估轨迹 (策略，时间): (自车轨迹，前车轨迹)"""
+
+    @property
+    def name(self):
+        return f"{self.ID}-{self.NAME}"
 
     @property
     def time_wanted(self):
@@ -287,6 +306,7 @@ class Vehicle(Obstacle):
         :param stra_info: 策略信息
         :param to_ndarray: 是否转为ndarray
         :param ache: 是否缓存
+        :param PC: 目标前车
         """
         stra_info = stra_info.copy()
         if ache and self.traj_ache is not None and stra_info in self.traj_ache:
@@ -295,7 +315,7 @@ class Vehicle(Obstacle):
             time_len = stra_info.stra_time
             target_lane = stra_info.target_lane
             lc_direction = stra_info.lc_direction
-            lc_gap = stra_info.lc_gap
+            veh_cp = stra_info.veh_cp
             lane_changing = True if lc_direction != 0 else False
 
             step_num = round(time_len / self.dt) + 1
@@ -306,14 +326,15 @@ class Vehicle(Obstacle):
             veh.lane_changing = lane_changing
             veh.cf_factor = stra_info.cf_stra
 
-            if (not lane_changing and self.f is None) or (lane_changing and lc_gap.TP is None):
+            cp = self.f if veh_cp is None else veh_cp
+
+            if cp is None:
                 traj = [self.get_traj_point()]
                 leader.x = veh.x + 1e6
                 leader.speed = veh.speed
                 leader.acc = 0
                 PC_traj = [leader.get_traj_point()] * step_num
             else:
-                cp = self.f if not lane_changing else lc_gap.TP
                 PC_traj = cp.pred_net.pred_traj(cp.pack_veh_surr(), time_len=time_len)
                 traj = [self.get_traj_point()]
 
@@ -345,8 +366,11 @@ class Vehicle(Obstacle):
     def cf_lateral_control(self):
         """自动驾驶跟驰过程/人类驾驶全过程的预瞄横向控制"""
         l_lat = self.target_lane.y_center - self.y
+        l_lat_abs = abs(l_lat)
+        l_lat = min(1, l_lat_abs) * np.sign(l_lat)  # 限制横向偏移量，避免过大
 
-        preview_s = max(self.MIN_PREVIEW_S, self.v * self.PREVIEW_TIME * (1 + abs(l_lat) / self.lane.width))
+        preview_s = max(self.MIN_PREVIEW_S, self.v * self.preview_time * (1 + abs(l_lat) / self.lane.width))
+        # preview_s = max(self.MIN_PREVIEW_S, self.v * self.preview_time)
 
         dist = np.sqrt(preview_s ** 2 + l_lat ** 2)  # 车头到预瞄点的距离
         theta = np.arctan2(l_lat, preview_s)
@@ -355,13 +379,47 @@ class Vehicle(Obstacle):
         R_r = np.sqrt(R_h ** 2 - self.l_rear_axle_2_head ** 2)
 
         delta = np.arctan2(self.wheelbase * np.sign(theta), R_r)
+        #
+        # # PD 控制器
+        # delta_error = delta - self.delta
+        # d_delta = self.K_P * delta_error + self.K_D * (delta_error - self.last_delta_error) / self.dt
+        # self.last_delta_error = delta_error
+        # delta_c = d_delta * self.dt
+        #
+        # delta = self.delta + delta_c
 
         # 使用加速度/转向率限制平滑转向角度的变化
-        d_delta_smooth = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
-        delta_smooth = self.delta + d_delta_smooth
+        d_delta_clip = np.clip(delta - self.delta, -self.D_DELTA_MAX * self.dt, self.D_DELTA_MAX * self.dt)
+        delta = self.delta + d_delta_clip
 
-        dynamic_delta_max = self.DELTA_MAX * max(0.5, 1 - abs(l_lat) / self.lane.width)
-        delta = np.clip(delta_smooth, -dynamic_delta_max, dynamic_delta_max)
+        # dynamic_delta_max = self.DELTA_MAX * max(0.5, 1 - abs(l_lat) / self.lane.width)
+        # delta = np.clip(delta_smooth, -dynamic_delta_max, dynamic_delta_max)
+
+        # lane_next_coords = self.x + self.speed * self.preview_time  # 预瞄点
+        # lane_future_heading = 0
+        #
+        # # Lateral position control
+        # lateral_speed_command = -self.KP_LATERAL * lane_coords[1]
+        # # Lateral speed to heading
+        # heading_command = np.arcsin(
+        #     np.clip(lateral_speed_command / not_zero(self.speed), -1, 1)
+        # )
+        # heading_ref = lane_future_heading + np.clip(
+        #     heading_command, -np.pi / 4, np.pi / 4
+        # )
+        # # Heading control
+        # heading_rate_command = self.KP_HEADING * wrap_to_pi(
+        #     heading_ref - self.heading
+        # )
+        # # Heading rate to steering angle
+        # slip_angle = np.arcsin(
+        #     np.clip(
+        #         self.length / 2 / not_zero(self.speed) * heading_rate_command,
+        #         -1,
+        #         1,
+        #         )
+        # )
+        # steering_angle = np.arctan(2 * np.tan(slip_angle))
 
         return delta
 

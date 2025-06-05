@@ -5,7 +5,7 @@
 # Software: PyCharm
 import abc
 import itertools
-from typing import TYPE_CHECKING, Optional, Iterable
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -30,11 +30,12 @@ class Game_Vehicle(Base_Agent, abc.ABC):
 
     def __init__(self, lane: 'LaneAbstract', type_: V_TYPE, id_: int, length: float):
         super().__init__(lane, type_, id_, length)
-        self.SCALE = 0.4
-        self.DELTA_V = 10
         # self.cf_stra_s = [0.6, 0.8, 1, 1.2, 1.4]
         self.cf_stra_s = [0.6, 1, 1.4]
         self.stra_times = np.arange(1, 10.1, 3)
+        self.DELTA_V = 10
+        self.LC_TIME_BASE = 10  # 换道时间基准
+        self.LC_VEL_INCREASE_TOL = 5  # 换道速度增加容忍度
 
     def get_rho_hat(self, vehicle):
         if vehicle.ID not in self.rho_hat_s:
@@ -59,10 +60,11 @@ class Game_Vehicle(Base_Agent, abc.ABC):
         self.lc_direction = 0
         self.lane_changing = False
 
-    def clear_stra(self, clear_lc_state=True):
+    def clear_stra(self, clear_lc_state=True, reason=""):
         """清除策略"""
         self.is_gaming = False
         self.is_game_leader = False
+        self.is_game_initiator = False
         self.cf_factor = 1
         self.clear_lc_state() if clear_lc_state else None
 
@@ -210,66 +212,36 @@ class Game_A_Vehicle(Game_Vehicle):
         if game_surr.EV.ID == self.ID:
             cf_stra = list(itertools.product(self.stra_times, [1], [0]))
             lc_stra = [(stra_time, 1, game_surr.lc_direction) for stra_time in self.stra_times]
-            if self.lane_changing and self.lc_cross:
+            if game_surr.lc_direction == 0:  # 保持车道
                 strategy = cf_stra
             else:
                 strategy = lc_stra + cf_stra
-            # strategy = lc_stra
         elif (self.route_lc_direction != 0 and game_surr.TR.ID == self.ID and
               game_surr.lc_direction == - self.route_lc_direction):  # 被动lc
             # 交织换道
-            print("get_strategies, weaving")
+            print(f"{self.name} get_strategies, weaving")
             lc_stra = [(None, 1, - game_surr.lc_direction)]
             cf_stra = list(itertools.product([None], self.cf_stra_s, [0]))
             strategy = lc_stra + cf_stra
+            game_surr.TR.no_lc = False  # 被动换道的情况下，TR允许换道
         elif (self.route_lc_direction != 0 and game_surr.CR.ID == self.ID and
               game_surr.lc_direction == self.route_lc_direction):  # 被动lc
             # 队列换道
-            print("get_strategies, platoon")
+            print(f"{self.name} get_strategies, platoon")
             lc_stra = [(None, 1, game_surr.lc_direction)]
             cf_stra = list(itertools.product([None], self.cf_stra_s, [0]))
             strategy = lc_stra + cf_stra
+            game_surr.CR.no_lc = False  # 被动换道的情况下，CR允许换道
         else:
             strategy = list(itertools.product([None], self.cf_stra_s, [0]))
 
         strategy = [StraInfo(self, stra_time, stra, lc_direction) for stra_time, stra, lc_direction in strategy]
         return strategy
 
-    def lc_intention_judge(self):
-        if self.lane == self.target_lane and self.lane_changing:
-            self.clear_stra()
-
-        if self.opti_game_res is not None and self.is_keep_lane_center():
-            self.clear_stra()
-
-        if not self.lane_changing:
-            super().lc_intention_judge()
-
-    def lc_decision_making(self, **kwargs):
-        """判断是否换道"""
-        super().lc_decision_making(set_lane_changing=False)
-        if self.no_lc:
-            return
-        if self.is_gaming and self.is_game_leader and self.last_cal_step == 1 and self.lane is not None:
-            self.update_rho_hat()
-        if self.lane_changing or self.lc_direction != 0:
-            # LC轨迹优化，如果博弈选择不换道，需要重新更新self.lane_changing，is_gaming以及target_lane
-            if self.lane_changing:
-                self.lc_conti_time += self.lane.dt
-            if (
-                    (self.lane_changing and self.last_cal_step >= self.re_cal_step)
-                    or self.risk_2d < self.ttc_star
-                    or (not self.lane_changing and self.lc_direction != 0)
-            ):
-                if not self.is_gaming or self.is_game_leader:
-                    self.stackel_berg()
-
-            self.last_cal_step += 1
-
     def cal_vehicle_control(self):
         """横向控制"""
         # if self.lane_changing is False or self.lane == self.target_lane:
-        if self.lane_changing is False:
+        if self.mpc_solver is None or self.mpc_solver.is_end:
             delta = self.cf_lateral_control()
             acc = self.cf_model.step(self.pack_veh_surr())
             next_acc_block = np.inf
@@ -282,7 +254,7 @@ class Game_A_Vehicle(Game_Vehicle):
             if is_end:
                 self.lane_changing = False
                 self.lc_conti_time = 0
-                print("MPC end")
+                print(f"{self.name} MPC end")
 
         self.next_acc = acc
         self.next_delta = delta
@@ -302,7 +274,7 @@ class Game_A_Vehicle(Game_Vehicle):
                 # 构建不等式求解问题
                 rho_real = sp.symbols("rho_real")
                 # 定义不等式
-                inequality = sp.Le(TR_real_lambda(rho_real), TR_est_lambda(rho_real))  # f(x) <= g(x)
+                inequality = sp.Le(real_lambda(rho_real), esti_lambda(rho_real))  # f(x) <= g(x)
                 # 求解不等式
                 solution = sp.solve_univariate_inequality(
                     inequality, rho_real, relational=False, domain=Interval(0, 1)
@@ -326,6 +298,37 @@ class Game_A_Vehicle(Game_Vehicle):
                 if rho_hat_range is not None:
                     self.rho_hat_s[veh.ID] = rho_hat_range
 
+    def lc_intention_judge(self):
+        if self.lane == self.target_lane and self.is_keep_lane_center():
+            self.clear_stra(reason="keep lane center")
+
+        if self.lane_changing and self.lane == self.target_lane:
+            self.lc_direction = 0
+
+        if not self.lane_changing:
+            super().lc_intention_judge()
+
+    def lc_decision_making(self, **kwargs):
+        """判断是否换道"""
+        super().lc_decision_making(set_lane_changing=False)
+        if self.no_lc or not self.can_raise_game:
+            return
+        if self.is_game_initiator and self.last_cal_step == 1 and self.lane is not None:
+            self.update_rho_hat()
+        # LC轨迹优化，如果博弈选择不换道，需要重新更新self.lane_changing，is_gaming以及target_lane
+        if (
+                (self.last_cal_step >= self.re_cal_step)  # 换道过程重规划
+                or (not self.lane_changing and self.lc_direction != 0)  # 未换道但有换道意图
+                or (not self.is_keep_lane_center() and not self.lane_changing)
+        ):
+            if self.is_game_initiator or (not self.is_gaming):  # 必须是发起者，或者并未处于博弈（主要考虑换道过程重规划）
+                print(f"{self.name} re_cal stackel_berg")
+                self.stackel_berg()
+
+        if self.lane_changing:
+            self.lc_conti_time += self.lane.dt
+            self.last_cal_step += 1
+
     def stackel_berg(self):
         """基于stackelberg主从博弈理论的换道策略，计算得到参考轨迹（无论是否换道）"""
         # 计算不同策略（换道时间）的最优轨迹和对应效用值
@@ -333,45 +336,53 @@ class Game_A_Vehicle(Game_Vehicle):
         self.game_res_list = self.cal_game_matrix()
         game_cost_list = [res.total_cost for res in self.game_res_list]
         if len(game_cost_list) == 0:
-            self.clear_stra()
-            print("没有可行的博弈策略")
+            self.clear_stra(reason="no feasible game result")
             return
         # 获取最优策略
         min_cost_idx = np.argmin(game_cost_list)
         opti_game_res = self.game_res_list[min_cost_idx]
 
-        if opti_game_res.EV_stra.lc_direction == 0:
-            if self.lane_changing:
-                self.clear_stra()
+        if opti_game_res.EV_stra.lc_direction == 0 and not self.lane_changing:
             return
 
         self.opti_game_res: GameRes = opti_game_res
+        print(f"{self.name} set opti_game_res")
         self.set_stra(self.opti_game_res.EV_stra)
 
     def set_stra(self, stra_info: StraInfo):
         super().set_stra(stra_info)
         if self.opti_game_res is not None:
+            # print(f"have opti_game_res {self.ID}")
             TR = self.opti_game_res.game_surr.TR
             TR.set_stra(self.opti_game_res.TR_stra)
             TP = self.opti_game_res.game_surr.TP
             TP.set_stra(self.opti_game_res.TF_stra)
             CR = self.opti_game_res.game_surr.CR
             CR.set_stra(self.opti_game_res.CR_stra)
-        self.set_path_mpc(stra_info.solve_res) if stra_info.lc_direction != 0 else None
+            self.last_cal_step = 0
+            self.is_game_initiator = True
+        # self.set_path_mpc(stra_info.solve_res) if stra_info.lc_direction != 0 else None
+        self.set_path_mpc(stra_info.solve_res) if not self.is_keep_lane_center() else None
 
-    def clear_stra(self, clear_lc_state=True):
+    def clear_stra(self, clear_lc_state=True, reason=""):
         super().clear_stra(clear_lc_state=clear_lc_state)
         if self.opti_game_res is not None:
             TR = self.opti_game_res.game_surr.TR
-            TR.clear_stra(clear_lc_state=False) if not TR.lane_changing else None
-            TP = self.opti_game_res.game_surr.TP
-            TP.clear_stra(clear_lc_state=False) if not TP.lane_changing else None
+            TR.clear_stra(reason="ev game end") if not TR.lane_changing else None
             CR = self.opti_game_res.game_surr.CR
-            CR.clear_stra(clear_lc_state=False) if not CR.lane_changing else None
-        self.mpc_solver = None
-        self.lc_conti_time = 0
-        self.last_cal_step = 0
-        self.opti_game_res = None
+            CR.clear_stra(reason="ev game end") if not CR.lane_changing else None
+            TP = self.opti_game_res.game_surr.TP
+            TP.clear_stra(reason="ev game end")
+            if isinstance(TR, Game_A_Vehicle) and TR.lane_changing:
+                TR.is_game_initiator = True
+            elif isinstance(CR, Game_A_Vehicle) and CR.lane_changing:
+                CR.is_game_initiator = True
+        if clear_lc_state:
+            self.mpc_solver = None
+            self.lc_conti_time = 0
+            self.last_cal_step = -1
+            self.opti_game_res = None
+        print(f"{self.name} clear strategy {reason=}")
 
     def cal_game_matrix(self):
         """backward induction method
@@ -380,16 +391,20 @@ class Game_A_Vehicle(Game_Vehicle):
         """
         game_res_list = []
         for gap in [-1, 0, 1]:
+        # for gap in [0]:
             TR, TP, CP, CR, TRR, CRR, TPP, CPP = self._no_car_correction(gap, self.lc_direction, return_RR=True)
             game_surr = GameVehSurr(
-                EV=self, TR=TR, TP=TP, CP=CP, CR=CR, TRR=TRR, CRR=CRR, TPP=TPP, CPP=CPP, lc_direction=self.lc_direction
+                EV=self, TR=TR, TP=TP, CP=CP, CR=CR, TRR=TRR, CRR=CRR, TPP=TPP, CPP=CPP,
+                lc_direction=self.lc_direction
             )
 
             ego_strategy = self.get_strategies(game_surr)
-            TR_strategy = TR.get_strategies(game_surr, single_stra=self.lc_direction == 0)
-            CR_strategy = CR.get_strategies(game_surr, single_stra=self.lc_direction == 0)
+            # TR_strategy = TR.get_strategies(game_surr, single_stra=self.lc_direction == 0)
+            # CR_strategy = CR.get_strategies(game_surr, single_stra=self.lc_direction == 0)
             TP_strategy = TP.get_strategies(game_surr, single_stra=True if isinstance(TP, Game_H_Vehicle) else False)
             CP_strategy = CP.get_strategies(game_surr, single_stra=True if isinstance(CP, Game_H_Vehicle) else False)
+            TR_strategy = TR.get_strategies(game_surr)
+            CR_strategy = CR.get_strategies(game_surr)
 
             cost_df, traj_data = self.cal_cost_df(
                 lc_surr=game_surr,
@@ -409,15 +424,14 @@ class Game_A_Vehicle(Game_Vehicle):
 
             if isinstance(TR, Game_A_Vehicle) and isinstance(CR, Game_A_Vehicle):
                 min_cost_idx = cost_df_temp["total_cost"].idxmin()
-            elif isinstance(TR, Game_A_Vehicle) and not isinstance(CR, Game_A_Vehicle):
-                min_CR_cost_idx = cost_df_temp.groupby(group_name)["CR_cost_hat"].idxmin()
-                min_cost_idx = cost_df_temp.loc[min_CR_cost_idx]["total_cost"].idxmin()  # 找到最小的cost值
-            elif isinstance(CR, Game_A_Vehicle) and not isinstance(TR, Game_A_Vehicle):
-                min_TR_cost_idx = cost_df_temp.groupby(group_name)["TR_cost_hat"].idxmin()
-                min_cost_idx = cost_df_temp.loc[min_TR_cost_idx]["total_cost"].idxmin()  # 找到最小的cost值
             else:
-                cost_df_temp["TR_CR_cost_hat"] = cost_df_temp["TR_cost_hat"] + cost_df_temp["CR_cost_hat"]
-                min_cost_idx = cost_df_temp.groupby(group_name)["TR_CR_cost_hat"].idxmin()
+                if isinstance(TR, Game_A_Vehicle) and not isinstance(CR, Game_A_Vehicle):
+                    min_other_cost_idx = cost_df_temp.groupby(group_name)["CR_cost_hat"].idxmin()
+                else:
+                    min_other_cost_idx = cost_df_temp.groupby(group_name)["TR_cost_hat"].idxmin()
+                min_cost_idx = cost_df_temp.loc[min_other_cost_idx].groupby(group_name)["total_cost"].idxmax()
+                min_cost_idx = cost_df_temp.loc[min_cost_idx]["total_cost"].idxmin()  # 找到最小的cost值
+
             if isinstance(min_cost_idx, pd.Series):
                 min_cost_idx = cost_df_temp.loc[min_cost_idx]["stra_time"].idxmin()
 
@@ -513,7 +527,8 @@ class Game_A_Vehicle(Game_Vehicle):
             ):
                 return None, None
             if (
-                TP_stra.cf_stra != 1
+                EV_stra.cf_stra != 1
+                or TP_stra.cf_stra != 1
                 or TR_stra.cf_stra != 1
                 or CR_stra.cf_stra != 1
                 or CP_stra.cf_stra != 1
@@ -529,6 +544,12 @@ class Game_A_Vehicle(Game_Vehicle):
         # 预测换道结束时目标车道前后车辆位置
         for stra_inf in [TP_stra, TR_stra, CR_stra, CP_stra]:
             stra_inf.stra_time = T
+        if TR_stra.lc_direction != 0:
+            TR_stra.veh_cp = CP
+        if CR_stra.lc_direction != 0:
+            CR_stra.veh_cp = TP
+        if EV_stra.lc_direction != 0:
+            CR_stra.veh_cp = CP
         TP_traj, _ = TP.pred_self_traj(TP_stra, to_ndarray=True, ache=True)
         TR_traj, _ = TR.pred_self_traj(TR_stra, to_ndarray=True, ache=True)
         CP_traj, _ = CP.pred_self_traj(CP_stra, to_ndarray=True, ache=True)
@@ -551,13 +572,14 @@ class Game_A_Vehicle(Game_Vehicle):
             return None, None
         elif platoon_feas or weaving_feas:
             if platoon_feas:
-                print("platoon")
+                # print("platoon")
                 ev_res_platoon, cr_res_platoon = opti_quintic_given_T_platoon(
-                    lc_surr, T, TP_traj=TP_traj, TR_traj=TRR_traj, CP_traj=CP_traj, CRR_traj=CRR_traj,
+                    lc_surr, T, TP_traj=TP_traj, TR_traj=TR_traj, CP_traj=CP_traj, CRR_traj=CRR_traj,
                     ori_lane=EV_stra.lane, target_lane=EV_stra.target_lane
                 )
                 if ev_res_platoon is None:
                     return None, None
+                print("platoon solved")
                 have_platoon = True
 
                 EV_stra.solve_res = ev_res_platoon
@@ -571,12 +593,14 @@ class Game_A_Vehicle(Game_Vehicle):
                 )
                 if ev_res_weaving is None:
                     return None, None
+                print("weaving solved")
                 have_weaving = True
 
                 EV_stra.solve_res = ev_res_weaving
                 TR_stra.solve_res = tr_res_weaving
                 TR_traj = tr_res_weaving.traj
-        elif EV_stra.lc_direction != 0:
+        # elif EV_stra.lc_direction != 0:
+        else:
             # print("single lc")
             ev_res_single = opti_quintic_given_T_single(
                 lc_surr, T, TP_traj=TP_traj, TR_traj=TR_traj, CP_traj=CP_traj, CR_traj=CR_traj,
@@ -584,14 +608,15 @@ class Game_A_Vehicle(Game_Vehicle):
             )
             if ev_res_single is None:
                 return None, None
+            # print("single lc solved")
             EV_stra.solve_res = ev_res_single
-        else:
-            # print("keep lane")
-            EV_traj, _ = self.pred_self_traj(EV_stra, to_ndarray=True, ache=True)
-            _, EV_real_cost, _ = cal_other_cost(
-                self, self.rho, EV_traj, [CP_traj],
-                v_length_s=[CP.length], stra_info=EV_stra
-            )
+        # else:
+        #     # print("keep lane")
+        #     EV_traj, _ = self.pred_self_traj(EV_stra, to_ndarray=True, ache=True)
+        #     _, EV_real_cost, _ = cal_other_cost(
+        #         self, self.rho, EV_traj, [CP_traj],
+        #         v_length_s=[CP.length], stra_info=EV_stra
+        #     )
 
         EV_traj = EV_stra.solve_res.traj
 
@@ -615,13 +640,15 @@ class Game_A_Vehicle(Game_Vehicle):
                 TR_cost_lambda = None
             else:
                 if have_platoon:
-                    route_cost = CR_stra.solve_res.route
+                    route_cost = CR_stra.solve_res.route + EV_stra.solve_res.route
                 else:
                     route_cost = EV_stra.solve_res.route
+                route_cost = 0 if TR_stra.lc_direction != 0 else route_cost
+                route_cost = route_cost if route_cost < 0 else 0
                 TR_cost_hat, TR_real_cost, TR_cost_lambda = cal_other_cost(
                     TR, TR_rho_hat, TR_traj,
-                    [EV_traj, TP_traj, CR_traj, CP_traj],
-                    v_length_s=[self.length, TP.length, CR.length, CP.length],
+                    [EV_traj, TP_traj, CR_traj],
+                    v_length_s=[self.length, TP.length, CR.length],
                     route_cost=route_cost, stra_info=TR_stra
                 )
             if have_platoon:
@@ -632,10 +659,12 @@ class Game_A_Vehicle(Game_Vehicle):
                     route_cost = TR_stra.solve_res.route
                 else:
                     route_cost = 0
+                route_cost = 0 if CR_stra.lc_direction != 0 else route_cost
+                route_cost = route_cost if route_cost < 0 else 0
                 CR_cost_hat, CR_real_cost, CR_cost_lambda = cal_other_cost(
                     CR, CR_rho_hat, CR_traj,
-                    [EV_traj, CP_traj, TR_traj, TP_traj],
-                    v_length_s=[self.length, CP.length, TR.length, TP.length],
+                    [EV_traj, CP_traj, TR_traj],
+                    v_length_s=[self.length, CP.length, TR.length],
                     route_cost=route_cost, stra_info=CR_stra
                 )
         else:
@@ -689,7 +718,6 @@ class Game_A_Vehicle(Game_Vehicle):
                 ])
             ]
         )  # 填补参考轨迹
-        self.opti_game_res.EV_opti_traj = ref_path
         ref_path = ReferencePath(ref_path, self.dt)
         self.mpc_solver = MPC_Solver(self.N_MPC, ref_path, self)
         self.mpc_solver.init_mpc()
@@ -707,21 +735,31 @@ class Game_H_Vehicle(Game_Vehicle):
         if single_stra:
             return [StraInfo(self, None, 1, 0)]  # None: 与EV时长保持一致，1：stra，0：不换道
         strategy = list(itertools.product([None], self.cf_stra_s, [0]))
-        strategy = [StraInfo(self, stra_time, cf_stra, lc_direction) for stra_time, cf_stra, lc_direction in strategy]
+        strategy = [StraInfo(self, stra_time, cf_stra, lc_direction)
+                    for stra_time, cf_stra, lc_direction in strategy]
         return strategy
 
+    def lc_intention_judge(self):
+        if (self.opti_gap is not None and self.is_keep_lane_center()
+                and self.opti_gap.target_lane == self.lane):
+            self.reset_lc_state()
+        super().lc_intention_judge()
+
     def cal_vehicle_control(self):
-        if self.opti_gap is not None:
+        if self.opti_gap is not None and self.opti_gap.target_lane != self.lane:
             if self.opti_gap.adapt_end_time > self.lane.time_:
                 self.next_acc = self.opti_gap.target_acc
             else:
-                self.target_lane = self.opti_gap.target_lane if self.opti_gap is not None else self.lane
+                self.target_lane = self.opti_gap.target_lane
                 veh_surr = VehSurr(ev=self, cp=self.opti_gap.TF)
+                # veh_surr = VehSurr(ev=self, cp=self.target_lane.get_relative_car(self)[0])
                 self.next_acc = self.cf_model.step(veh_surr)
         else:
             next_acc_block = np.inf
             if self.lane.index not in self.destination_lane_indexes:
-                next_acc_block = self.cf_model.step(VehSurr(ev=self, cp=self.lane.road.end_weaving_block_veh))
+                next_acc_block = (
+                    self.cf_model.step(VehSurr(ev=self, cp=self.lane.road.end_weaving_block_veh))
+                )
             next_acc = self.cf_model.step(self.pack_veh_surr())
             self.next_acc = min(next_acc, next_acc_block)
 

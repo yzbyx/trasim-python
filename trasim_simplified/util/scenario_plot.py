@@ -55,7 +55,7 @@ def bbox_traj_helper(x_c, y_c, yaw, ax, length=5, width=2,
     # 绘制车辆的矩形框，要闭合
     rotated_corners = np.vstack((rotated_corners, rotated_corners[0]))
     ax.plot(rotated_corners[:, 0], rotated_corners[:, 1], color=color, linewidth=linewidth,
-            label=label, alpha=alpha)
+            label=label, alpha=1)
     ax.fill(rotated_corners[:, 0], rotated_corners[:, 1], color=color, alpha=alpha)
 
 
@@ -292,8 +292,8 @@ def plot_scenario_twin(traj_s, traj_names, road: 'Road', fig_name,
     )
 
     # 去除第二个__之间的文字
-    text_name_list = fig_name.split("_")
-    text_name = "-".join([text_name_list[0], text_name_list[2]])
+    # text_name_list = fig_name.split("_")
+    # text_name = "-".join([text_name_list[0], text_name_list[2]])
     # ax.text(
     #     0.95, 0.95, text_name,
     #     fontsize=fontsize, color="black", ha='right', va='top',
