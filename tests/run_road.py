@@ -3,7 +3,7 @@
 # @Author : yzbyx
 # @File : run_road.py
 # Software: PyCharm
-from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM
+from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, V_CLASS
 from trasim_simplified.core.frame.micro.open_lane import THW_DISTRI
 from trasim_simplified.core.frame.micro.road import Road
 from trasim_simplified.util.timer import timer_no_log
@@ -40,7 +40,7 @@ def run_road():
         for i in range(lane_num):
             # lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.KK, _cf_param, {"color": COLOR.yellow},
             #                     lc_name=LCM.KK, lc_param={})
-            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, 20, False, CFM.TPACC, _cf_param, {"color": COLOR.blue},
+            lanes[i].car_config(200, 7.5, V_TYPE.PASSENGER, V_CLASS.GAME_HV, 20, False, CFM.TPACC, _cf_param, {"color": COLOR.blue},
                                 lc_name=LCM.ACC, lc_param={})
             if i == 0:
                 lanes[i].car_loader(2000, THW_DISTRI.Uniform)

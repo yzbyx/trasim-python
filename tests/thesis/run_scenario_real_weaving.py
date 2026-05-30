@@ -10,7 +10,7 @@ from trasim_simplified.util.scenario.scenario_loader import Scenario
 from trasim_simplified.util.tools import load_from_pickle, save_to_pickle
 
 if __name__ == '__main__':
-    scenario_path = r"E:\BaiduSyncdisk\weaving-analysis\data\pattern_scenario_data.pkl"
+    scenario_path = r"E:\BaiduSyncdisk\process-code-test\tests\thesis_master\chapter3\weaving-analysis\data\pattern_scenario_data.pkl"
     scenario_data: dict[str, list[ScenarioTraj]] = load_from_pickle(scenario_path)  # pattern_name, pattern_traj_s
 
     for pattern_name, pattern_traj_s in scenario_data.items():
@@ -33,11 +33,12 @@ if __name__ == '__main__':
                 save_to_pickle(cf_params, fr"{base_path}\{name}_cf_params.pkl")
             cf_params = load_from_pickle(fr"{base_path}\{name}_cf_params.pkl")
 
-            car_params = {}
-            if not os.path.exists(fr"{base_path}\{name}_car_params.pkl"):
-                car_params = sce.opti_ade(cf_params)
-                save_to_pickle(car_params,fr"{base_path}\{name}_car_params.pkl")
-            car_params = load_from_pickle(fr"{base_path}\{name}_car_params.pkl")
+            car_params = None
+            # car_params = {}
+            # if not os.path.exists(fr"{base_path}\{name}_car_params.pkl"):
+            #     car_params = sce.opti_ade(cf_params)
+            #     save_to_pickle(car_params,fr"{base_path}\{name}_car_params.pkl")
+            # car_params = load_from_pickle(fr"{base_path}\{name}_car_params.pkl")
 
             if not os.path.exists(fr"E:\BaiduSyncdisk\car-following-model\tests\thesis\data\{name}_sim_data.pkl"):
                 sce.run(cf_params=cf_params, car_params=car_params, has_ui=True)

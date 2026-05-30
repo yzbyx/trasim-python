@@ -154,7 +154,7 @@ class UI2DMatplotlib:
                     self.ax.plot(lc_traj[:, 0], lc_traj[:, 3],
                                  color='blue', linestyle='--', linewidth=1)
 
-        self.resize_by_car()
+        # self.resize_by_car()
 
         plt.pause(0.01)  # 短暂暂停以更新显示
         if self.frame_rate > 0:

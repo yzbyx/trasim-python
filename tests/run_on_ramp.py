@@ -78,7 +78,7 @@ def run_road():
             lanes[i].car_config(20, v_length, V_TYPE.PASSENGER, lanes[i].get_speed_limit(0), False,
                                 CFM.KK, _cf_param, {"color": COLOR.blue}, lc_name=LCM.KK, lc_param={})
 
-            lanes[i].data_container.config()
+            lanes[i].data_container.config([C_Info.ttc])
 
             if i != lane_num - 1:
                 lanes[i].car_loader(2000, THW_DISTRI.Uniform)

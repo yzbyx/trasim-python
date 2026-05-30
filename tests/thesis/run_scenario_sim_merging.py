@@ -12,9 +12,7 @@ from skopt.space import Real
 from trasim_simplified.core.agent.game_agent import Game_Vehicle, Game_A_Vehicle, Game_H_Vehicle
 from trasim_simplified.core.constant import V_TYPE, CFM, COLOR, LCM, V_CLASS, RouteType, MARKING_TYPE, SECTION_TYPE
 from trasim_simplified.core.frame.micro.road import Road
-from trasim_simplified.core.kinematics.cfm.CFModel_IDM import cf_IDM_equilibrium_jit
-from trasim_simplified.util.scenario.scenario_util import make_road_from_osm
-from trasim_simplified.util.scenario_plot import plot_scenario, plot_stra, plot_scenario_twin
+# from trasim_simplified.util.scenario_plot import plot_stra
 from trasim_simplified.util.timer import timer_no_log
 from trasim_simplified.core.data.data_container import Info as C_Info
 from trasim_simplified.util.tools import save_to_pickle, load_from_pickle
@@ -193,6 +191,7 @@ def run_road(road: Road):
     TP_stra_dict = {}
     for step, stage in sim.run(data_save=True, has_ui=has_ui, frame_rate=-1,
                                warm_up_step=warm_up_step, sim_step=sim_step, dt=dt):
+        print(step, stage)
         if stage == 4:
             # sim.ui.plot_pred_traj()
             # sim.ui.plot_hist_traj()
@@ -244,8 +243,8 @@ def run_road(road: Road):
     is_TR_HV = isinstance(veh_TR, Game_H_Vehicle)
     is_TP_HV = isinstance(veh_TP, Game_H_Vehicle)
     save_file_name = f"merging_TR-HV-{is_TR_HV}_TP-HV-{is_TP_HV}"
-    plot_stra(TR_stra_dict, sim_step, save_file_name, type_="TR")
-    plot_stra(TP_stra_dict, sim_step, save_file_name, type_="TP")
+    # plot_stra(TR_stra_dict, sim_step, save_file_name, type_="TR")
+    # plot_stra(TP_stra_dict, sim_step, save_file_name, type_="TP")
 
     df = sim.data_to_df()
     df[C_Info.localLonAcc] = df[C_Info.acc] * np.cos(df[C_Info.yaw])
@@ -262,44 +261,44 @@ def run_road(road: Road):
     save_to_pickle([traj_s, traj_names], rf"data\{save_file_name}_traj_s.pkl")
 
 
-def plot_data(sim, save_file_name):
-    traj_s, traj_names = load_from_pickle(rf"data\{save_file_name}_traj_s.pkl")
-    plot_scenario_twin(
-        traj_s, traj_names=traj_names,
-        road=sim, fig_name=save_file_name, ori_plot=False
-    )
-
-    ttc_s = []
-    eff_s = []
-    jerk_s = []
-    acc_s = []
-
-    for name, traj in zip(traj_names, traj_s):
-        ttc = traj[C_Info.ttc].to_numpy()
-        min_ttc = np.nanmin(ttc)
-        tit = sum(abs(ttc[ttc < 1.3])) * 0.1
-        ttc_s.append(min_ttc)
-        print(f"{name}安全：", min_ttc, tit)
-
-        v = traj[C_Info.speed].to_numpy()
-        eff = v[0] - np.nanmean(v)
-        eff_s.append(eff)
-        print(f"{name}效率成本：", eff)
-
-        jerk = np.diff(traj[C_Info.acc].to_numpy())
-        jerk_max = np.nanmax(np.abs(jerk))
-        jerk_s.append(jerk_max)
-        print(f"{name}舒适成本jerk：", jerk_max)
-
-        acc = traj[C_Info.acc].to_numpy()
-        acc_max = np.nanmax(np.abs(acc))
-        acc_s.append(acc_max)
-        print(f"{name}舒适成本acc：", acc_max)
-
-    print("最小ttc：", min(ttc_s))
-    print("平均效率成本：", np.mean(eff_s))
-    print("平均舒适成本jerk：", np.mean(jerk_s))
-    print("平均舒适成本acc：", np.mean(acc_s))
+# def plot_data(sim, save_file_name):
+#     traj_s, traj_names = load_from_pickle(rf"data\{save_file_name}_traj_s.pkl")
+#     plot_scenario_twin(
+#         traj_s, traj_names=traj_names,
+#         road=sim, fig_name=save_file_name, ori_plot=False
+#     )
+#
+#     ttc_s = []
+#     eff_s = []
+#     jerk_s = []
+#     acc_s = []
+#
+#     for name, traj in zip(traj_names, traj_s):
+#         ttc = traj[C_Info.ttc].to_numpy()
+#         min_ttc = np.nanmin(ttc)
+#         tit = sum(abs(ttc[ttc < 1.3])) * 0.1
+#         ttc_s.append(min_ttc)
+#         print(f"{name}安全：", min_ttc, tit)
+#
+#         v = traj[C_Info.speed].to_numpy()
+#         eff = v[0] - np.nanmean(v)
+#         eff_s.append(eff)
+#         print(f"{name}效率成本：", eff)
+#
+#         jerk = np.diff(traj[C_Info.acc].to_numpy())
+#         jerk_max = np.nanmax(np.abs(jerk))
+#         jerk_s.append(jerk_max)
+#         print(f"{name}舒适成本jerk：", jerk_max)
+#
+#         acc = traj[C_Info.acc].to_numpy()
+#         acc_max = np.nanmax(np.abs(acc))
+#         acc_s.append(acc_max)
+#         print(f"{name}舒适成本acc：", acc_max)
+#
+#     print("最小ttc：", min(ttc_s))
+#     print("平均效率成本：", np.mean(eff_s))
+#     print("平均舒适成本jerk：", np.mean(jerk_s))
+#     print("平均舒适成本acc：", np.mean(acc_s))
 
 
 def opti_ade(self, cf_params=None):
@@ -362,4 +361,4 @@ def opti_ade(self, cf_params=None):
 if __name__ == '__main__':
     sim = make_road()
     run_road(sim)
-    plot_data(sim, save_file_name=f"merging_TR-HV-False_TP-HV-False")
+    # plot_data(sim, save_file_name=f"merging_TR-HV-False_TP-HV-False")

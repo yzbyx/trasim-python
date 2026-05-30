@@ -25,7 +25,7 @@ fontsize = 10  # 7磅/pt/point
 from hmmlearn.hmm import GMMHMM
 
 # 读取纵向模型
-model_path = fr"E:\BaiduSyncdisk\weaving-analysis\data\lon_gmm_hmm_model.pkl"
+model_path = fr"E:\BaiduSyncdisk\process-code-test\tests\thesis_master\chapter3\weaving-analysis\data\lon_gmm_hmm_model.pkl"
 with open(model_path, 'rb') as f:
     lon_model: GMMHMM = pickle.load(f)
 
